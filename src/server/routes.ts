@@ -42,8 +42,19 @@ export function createApiRouter(db: Knex): Router {
   // ===================== APP SETTINGS =====================
   router.get('/settings', async (req: Request, res: Response) => {
     try {
-      const settings = await db('app_settings').first();
-      res.json(settings);
+      let settings = await db('app_settings').first();
+      if (!settings) {
+        const { seedInitialData } = await import('./database/seed');
+        await seedInitialData(db);
+        settings = await db('app_settings').first();
+      }
+      res.json(settings || {
+        operating_mode: 'SINGLE_COMPUTER',
+        db_type: 'sqlite',
+        server_port: 4200,
+        show_company_selector_on_startup: true,
+        theme: 'light',
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -51,9 +62,46 @@ export function createApiRouter(db: Knex): Router {
 
   router.put('/settings', async (req: Request, res: Response) => {
     try {
-      const updateData = { ...req.body, updated_at: new Date().toISOString() };
-      delete updateData.id;
-      await db('app_settings').update(updateData);
+      const allowedCols = new Set([
+        'operating_mode',
+        'db_type',
+        'pg_host',
+        'pg_port',
+        'pg_database',
+        'pg_user',
+        'pg_password',
+        'server_port',
+        'show_company_selector_on_startup',
+        'theme',
+        'invoice_save_path',
+        'quotation_save_path',
+        'purchase_save_path',
+        'report_save_path',
+        'backup_save_path',
+      ]);
+      const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
+      for (const [k, v] of Object.entries(req.body || {})) {
+        if (allowedCols.has(k)) {
+          updateData[k] = v;
+        }
+      }
+
+      const existing = await db('app_settings').first();
+      if (existing) {
+        await db('app_settings').where({ id: existing.id }).update(updateData);
+      } else {
+        const { v4: uuidv4 } = await import('uuid');
+        await db('app_settings').insert({
+          id: uuidv4(),
+          operating_mode: 'SINGLE_COMPUTER',
+          db_type: 'sqlite',
+          server_port: 4200,
+          show_company_selector_on_startup: true,
+          theme: 'light',
+          ...updateData,
+          created_at: new Date().toISOString(),
+        });
+      }
       const settings = await db('app_settings').first();
       res.json(settings);
     } catch (err: any) {

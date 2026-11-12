@@ -387,10 +387,40 @@ export class CompanyService {
   }
 
   async updateCompanySettings(companyId: string, data: Partial<CompanySettings>): Promise<CompanySettings> {
+    await this.getCompanySettings(companyId);
     const now = new Date().toISOString();
-    const updateData = { ...data, updated_at: now };
-    delete (updateData as any).id;
-    delete (updateData as any).company_id;
+    const allowed = new Set([
+      'invoice_overdue_days',
+      'print_invoice_after_save',
+      'show_postal_code_before_city',
+      'include_additional_notes_in_search',
+      'sort_invoices_by_number',
+      'show_amount_in_words',
+      'zero_not_displayed',
+      'indian_number_style',
+      'currency_name',
+      'currency_symbol',
+      'decimal_name',
+      'printed_date_format',
+      'allow_negative_stock',
+      'inventory_valuation_method',
+      'enable_reverse_charge_by_default',
+      'invoice_save_path',
+      'quotation_save_path',
+      'purchase_save_path',
+      'report_save_path',
+      'backup_save_path',
+      'default_invoice_notes',
+      'default_quotation_notes',
+      'quotation_validity_days',
+      'default_tax_inclusive',
+    ]);
+    const updateData: Record<string, any> = { updated_at: now };
+    for (const [k, v] of Object.entries(data)) {
+      if (allowed.has(k)) {
+        updateData[k] = v;
+      }
+    }
 
     await this.db('company_settings').where({ company_id: companyId }).update(updateData);
     return this.getCompanySettings(companyId);

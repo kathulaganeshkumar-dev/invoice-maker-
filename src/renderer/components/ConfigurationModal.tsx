@@ -19,16 +19,19 @@ import {
   AlertCircle,
   RefreshCw,
   Upload,
+  Loader2,
+  Building2,
 } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  companyId: string;
+  companyId?: string | null;
+  onOpenCompanyModal?: () => void;
 }
 
-export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId }) => {
-  const [activeCategory, setActiveCategory] = useState<string>('Business_Settings');
+export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId, onOpenCompanyModal }) => {
+  const [activeCategory, setActiveCategory] = useState<string>(companyId ? 'Business_Settings' : 'Deployment_Mode');
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -38,41 +41,60 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
 
   // Database Connection Test State
   const [testDbLoading, setTestDbLoading] = useState<boolean>(false);
   const [testDbResult, setTestDbResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    if (isOpen && companyId) {
+    if (isOpen) {
+      if (!companyId && activeCategory !== 'Deployment_Mode') {
+        setActiveCategory('Deployment_Mode');
+      }
       loadAllSettings();
     }
   }, [isOpen, companyId]);
 
   const loadAllSettings = async () => {
     setLoading(true);
+    setError('');
     try {
-      const [cs, as, comp, seqList] = await Promise.all([
-        api.getCompanySettings(companyId),
-        api.getAppSettings(),
-        api.getCompany(companyId),
-        api.getSequences(companyId),
-      ]);
-      setCompanySettings(cs);
-      setAppSettings(as);
-      setCompany(comp);
-      setSequences(seqList);
-    } catch (err) {
+      try {
+        const as = await api.getAppSettings();
+        setAppSettings(as);
+      } catch (e: any) {
+        console.warn('Could not load app settings:', e);
+      }
+
+      if (companyId) {
+        const [csRes, compRes, seqRes] = await Promise.allSettled([
+          api.getCompanySettings(companyId),
+          api.getCompany(companyId),
+          api.getSequences(companyId),
+        ]);
+        if (csRes.status === 'fulfilled') setCompanySettings(csRes.value);
+        if (compRes.status === 'fulfilled') setCompany(compRes.value);
+        if (seqRes.status === 'fulfilled') setSequences(seqRes.value);
+      } else {
+        setCompanySettings(null);
+        setCompany(null);
+        setSequences([]);
+      }
+    } catch (err: any) {
       console.error('Error loading configuration:', err);
+      setError(err?.message || 'Error loading configuration');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSave = async () => {
-    if (!companySettings) return;
+    if (!companySettings && !appSettings) return;
     try {
-      await api.updateCompanySettings(companyId, companySettings);
+      if (companyId && companySettings) {
+        await api.updateCompanySettings(companyId, companySettings);
+      }
       if (appSettings) {
         await api.updateAppSettings(appSettings);
       }
@@ -81,10 +103,22 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
       }
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving settings:', err);
-      alert('Error saving settings');
+      alert('Error saving settings: ' + (err?.message || 'Unknown error'));
     }
+  };
+
+  const updateCompanySetting = <K extends keyof CompanySettings>(key: K, value: CompanySettings[K]) => {
+    setCompanySettings((prev) => (prev ? { ...prev, [key]: value } : null));
+  };
+
+  const updateAppSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setAppSettings((prev) => (prev ? { ...prev, [key]: value } : null));
+  };
+
+  const updateCompanyField = <K extends keyof Company>(key: K, value: Company[K]) => {
+    setCompany((prev) => (prev ? { ...prev, [key]: value } : null));
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,18 +128,17 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
-      setCompany({ ...company, logo_url: base64 });
+      updateCompanyField('logo_url', base64);
     };
     reader.readAsDataURL(file);
   };
 
   const handleClearLogo = () => {
-    if (company) {
-      setCompany({ ...company, logo_url: '' });
-    }
+    updateCompanyField('logo_url', '');
   };
 
   const handleUpdateSequence = async (seqId: string) => {
+    if (!companyId) return;
     try {
       await api.updateSequence(companyId, seqId, seqFormData);
       const updated = await api.getSequences(companyId);
@@ -138,7 +171,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     }
   };
 
-  if (!isOpen || !companySettings || !company) return null;
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -148,9 +181,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
           <div className="flex items-center space-x-2">
             <Settings className="w-5 h-5 text-brand-600" />
             <h2 className="text-base font-bold text-slate-800">Configuration & Preferences</h2>
-            <span className="text-xs bg-brand-50 text-brand-700 px-2 py-0.5 rounded font-semibold border border-brand-200">
-              {company.name}
-            </span>
+            {company ? (
+              <span className="text-xs bg-brand-50 text-brand-700 px-2 py-0.5 rounded font-semibold border border-brand-200">
+                {company.name}
+              </span>
+            ) : (
+              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold border border-slate-200">
+                Global System Settings
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-md">
             <X className="w-5 h-5" />
@@ -268,8 +307,48 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
           {/* Right Main Settings Panel */}
           <div className="flex-1 p-6 overflow-y-auto space-y-6">
-            {/* 1. Document Settings */}
-            {activeCategory === 'Business_Settings' && (
+            {loading ? (
+              <div className="h-full flex flex-col items-center justify-center p-8 space-y-3">
+                <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
+                <span className="text-sm font-semibold text-slate-600">Loading Configuration & Preferences...</span>
+              </div>
+            ) : error ? (
+              <div className="h-full flex flex-col items-center justify-center p-8 space-y-3 text-center">
+                <AlertCircle className="w-8 h-8 text-rose-500" />
+                <span className="text-sm font-bold text-slate-800">Failed to load configuration</span>
+                <p className="text-xs text-slate-500 max-w-sm">{error}</p>
+                <button
+                  type="button"
+                  onClick={loadAllSettings}
+                  className="px-4 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold hover:bg-brand-700"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : activeCategory !== 'Deployment_Mode' && (!companySettings || !company) ? (
+              <div className="h-full flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
+                <Building2 className="w-12 h-12 text-slate-400 mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Business Profile Selected</h3>
+                <p className="text-xs text-slate-500 mt-1 mb-4">
+                  Select or create a business profile to configure business-specific document rules, tax rates, numbering sequences, and logos.
+                </p>
+                {onOpenCompanyModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenCompanyModal();
+                    }}
+                    className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
+                  >
+                    Select or Create Business Profile
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* 1. Document Settings */}
+                {activeCategory === 'Business_Settings' && companySettings && (
               <>
                 <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white shadow-sm">
                   <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">Document Behavior</h3>
@@ -279,9 +358,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="number"
                         value={companySettings.invoice_overdue_days}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, invoice_overdue_days: Number(e.target.value) })
-                        }
+                        onChange={(e) => updateCompanySetting('invoice_overdue_days', Number(e.target.value))}
                         className="w-32 border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                       />
                     </div>
@@ -292,9 +369,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="checkbox"
                         checked={companySettings.print_invoice_after_save}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, print_invoice_after_save: e.target.checked })
-                        }
+                        onChange={(e) => updateCompanySetting('print_invoice_after_save', e.target.checked)}
                         className="w-4 h-4 rounded text-brand-600 border-slate-300"
                       />
                       <span>Print invoice immediately after finalization</span>
@@ -304,9 +379,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="checkbox"
                         checked={companySettings.show_postal_code_before_city}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, show_postal_code_before_city: e.target.checked })
-                        }
+                        onChange={(e) => updateCompanySetting('show_postal_code_before_city', e.target.checked)}
                         className="w-4 h-4 rounded text-brand-600 border-slate-300"
                       />
                       <span>Show postal PIN code before city in addresses</span>
@@ -316,12 +389,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="checkbox"
                         checked={companySettings.include_additional_notes_in_search}
-                        onChange={(e) =>
-                          setCompanySettings({
-                            ...companySettings,
-                            include_additional_notes_in_search: e.target.checked,
-                          })
-                        }
+                        onChange={(e) => updateCompanySetting('include_additional_notes_in_search', e.target.checked)}
                         className="w-4 h-4 rounded text-brand-600 border-slate-300"
                       />
                       <span>Include Additional Notes when searching invoices</span>
@@ -331,9 +399,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="checkbox"
                         checked={companySettings.sort_invoices_by_number}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, sort_invoices_by_number: e.target.checked })
-                        }
+                        onChange={(e) => updateCompanySetting('sort_invoices_by_number', e.target.checked)}
                         className="w-4 h-4 rounded text-brand-600 border-slate-300"
                       />
                       <span>Sort invoices by document number column by default</span>
@@ -347,9 +413,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <label className="block font-semibold text-slate-700 mb-1">Standard display date format:</label>
                     <select
                       value={companySettings.printed_date_format}
-                      onChange={(e) =>
-                        setCompanySettings({ ...companySettings, printed_date_format: e.target.value })
-                      }
+                      onChange={(e) => updateCompanySetting('printed_date_format', e.target.value)}
                       className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm bg-white outline-none focus:ring-1 focus:ring-brand-500"
                     >
                       <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 09/11/2026)</option>
@@ -362,7 +426,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             )}
 
             {/* 2. Currency & Numbering */}
-            {activeCategory === 'Business_Currency' && (
+            {activeCategory === 'Business_Currency' && companySettings && (
               <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-white shadow-sm">
                 <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">
                   Currency & Numbering Formatting
@@ -372,9 +436,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <input
                       type="checkbox"
                       checked={companySettings.show_amount_in_words}
-                      onChange={(e) =>
-                        setCompanySettings({ ...companySettings, show_amount_in_words: e.target.checked })
-                      }
+                      onChange={(e) => updateCompanySetting('show_amount_in_words', e.target.checked)}
                       className="w-4 h-4 rounded text-brand-600 border-slate-300"
                     />
                     <span>Print Amount in Words automatically on document footers</span>
@@ -384,9 +446,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <input
                       type="checkbox"
                       checked={companySettings.indian_number_style}
-                      onChange={(e) =>
-                        setCompanySettings({ ...companySettings, indian_number_style: e.target.checked })
-                      }
+                      onChange={(e) => updateCompanySetting('indian_number_style', e.target.checked)}
                       className="w-4 h-4 rounded text-brand-600 border-slate-300"
                     />
                     <span>Indian Numbering Grouping (Crores & Lakhs, e.g. 12,34,567.00)</span>
@@ -396,9 +456,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <input
                       type="checkbox"
                       checked={companySettings.zero_not_displayed}
-                      onChange={(e) =>
-                        setCompanySettings({ ...companySettings, zero_not_displayed: e.target.checked })
-                      }
+                      onChange={(e) => updateCompanySetting('zero_not_displayed', e.target.checked)}
                       className="w-4 h-4 rounded text-brand-600 border-slate-300"
                     />
                     <span>Suppress zeroes on printouts</span>
@@ -410,9 +468,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="text"
                         value={companySettings.currency_name}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, currency_name: e.target.value })
-                        }
+                        onChange={(e) => updateCompanySetting('currency_name', e.target.value)}
                         className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                         placeholder="Rupees"
                       />
@@ -422,9 +478,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="text"
                         value={companySettings.currency_symbol}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, currency_symbol: e.target.value })
-                        }
+                        onChange={(e) => updateCompanySetting('currency_symbol', e.target.value)}
                         className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                         placeholder="₹"
                       />
@@ -434,9 +488,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="text"
                         value={companySettings.decimal_name}
-                        onChange={(e) =>
-                          setCompanySettings({ ...companySettings, decimal_name: e.target.value })
-                        }
+                        onChange={(e) => updateCompanySetting('decimal_name', e.target.value)}
                         className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                         placeholder="Paise"
                       />
@@ -447,7 +499,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             )}
 
             {/* 3. Company Logo */}
-            {activeCategory === 'Business_Logo' && (
+            {activeCategory === 'Business_Logo' && company && (
               <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
                 <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
                   <ImageIcon className="w-4 h-4 text-brand-600" />
@@ -496,7 +548,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             )}
 
             {/* 4. Invoice Rules & Terms */}
-            {activeCategory === 'Sales_Invoice_Rules' && (
+            {activeCategory === 'Sales_Invoice_Rules' && companySettings && company && (
               <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
                 <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
                   <FileText className="w-4 h-4 text-brand-600" />
@@ -509,7 +561,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <textarea
                       rows={4}
                       value={company.default_invoice_terms || ''}
-                      onChange={(e) => setCompany({ ...company, default_invoice_terms: e.target.value })}
+                      onChange={(e) => updateCompanyField('default_invoice_terms', e.target.value)}
                       placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. charged after due date.&#10;3. Subject to local jurisdiction."
                       className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
@@ -520,7 +572,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <textarea
                       rows={3}
                       value={companySettings.default_invoice_notes || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, default_invoice_notes: e.target.value })}
+                      onChange={(e) => updateCompanySetting('default_invoice_notes', e.target.value)}
                       placeholder="Please remit payment via NEFT/RTGS to Bank Account # ... IFSC ... or UPI business@upi"
                       className="w-full border border-slate-300 rounded p-2.5 text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
@@ -531,7 +583,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <input
                         type="checkbox"
                         checked={Boolean(companySettings.default_tax_inclusive)}
-                        onChange={(e) => setCompanySettings({ ...companySettings, default_tax_inclusive: e.target.checked })}
+                        onChange={(e) => updateCompanySetting('default_tax_inclusive', e.target.checked)}
                         className="w-4 h-4 rounded text-brand-600 border-slate-300"
                       />
                       <span className="font-medium">Default new items to Tax-Inclusive pricing (MRP mode)</span>
@@ -542,7 +594,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             )}
 
             {/* 5. Quotation Defaults */}
-            {activeCategory === 'Sales_Quotation_Defaults' && (
+            {activeCategory === 'Sales_Quotation_Defaults' && companySettings && company && (
               <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
                 <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
                   <FileCheck className="w-4 h-4 text-brand-600" />
@@ -555,7 +607,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <input
                       type="number"
                       value={companySettings.quotation_validity_days || 30}
-                      onChange={(e) => setCompanySettings({ ...companySettings, quotation_validity_days: Number(e.target.value) })}
+                      onChange={(e) => updateCompanySetting('quotation_validity_days', Number(e.target.value))}
                       className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -565,7 +617,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <textarea
                       rows={4}
                       value={company.default_quotation_terms || ''}
-                      onChange={(e) => setCompany({ ...company, default_quotation_terms: e.target.value })}
+                      onChange={(e) => updateCompanyField('default_quotation_terms', e.target.value)}
                       placeholder="1. Quotation valid for 30 days from date of issue.&#10;2. Taxes extra as applicable.&#10;3. Delivery within 7 business days from PO."
                       className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
@@ -576,7 +628,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <textarea
                       rows={3}
                       value={companySettings.default_quotation_notes || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, default_quotation_notes: e.target.value })}
+                      onChange={(e) => updateCompanySetting('default_quotation_notes', e.target.value)}
                       placeholder="Thank you for your inquiry. Please find our best commercial quotation as detailed above."
                       className="w-full border border-slate-300 rounded p-2.5 text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
@@ -704,7 +756,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             )}
 
             {/* 7. Saving Paths by Category */}
-            {activeCategory === 'Category_Save_Paths' && (
+            {activeCategory === 'Category_Save_Paths' && companySettings && (
               <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
                 <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
                   <FolderOpen className="w-4 h-4 text-brand-600" />
@@ -721,7 +773,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Invoices"
                       value={companySettings.invoice_save_path || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, invoice_save_path: e.target.value })}
+                      onChange={(e) => updateCompanySetting('invoice_save_path', e.target.value)}
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -732,7 +784,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Quotations"
                       value={companySettings.quotation_save_path || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, quotation_save_path: e.target.value })}
+                      onChange={(e) => updateCompanySetting('quotation_save_path', e.target.value)}
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -743,7 +795,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Purchases"
                       value={companySettings.purchase_save_path || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, purchase_save_path: e.target.value })}
+                      onChange={(e) => updateCompanySetting('purchase_save_path', e.target.value)}
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -754,7 +806,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Reports"
                       value={companySettings.report_save_path || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, report_save_path: e.target.value })}
+                      onChange={(e) => updateCompanySetting('report_save_path', e.target.value)}
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -765,7 +817,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       type="text"
                       placeholder="e.g. D:\Backups\InvoiceManager"
                       value={companySettings.backup_save_path || ''}
-                      onChange={(e) => setCompanySettings({ ...companySettings, backup_save_path: e.target.value })}
+                      onChange={(e) => updateCompanySetting('backup_save_path', e.target.value)}
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -774,7 +826,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             )}
 
             {/* 8. Inventory Rules */}
-            {activeCategory === 'Inventory_Rules' && (
+            {activeCategory === 'Inventory_Rules' && companySettings && (
               <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
                 <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">
                   Inventory Valuation & Control
@@ -784,12 +836,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <label className="block font-semibold text-slate-700 mb-1">Inventory Valuation Costing Method:</label>
                     <select
                       value={companySettings.inventory_valuation_method}
-                      onChange={(e) =>
-                        setCompanySettings({
-                          ...companySettings,
-                          inventory_valuation_method: e.target.value as any,
-                        })
-                      }
+                      onChange={(e) => updateCompanySetting('inventory_valuation_method', e.target.value as any)}
                       className="w-64 border border-slate-300 rounded px-3 py-1.5 text-sm bg-white"
                     >
                       <option value="FIFO">FIFO (First In First Out)</option>
@@ -801,9 +848,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <input
                       type="checkbox"
                       checked={companySettings.allow_negative_stock}
-                      onChange={(e) =>
-                        setCompanySettings({ ...companySettings, allow_negative_stock: e.target.checked })
-                      }
+                      onChange={(e) => updateCompanySetting('allow_negative_stock', e.target.checked)}
                       className="w-4 h-4 rounded text-brand-600 border-slate-300"
                     />
                     <span>Allow negative stock balance (Disabled by default to prevent selling phantom inventory)</span>
@@ -823,7 +868,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 <div className="space-y-4 text-xs">
                   <div className="grid grid-cols-2 gap-3">
                     <div
-                      onClick={() => setAppSettings({ ...appSettings, operating_mode: 'SINGLE_COMPUTER', db_type: 'sqlite' })}
+                      onClick={() => updateAppSetting('operating_mode', 'SINGLE_COMPUTER')}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                         appSettings.operating_mode === 'SINGLE_COMPUTER'
                           ? 'border-brand-600 bg-brand-50/50'
@@ -835,7 +880,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     </div>
 
                     <div
-                      onClick={() => setAppSettings({ ...appSettings, operating_mode: 'LOCAL_NETWORK_SERVER', db_type: 'postgres' })}
+                      onClick={() => updateAppSetting('operating_mode', 'LOCAL_NETWORK_SERVER')}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                         appSettings.operating_mode === 'LOCAL_NETWORK_SERVER'
                           ? 'border-brand-600 bg-brand-50/50'
@@ -861,7 +906,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             type="text"
                             placeholder="e.g. 192.168.1.100 or 127.0.0.1"
                             value={appSettings.pg_host || ''}
-                            onChange={(e) => setAppSettings({ ...appSettings, pg_host: e.target.value })}
+                            onChange={(e) => updateAppSetting('pg_host', e.target.value)}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
                           />
                         </div>
@@ -871,7 +916,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             type="number"
                             placeholder="5432"
                             value={appSettings.pg_port || 5432}
-                            onChange={(e) => setAppSettings({ ...appSettings, pg_port: Number(e.target.value) })}
+                            onChange={(e) => updateAppSetting('pg_port', Number(e.target.value))}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
                           />
                         </div>
@@ -881,7 +926,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             type="text"
                             placeholder="invoice_manager"
                             value={appSettings.pg_database || ''}
-                            onChange={(e) => setAppSettings({ ...appSettings, pg_database: e.target.value })}
+                            onChange={(e) => updateAppSetting('pg_database', e.target.value)}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
                           />
                         </div>
@@ -891,7 +936,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             type="text"
                             placeholder="postgres"
                             value={appSettings.pg_user || ''}
-                            onChange={(e) => setAppSettings({ ...appSettings, pg_user: e.target.value })}
+                            onChange={(e) => updateAppSetting('pg_user', e.target.value)}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
                           />
                         </div>
@@ -901,7 +946,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             type="password"
                             placeholder="••••••••"
                             value={appSettings.pg_password || ''}
-                            onChange={(e) => setAppSettings({ ...appSettings, pg_password: e.target.value })}
+                            onChange={(e) => updateAppSetting('pg_password', e.target.value)}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
                           />
                         </div>
@@ -935,6 +980,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   )}
                 </div>
               </div>
+            )}
+              </>
             )}
           </div>
         </div>

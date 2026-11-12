@@ -111,7 +111,11 @@ export const App: React.FC = () => {
 
       {/* Main Container: Sidebar + View Content */}
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar activeTab={activeTab} onSelectTab={(tab) => setActiveTab(tab)} />
+        <Sidebar
+          activeTab={activeTab}
+          onSelectTab={(tab) => setActiveTab(tab)}
+          onOpenSettings={() => setIsConfigModalOpen(true)}
+        />
 
         <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
           {!activeCompany ? (
@@ -194,13 +198,15 @@ export const App: React.FC = () => {
       />
 
       {/* System & Company Configuration Modal */}
-      {activeCompany && (
-        <ConfigurationModal
-          isOpen={isConfigModalOpen}
-          onClose={() => setIsConfigModalOpen(false)}
-          companyId={activeCompany.id}
-        />
-      )}
+      <ConfigurationModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        companyId={activeCompany?.id}
+        onOpenCompanyModal={() => {
+          setIsConfigModalOpen(false);
+          setIsCompanyModalOpen(true);
+        }}
+      />
     </div>
   );
 };
