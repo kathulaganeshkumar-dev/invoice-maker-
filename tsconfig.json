@@ -19,7 +19,7 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "api"],
   "ts-node": {
     "compilerOptions": {
       "module": "commonjs"

@@ -20,21 +20,33 @@ export function getDefaultDataDir(): string {
   // Store database inside user data directory or workspace for portability and sandbox safety
   let appDataDir = process.env.APP_DATA_DIR;
   if (!appDataDir) {
-    try {
-      // In electron environment, use safe app userData
-      const { app } = require('electron');
-      if (app && typeof app.getPath === 'function') {
-        appDataDir = path.join(app.getPath('userData'), 'data');
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      appDataDir = path.join('/tmp', 'data');
+    } else {
+      try {
+        // In electron environment, use safe app userData
+        const { app } = require('electron');
+        if (app && typeof app.getPath === 'function') {
+          appDataDir = path.join(app.getPath('userData'), 'data');
+        }
+      } catch {
+        // Not running in Electron process
       }
-    } catch {
-      // Not running in Electron process
     }
   }
   if (!appDataDir) {
     appDataDir = path.join(process.cwd(), 'data');
   }
-  if (!fs.existsSync(appDataDir)) {
-    fs.mkdirSync(appDataDir, { recursive: true });
+  try {
+    if (!fs.existsSync(appDataDir)) {
+      fs.mkdirSync(appDataDir, { recursive: true });
+    }
+  } catch {
+    // Fallback to /tmp if current directory is read-only (e.g. serverless runtime)
+    appDataDir = path.join('/tmp', 'data');
+    if (!fs.existsSync(appDataDir)) {
+      fs.mkdirSync(appDataDir, { recursive: true });
+    }
   }
   return appDataDir;
 }
@@ -48,21 +60,30 @@ export async function initDatabase(config?: DbConfig): Promise<Knex> {
     return cachedDb;
   }
 
-  const dbType = config?.type || 'sqlite';
+  // Auto-detect PostgreSQL if DATABASE_URL, POSTGRES_URL, or PGHOST environment variable is present
+  const hasPgEnv = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.PGHOST);
+  const dbType = config?.type || (hasPgEnv ? 'postgres' : 'sqlite');
 
   let db: Knex;
 
   if (dbType === 'postgres') {
+    const connString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     db = knex({
       client: 'pg',
-      connection: {
-        host: config?.pgHost || '127.0.0.1',
-        port: config?.pgPort || 5432,
-        database: config?.pgDatabase || 'invoice_manager',
-        user: config?.pgUser || 'postgres',
-        password: config?.pgPassword || 'postgres',
-      },
-      pool: { min: 2, max: 20 },
+      connection: connString
+        ? {
+            connectionString: connString,
+            ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+          }
+        : {
+            host: config?.pgHost || process.env.PGHOST || '127.0.0.1',
+            port: Number(config?.pgPort || process.env.PGPORT) || 5432,
+            database: config?.pgDatabase || process.env.PGDATABASE || 'invoice_manager',
+            user: config?.pgUser || process.env.PGUSER || 'postgres',
+            password: config?.pgPassword || process.env.PGPASSWORD || 'postgres',
+            ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
+          },
+      pool: { min: 0, max: 10 },
     });
   } else {
     const sqlitePath = config?.sqlitePath || getDefaultSqlitePath();
