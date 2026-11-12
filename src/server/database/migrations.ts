@@ -1,0 +1,719 @@
+// src/server/database/migrations.ts - Automated database schema migrations for SQLite and PostgreSQL
+import { Knex } from 'knex';
+
+export async function runMigrations(db: Knex): Promise<void> {
+  // 1. Application Settings
+  if (!(await db.schema.hasTable('app_settings'))) {
+    await db.schema.createTable('app_settings', (table) => {
+      table.string('id').primary();
+      table.string('operating_mode').defaultTo('SINGLE_COMPUTER');
+      table.string('db_type').defaultTo('sqlite');
+      table.string('pg_host').nullable();
+      table.integer('pg_port').defaultTo(5432);
+      table.string('pg_database').nullable();
+      table.string('pg_user').nullable();
+      table.string('pg_password').nullable();
+      table.integer('server_port').defaultTo(4200);
+      table.boolean('show_company_selector_on_startup').defaultTo(true);
+      table.string('theme').defaultTo('light');
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+    });
+  }
+
+  // 2. Companies
+  if (!(await db.schema.hasTable('companies'))) {
+    await db.schema.createTable('companies', (table) => {
+      table.string('id').primary();
+      table.string('name').notNullable();
+      table.string('legal_name').notNullable();
+      table.string('business_type').defaultTo('Proprietorship');
+      table.text('logo_url').nullable();
+      table.text('registered_address').notNullable();
+      table.string('gstin').nullable();
+      table.string('pan').nullable();
+      table.string('state').notNullable();
+      table.string('state_code', 2).notNullable();
+      table.string('pin_code', 10).notNullable();
+      table.string('phone').notNullable();
+      table.string('email').notNullable();
+      table.string('website').nullable();
+      table.string('bank_name').nullable();
+      table.string('bank_account_no').nullable();
+      table.string('bank_ifsc').nullable();
+      table.string('bank_branch').nullable();
+      table.string('upi_id').nullable();
+      table.text('default_invoice_terms').nullable();
+      table.text('default_quotation_terms').nullable();
+      table.boolean('is_default').defaultTo(false);
+      table.boolean('is_archived').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+    });
+  }
+
+  // 3. Branches
+  if (!(await db.schema.hasTable('branches'))) {
+    await db.schema.createTable('branches', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('name').notNullable();
+      table.string('code').notNullable();
+      table.text('address').notNullable();
+      table.string('phone').notNullable();
+      table.string('email').notNullable();
+      table.string('gstin').nullable();
+      table.string('state').notNullable();
+      table.string('state_code', 2).notNullable();
+      table.boolean('is_default').defaultTo(false);
+      table.boolean('is_archived').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+    });
+  }
+
+  // 4. Company Settings
+  if (!(await db.schema.hasTable('company_settings'))) {
+    await db.schema.createTable('company_settings', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().unique().references('id').inTable('companies').onDelete('CASCADE');
+      table.integer('invoice_overdue_days').defaultTo(0);
+      table.boolean('print_invoice_after_save').defaultTo(true);
+      table.boolean('show_postal_code_before_city').defaultTo(false);
+      table.boolean('include_additional_notes_in_search').defaultTo(true);
+      table.boolean('sort_invoices_by_number').defaultTo(true);
+      table.boolean('show_amount_in_words').defaultTo(true);
+      table.boolean('zero_not_displayed').defaultTo(false);
+      table.boolean('indian_number_style').defaultTo(true);
+      table.string('currency_name').defaultTo('Rupees');
+      table.string('currency_symbol').defaultTo('₹');
+      table.string('decimal_name').defaultTo('Paise');
+      table.string('printed_date_format').defaultTo('DD/MM/YYYY');
+      table.boolean('allow_negative_stock').defaultTo(false);
+      table.string('inventory_valuation_method').defaultTo('FIFO');
+      table.boolean('enable_reverse_charge_by_default').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+    });
+  }
+
+  // 5. Numbering Sequences
+  if (!(await db.schema.hasTable('numbering_sequences'))) {
+    await db.schema.createTable('numbering_sequences', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').nullable();
+      table.string('document_type').notNullable();
+      table.string('prefix').defaultTo('');
+      table.string('suffix').defaultTo('');
+      table.integer('padding_length').defaultTo(4);
+      table.integer('current_number').defaultTo(0);
+      table.boolean('include_financial_year').defaultTo(true);
+      table.string('fy_format').defaultTo('YYYY-YY');
+      table.string('separator').defaultTo('/');
+      table.string('custom_format').nullable();
+      table.string('last_generated_number').nullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id', 'document_type']);
+    });
+  }
+
+  // 6. Categories
+  if (!(await db.schema.hasTable('categories'))) {
+    await db.schema.createTable('categories', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('name').notNullable();
+      table.text('description').nullable();
+      table.string('parent_id').nullable();
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+    });
+  }
+
+  // 7. Units
+  if (!(await db.schema.hasTable('units'))) {
+    await db.schema.createTable('units', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('name').notNullable();
+      table.string('code').notNullable();
+      table.boolean('is_decimal_allowed').defaultTo(false);
+
+      table.index(['company_id']);
+    });
+  }
+
+  // 8. Products and Services
+  if (!(await db.schema.hasTable('products'))) {
+    await db.schema.createTable('products', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('item_type').defaultTo('PRODUCT'); // PRODUCT or SERVICE
+      table.string('name').notNullable();
+      table.string('sku').nullable();
+      table.string('product_code').nullable();
+      table.string('barcode').nullable();
+      table.string('category_id').nullable().references('id').inTable('categories').onDelete('SET NULL');
+      table.text('description').nullable();
+      table.text('image_url').nullable();
+      table.string('unit').defaultTo('NOS');
+      table.string('hsn_or_sac').notNullable();
+      table.string('gst_rate').defaultTo('18.00');
+      table.string('purchase_price').defaultTo('0.00');
+      table.string('selling_price').defaultTo('0.00');
+      table.boolean('is_tax_inclusive').defaultTo(false);
+      table.string('minimum_stock').defaultTo('0.00');
+      table.string('current_stock').defaultTo('0.00');
+      table.string('preferred_supplier_id').nullable();
+      table.boolean('is_active').defaultTo(true);
+      table.boolean('is_archived').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id', 'item_type']);
+      table.index(['company_id', 'name']);
+    });
+  }
+
+  // 9. Customers
+  if (!(await db.schema.hasTable('customers'))) {
+    await db.schema.createTable('customers', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('customer_type').defaultTo('BUSINESS');
+      table.string('name').notNullable();
+      table.string('company_name').nullable();
+      table.string('contact_person').nullable();
+      table.string('mobile').notNullable();
+      table.string('alternate_phone').nullable();
+      table.string('email').nullable();
+      table.string('gstin').nullable();
+      table.string('pan').nullable();
+      table.text('billing_address').notNullable();
+      table.text('shipping_address').notNullable();
+      table.string('city').notNullable();
+      table.string('state').notNullable();
+      table.string('state_code', 2).notNullable();
+      table.string('pin_code', 10).notNullable();
+      table.string('opening_balance').defaultTo('0.00');
+      table.string('current_balance').defaultTo('0.00');
+      table.string('credit_limit').defaultTo('0.00');
+      table.integer('payment_terms_days').defaultTo(30);
+      table.text('notes').nullable();
+      table.boolean('is_archived').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+      table.index(['company_id', 'name']);
+    });
+  }
+
+  // 10. Customer Addresses
+  if (!(await db.schema.hasTable('customer_addresses'))) {
+    await db.schema.createTable('customer_addresses', (table) => {
+      table.string('id').primary();
+      table.string('customer_id').notNullable().references('id').inTable('customers').onDelete('CASCADE');
+      table.string('address_type').defaultTo('BILLING');
+      table.text('street').notNullable();
+      table.string('city').notNullable();
+      table.string('state').notNullable();
+      table.string('state_code', 2).notNullable();
+      table.string('pin_code', 10).notNullable();
+      table.boolean('is_default').defaultTo(true);
+
+      table.index(['customer_id']);
+    });
+  }
+
+  // 11. Suppliers
+  if (!(await db.schema.hasTable('suppliers'))) {
+    await db.schema.createTable('suppliers', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('name').notNullable();
+      table.string('company_name').nullable();
+      table.string('contact_person').nullable();
+      table.string('mobile').notNullable();
+      table.string('email').nullable();
+      table.string('gstin').nullable();
+      table.string('pan').nullable();
+      table.text('address').notNullable();
+      table.string('state').notNullable();
+      table.string('state_code', 2).notNullable();
+      table.string('pin_code', 10).notNullable();
+      table.string('bank_name').nullable();
+      table.string('bank_account_no').nullable();
+      table.string('bank_ifsc').nullable();
+      table.string('upi_id').nullable();
+      table.string('opening_balance').defaultTo('0.00');
+      table.string('current_balance').defaultTo('0.00');
+      table.integer('payment_terms_days').defaultTo(30);
+      table.text('notes').nullable();
+      table.boolean('is_archived').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+    });
+  }
+
+  // 12. Warehouses
+  if (!(await db.schema.hasTable('warehouses'))) {
+    await db.schema.createTable('warehouses', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('name').notNullable();
+      table.string('code').notNullable();
+      table.text('address').notNullable();
+      table.boolean('is_default').defaultTo(false);
+      table.boolean('is_active').defaultTo(true);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+    });
+  }
+
+  // 13. Invoices
+  if (!(await db.schema.hasTable('invoices'))) {
+    await db.schema.createTable('invoices', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('document_type').notNullable();
+      table.string('invoice_number').notNullable();
+      table.string('invoice_date').notNullable();
+      table.string('due_date').notNullable();
+      table.string('customer_id').notNullable().references('id').inTable('customers');
+      table.string('customer_name').notNullable();
+      table.string('customer_gstin').nullable();
+      table.string('customer_pan').nullable();
+      table.text('billing_address').notNullable();
+      table.text('shipping_address').notNullable();
+      table.string('place_of_supply_state').notNullable();
+      table.string('place_of_supply_code', 2).notNullable();
+      table.boolean('is_inter_state').defaultTo(false);
+      table.boolean('is_reverse_charge').defaultTo(false);
+      table.string('reference_number').nullable();
+      table.string('purchase_order_number').nullable();
+      table.string('payment_terms').nullable();
+      table.string('subtotal').defaultTo('0.00');
+      table.string('overall_discount_percentage').defaultTo('0.00');
+      table.string('overall_discount_amount').defaultTo('0.00');
+      table.string('total_taxable_value').defaultTo('0.00');
+      table.string('total_cgst').defaultTo('0.00');
+      table.string('total_sgst').defaultTo('0.00');
+      table.string('total_igst').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('additional_charges').defaultTo('0.00');
+      table.string('round_off').defaultTo('0.00');
+      table.string('grand_total').defaultTo('0.00');
+      table.text('amount_in_words').notNullable();
+      table.string('paid_amount').defaultTo('0.00');
+      table.string('balance_amount').defaultTo('0.00');
+      table.string('status').defaultTo('DRAFT'); // DRAFT, REVIEW, FINALIZED, CANCELLED
+      table.string('finalized_at').nullable();
+      table.string('cancelled_at').nullable();
+      table.text('cancellation_reason').nullable();
+      table.string('letterhead_template_id').nullable();
+      table.text('notes').nullable();
+      table.text('terms_conditions').nullable();
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id', 'status']);
+      table.index(['company_id', 'document_type']);
+      table.index(['company_id', 'customer_id']);
+      table.unique(['company_id', 'document_type', 'invoice_number']);
+    });
+  }
+
+  // 14. Invoice Items
+  if (!(await db.schema.hasTable('invoice_items'))) {
+    await db.schema.createTable('invoice_items', (table) => {
+      table.string('id').primary();
+      table.string('invoice_id').notNullable().references('id').inTable('invoices').onDelete('CASCADE');
+      table.string('item_id').nullable();
+      table.string('item_type').defaultTo('PRODUCT');
+      table.string('item_name').notNullable();
+      table.text('description').nullable();
+      table.string('hsn_or_sac').notNullable();
+      table.string('quantity').defaultTo('1.00');
+      table.string('unit').defaultTo('NOS');
+      table.string('rate').defaultTo('0.00');
+      table.string('discount_percentage').defaultTo('0.00');
+      table.string('discount_amount').defaultTo('0.00');
+      table.boolean('is_tax_inclusive').defaultTo(false);
+      table.string('taxable_value').defaultTo('0.00');
+      table.string('gst_rate').defaultTo('18.00');
+      table.string('cgst_rate').defaultTo('9.00');
+      table.string('cgst_amount').defaultTo('0.00');
+      table.string('sgst_rate').defaultTo('9.00');
+      table.string('sgst_amount').defaultTo('0.00');
+      table.string('igst_rate').defaultTo('0.00');
+      table.string('igst_amount').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('line_total').defaultTo('0.00');
+      table.integer('sort_order').defaultTo(0);
+
+      table.index(['invoice_id']);
+    });
+  }
+
+  // 15. Quotations
+  if (!(await db.schema.hasTable('quotations'))) {
+    await db.schema.createTable('quotations', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('quotation_number').notNullable();
+      table.integer('revision_number').defaultTo(1);
+      table.string('quotation_date').notNullable();
+      table.string('valid_until_date').notNullable();
+      table.string('customer_id').notNullable().references('id').inTable('customers');
+      table.string('customer_name').notNullable();
+      table.string('customer_gstin').nullable();
+      table.text('billing_address').notNullable();
+      table.text('shipping_address').notNullable();
+      table.string('place_of_supply_state').notNullable();
+      table.string('place_of_supply_code', 2).notNullable();
+      table.string('subtotal').defaultTo('0.00');
+      table.string('overall_discount_amount').defaultTo('0.00');
+      table.string('total_taxable_value').defaultTo('0.00');
+      table.string('total_cgst').defaultTo('0.00');
+      table.string('total_sgst').defaultTo('0.00');
+      table.string('total_igst').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('additional_charges').defaultTo('0.00');
+      table.string('round_off').defaultTo('0.00');
+      table.string('grand_total').defaultTo('0.00');
+      table.text('amount_in_words').notNullable();
+      table.string('status').defaultTo('DRAFT'); // DRAFT, UNDER_REVIEW, SENT, ACCEPTED, REJECTED, EXPIRED, CONVERTED, CANCELLED
+      table.string('converted_invoice_id').nullable();
+      table.string('converted_at').nullable();
+      table.string('letterhead_template_id').nullable();
+      table.text('notes').nullable();
+      table.text('terms_conditions').nullable();
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id', 'status']);
+      table.unique(['company_id', 'quotation_number', 'revision_number']);
+    });
+  }
+
+  // 16. Quotation Items
+  if (!(await db.schema.hasTable('quotation_items'))) {
+    await db.schema.createTable('quotation_items', (table) => {
+      table.string('id').primary();
+      table.string('quotation_id').notNullable().references('id').inTable('quotations').onDelete('CASCADE');
+      table.string('item_id').nullable();
+      table.string('item_type').defaultTo('PRODUCT');
+      table.string('item_name').notNullable();
+      table.text('description').nullable();
+      table.string('hsn_or_sac').notNullable();
+      table.string('quantity').defaultTo('1.00');
+      table.string('unit').defaultTo('NOS');
+      table.string('rate').defaultTo('0.00');
+      table.string('discount_percentage').defaultTo('0.00');
+      table.string('discount_amount').defaultTo('0.00');
+      table.string('taxable_value').defaultTo('0.00');
+      table.string('gst_rate').defaultTo('18.00');
+      table.string('cgst_rate').defaultTo('9.00');
+      table.string('cgst_amount').defaultTo('0.00');
+      table.string('sgst_rate').defaultTo('9.00');
+      table.string('sgst_amount').defaultTo('0.00');
+      table.string('igst_rate').defaultTo('0.00');
+      table.string('igst_amount').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('line_total').defaultTo('0.00');
+      table.integer('sort_order').defaultTo(0);
+
+      table.index(['quotation_id']);
+    });
+  }
+
+  // 17. Purchase Orders
+  if (!(await db.schema.hasTable('purchase_orders'))) {
+    await db.schema.createTable('purchase_orders', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('po_number').notNullable();
+      table.string('po_date').notNullable();
+      table.string('expected_delivery_date').nullable();
+      table.string('supplier_id').notNullable().references('id').inTable('suppliers');
+      table.string('supplier_name').notNullable();
+      table.string('supplier_gstin').nullable();
+      table.string('subtotal').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('grand_total').defaultTo('0.00');
+      table.string('status').defaultTo('DRAFT'); // DRAFT, CONFIRMED, RECEIVED, CANCELLED
+      table.text('notes').nullable();
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+      table.unique(['company_id', 'po_number']);
+    });
+  }
+
+  // 18. Purchase Order Items
+  if (!(await db.schema.hasTable('purchase_order_items'))) {
+    await db.schema.createTable('purchase_order_items', (table) => {
+      table.string('id').primary();
+      table.string('purchase_order_id').notNullable().references('id').inTable('purchase_orders').onDelete('CASCADE');
+      table.string('product_id').nullable();
+      table.string('item_name').notNullable();
+      table.string('hsn_code').defaultTo('');
+      table.string('quantity').defaultTo('1.00');
+      table.string('unit').defaultTo('NOS');
+      table.string('rate').defaultTo('0.00');
+      table.string('discount_amount').defaultTo('0.00');
+      table.string('gst_rate').defaultTo('18.00');
+      table.string('taxable_value').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('line_total').defaultTo('0.00');
+
+      table.index(['purchase_order_id']);
+    });
+  }
+
+  // 19. Purchase Invoices (Bills)
+  if (!(await db.schema.hasTable('purchase_invoices'))) {
+    await db.schema.createTable('purchase_invoices', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('purchase_order_id').nullable();
+      table.string('bill_number').notNullable();
+      table.string('bill_date').notNullable();
+      table.string('due_date').notNullable();
+      table.string('supplier_id').notNullable().references('id').inTable('suppliers');
+      table.string('supplier_name').notNullable();
+      table.string('supplier_gstin').nullable();
+      table.string('warehouse_id').notNullable().references('id').inTable('warehouses');
+      table.string('subtotal').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('grand_total').defaultTo('0.00');
+      table.string('paid_amount').defaultTo('0.00');
+      table.string('balance_amount').defaultTo('0.00');
+      table.boolean('is_finalized').defaultTo(false);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+      table.unique(['company_id', 'supplier_id', 'bill_number']);
+    });
+  }
+
+  // 20. Purchase Invoice Items
+  if (!(await db.schema.hasTable('purchase_invoice_items'))) {
+    await db.schema.createTable('purchase_invoice_items', (table) => {
+      table.string('id').primary();
+      table.string('purchase_invoice_id').notNullable().references('id').inTable('purchase_invoices').onDelete('CASCADE');
+      table.string('product_id').nullable();
+      table.string('item_name').notNullable();
+      table.string('hsn_code').defaultTo('');
+      table.string('quantity').defaultTo('1.00');
+      table.string('unit').defaultTo('NOS');
+      table.string('rate').defaultTo('0.00');
+      table.string('discount_amount').defaultTo('0.00');
+      table.string('gst_rate').defaultTo('18.00');
+      table.string('taxable_value').defaultTo('0.00');
+      table.string('cgst_amount').defaultTo('0.00');
+      table.string('sgst_amount').defaultTo('0.00');
+      table.string('igst_amount').defaultTo('0.00');
+      table.string('total_tax').defaultTo('0.00');
+      table.string('line_total').defaultTo('0.00');
+
+      table.index(['purchase_invoice_id']);
+    });
+  }
+
+  // 21. Inventory Transactions (Stock Movements)
+  if (!(await db.schema.hasTable('inventory_transactions'))) {
+    await db.schema.createTable('inventory_transactions', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('warehouse_id').notNullable().references('id').inTable('warehouses');
+      table.string('product_id').notNullable().references('id').inTable('products');
+      table.string('movement_type').notNullable();
+      table.string('quantity').notNullable(); // Positive for inward, negative for outward
+      table.string('unit_cost').defaultTo('0.00');
+      table.string('total_cost').defaultTo('0.00');
+      table.string('reference_document_type').notNullable();
+      table.string('reference_document_id').notNullable();
+      table.string('reference_document_number').notNullable();
+      table.string('batch_number').nullable();
+      table.text('serial_numbers_json').nullable();
+      table.text('notes').nullable();
+      table.string('transaction_date').notNullable();
+      table.string('created_at').notNullable();
+
+      table.index(['company_id', 'product_id']);
+      table.index(['company_id', 'warehouse_id']);
+    });
+  }
+
+  // 22. Stock Balances
+  if (!(await db.schema.hasTable('stock_balances'))) {
+    await db.schema.createTable('stock_balances', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('warehouse_id').notNullable().references('id').inTable('warehouses');
+      table.string('product_id').notNullable().references('id').inTable('products');
+      table.string('quantity_on_hand').defaultTo('0.00');
+      table.string('average_unit_cost').defaultTo('0.00');
+      table.string('total_stock_value').defaultTo('0.00');
+      table.string('last_updated_at').notNullable();
+
+      table.unique(['company_id', 'warehouse_id', 'product_id']);
+    });
+  }
+
+  // 23. Customer Payments
+  if (!(await db.schema.hasTable('customer_payments'))) {
+    await db.schema.createTable('customer_payments', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('payment_number').notNullable();
+      table.string('payment_date').notNullable();
+      table.string('customer_id').notNullable().references('id').inTable('customers');
+      table.string('customer_name').notNullable();
+      table.string('amount').notNullable();
+      table.string('payment_method').defaultTo('BANK_TRANSFER');
+      table.string('reference_number').nullable();
+      table.text('notes').nullable();
+      table.string('unallocated_amount').defaultTo('0.00');
+      table.string('created_at').notNullable();
+
+      table.index(['company_id', 'customer_id']);
+      table.unique(['company_id', 'payment_number']);
+    });
+  }
+
+  // 24. Supplier Payments
+  if (!(await db.schema.hasTable('supplier_payments'))) {
+    await db.schema.createTable('supplier_payments', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').notNullable();
+      table.string('payment_number').notNullable();
+      table.string('payment_date').notNullable();
+      table.string('supplier_id').notNullable().references('id').inTable('suppliers');
+      table.string('supplier_name').notNullable();
+      table.string('amount').notNullable();
+      table.string('payment_method').defaultTo('BANK_TRANSFER');
+      table.string('reference_number').nullable();
+      table.text('notes').nullable();
+      table.string('unallocated_amount').defaultTo('0.00');
+      table.string('created_at').notNullable();
+
+      table.index(['company_id', 'supplier_id']);
+      table.unique(['company_id', 'payment_number']);
+    });
+  }
+
+  // 25. Payment Allocations
+  if (!(await db.schema.hasTable('payment_allocations'))) {
+    await db.schema.createTable('payment_allocations', (table) => {
+      table.string('id').primary();
+      table.string('payment_id').notNullable();
+      table.string('document_type').notNullable(); // INVOICE or PURCHASE_INVOICE
+      table.string('document_id').notNullable();
+      table.string('document_number').notNullable();
+      table.string('allocated_amount').notNullable();
+      table.string('allocated_at').notNullable();
+
+      table.index(['payment_id']);
+      table.index(['document_id']);
+    });
+  }
+
+  // 26. Letterhead Templates
+  if (!(await db.schema.hasTable('letterhead_templates'))) {
+    await db.schema.createTable('letterhead_templates', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('branch_id').nullable();
+      table.string('name').notNullable();
+      table.text('file_path').notNullable();
+      table.string('file_type').defaultTo('PDF');
+      table.string('page_size').defaultTo('A4');
+      table.string('orientation').defaultTo('PORTRAIT');
+      table.boolean('is_default').defaultTo(false);
+      table.text('layout_config_json').notNullable();
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.index(['company_id']);
+    });
+  }
+
+  // 27. Audit Logs
+  if (!(await db.schema.hasTable('audit_logs'))) {
+    await db.schema.createTable('audit_logs', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable();
+      table.string('entity_type').notNullable();
+      table.string('entity_id').notNullable();
+      table.string('action').notNullable();
+      table.text('details').notNullable();
+      table.string('timestamp').notNullable();
+
+      table.index(['company_id', 'entity_type']);
+      table.index(['timestamp']);
+    });
+  }
+
+  // Schema enhancements: Ensure additional columns exist on company_settings and app_settings
+  const compSettingsCols = [
+    { name: 'invoice_save_path', type: 'text' },
+    { name: 'quotation_save_path', type: 'text' },
+    { name: 'purchase_save_path', type: 'text' },
+    { name: 'report_save_path', type: 'text' },
+    { name: 'backup_save_path', type: 'text' },
+    { name: 'default_invoice_notes', type: 'text' },
+    { name: 'default_quotation_notes', type: 'text' },
+    { name: 'quotation_validity_days', type: 'integer' },
+    { name: 'default_tax_inclusive', type: 'boolean' },
+  ];
+
+  for (const col of compSettingsCols) {
+    const exists = await db.schema.hasColumn('company_settings', col.name);
+    if (!exists) {
+      await db.schema.alterTable('company_settings', (table) => {
+        if (col.type === 'text') table.text(col.name).nullable();
+        else if (col.type === 'integer') table.integer(col.name).defaultTo(30);
+        else if (col.type === 'boolean') table.boolean(col.name).defaultTo(false);
+      });
+    }
+  }
+
+  const appSettingsCols = [
+    'invoice_save_path',
+    'quotation_save_path',
+    'purchase_save_path',
+    'report_save_path',
+    'backup_save_path',
+  ];
+  for (const col of appSettingsCols) {
+    const exists = await db.schema.hasColumn('app_settings', col);
+    if (!exists) {
+      await db.schema.alterTable('app_settings', (table) => {
+        table.text(col).nullable();
+      });
+    }
+  }
+}

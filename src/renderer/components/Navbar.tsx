@@ -1,0 +1,133 @@
+// src/renderer/components/Navbar.tsx - Desktop Top Navigation Bar
+import React from 'react';
+import { Company, Branch } from '../../shared/types';
+import {
+  Building2,
+  GitBranch,
+  Settings,
+  PlusCircle,
+  FilePlus,
+  Users,
+  Moon,
+  Sun,
+  ShieldCheck,
+} from 'lucide-react';
+import { getIndianFinancialYear } from '../../server/services/numberingService';
+
+interface Props {
+  company: Company | null;
+  branch: Branch | null;
+  onOpenCompanyModal: () => void;
+  onOpenConfigModal: () => void;
+  onNavigate: (tab: string) => void;
+  isDarkMode: boolean;
+  onToggleTheme: () => void;
+}
+
+export const Navbar: React.FC<Props> = ({
+  company,
+  branch,
+  onOpenCompanyModal,
+  onOpenConfigModal,
+  onNavigate,
+  isDarkMode,
+  onToggleTheme,
+}) => {
+  const currentFy = getIndianFinancialYear();
+
+  return (
+    <header className="h-14 border-b border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between px-4 select-none z-20">
+      {/* Left: Brand logo & Active Business Selector */}
+      <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 text-brand-900 dark:text-white font-extrabold text-base tracking-tight">
+          <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-sm font-bold text-lg">
+            Σ
+          </div>
+          <span className="hidden sm:inline">Enterprise Invoicer</span>
+        </div>
+
+        <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+
+        {/* Business Selector Pill matching user workflow */}
+        <button
+          type="button"
+          onClick={onOpenCompanyModal}
+          className="flex items-center space-x-2 px-3 py-1 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-100 transition-colors border border-slate-200 dark:border-slate-700"
+          title="Click to switch Company or Branch"
+        >
+          <Building2 className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+          <span className="max-w-[140px] truncate">{company?.name || 'Select Business'}</span>
+          {branch && (
+            <>
+              <span className="text-slate-400">•</span>
+              <span className="text-slate-500 dark:text-slate-400 max-w-[100px] truncate">{branch.name}</span>
+            </>
+          )}
+        </button>
+
+        {/* Financial Year Badge */}
+        <span className="px-2 py-0.5 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 rounded text-[11px] font-mono font-bold">
+          FY {currentFy}
+        </span>
+      </div>
+
+      {/* Right: Quick Actions, Theme, Status */}
+      <div className="flex items-center space-x-2.5">
+        <button
+          type="button"
+          onClick={() => onNavigate('invoices')}
+          className="inline-flex items-center space-x-1.5 px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-xs font-bold shadow-sm transition-all"
+        >
+          <PlusCircle className="w-3.5 h-3.5" />
+          <span>New Invoice</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('quotations')}
+          className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+        >
+          <FilePlus className="w-3.5 h-3.5 text-slate-500" />
+          <span className="hidden md:inline">Quotation</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('customers')}
+          className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+        >
+          <Users className="w-3.5 h-3.5 text-slate-500" />
+          <span className="hidden md:inline">Customer</span>
+        </button>
+
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+
+        {/* Offline Security Status */}
+        <div className="flex items-center space-x-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 rounded border border-emerald-200 dark:border-emerald-800">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Offline & Local</span>
+        </div>
+
+        {/* Dark/Light toggle */}
+        <button
+          type="button"
+          onClick={onToggleTheme}
+          className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Toggle Dark/Light Mode"
+        >
+          {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+        </button>
+
+        {/* Configuration Modal Trigger */}
+        <button
+          type="button"
+          onClick={onOpenConfigModal}
+          className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Settings & Preferences"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      </div>
+    </header>
+  );
+};
