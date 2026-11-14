@@ -46,3 +46,6 @@ Thumbs.db
 
 # Local agent artifacts
 .agents/
+
+.vercel
+.env*
