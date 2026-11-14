@@ -516,6 +516,26 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">IFSC Code</label>
+                  <input
+                    type="text"
+                    value={editingCompany.bank_ifsc || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, bank_ifsc: e.target.value.toUpperCase() })}
+                    placeholder="e.g. SBIN0001234"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Branch Details</label>
+                  <input
+                    type="text"
+                    value={editingCompany.bank_branch || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, bank_branch: e.target.value })}
+                    placeholder="e.g. Main Branch, MG Road"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">
