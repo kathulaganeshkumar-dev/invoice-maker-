@@ -95,6 +95,8 @@ export const api = {
   getBranches: (companyId: string) => request<Branch[]>(`/companies/${companyId}/branches`),
   createBranch: (companyId: string, data: Partial<Branch>) =>
     request<Branch>(`/companies/${companyId}/branches`, { method: 'POST', body: JSON.stringify(data) }),
+  updateBranch: (companyId: string, branchId: string, data: Partial<Branch>) =>
+    request<Branch>(`/companies/${companyId}/branches/${branchId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteBranch: (companyId: string, branchId: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/branches/${branchId}`, { method: 'DELETE' }),
 

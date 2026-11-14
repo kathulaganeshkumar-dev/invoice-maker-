@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Company, Branch } from '../../shared/types';
 import { INDIAN_STATES } from '../../shared/constants';
 import { api } from '../services/api';
-import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown, Eye } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -29,8 +29,10 @@ export const CompanyBranchModal: React.FC<Props> = ({
   const [error, setError] = useState<string>('');
   const [stateQuery, setStateQuery] = useState<string>('');
   const [isStateOpen, setIsStateOpen] = useState<boolean>(false);
-  const [showAddBranch, setShowAddBranch] = useState<boolean>(false);
-  const [newBranch, setNewBranch] = useState<Partial<Branch>>({});
+  const [isBranchFormOpen, setIsBranchFormOpen] = useState<boolean>(false);
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [branchFormData, setBranchFormData] = useState<Partial<Branch>>({});
+  const [showBranchesList, setShowBranchesList] = useState<boolean>(false);
   const stateDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,34 +84,96 @@ export const CompanyBranchModal: React.FC<Props> = ({
     setIsStateOpen(false);
   };
 
-  const handleCreateBranch = async () => {
-    if (!newBranch.name?.trim()) {
+  const handleOpenAddBranch = () => {
+    const comp = companies.find((c) => c.id === selectedCompanyId);
+    setEditingBranchId(null);
+    setBranchFormData({
+      state: comp?.state || 'Madhya Pradesh',
+      state_code: comp?.state_code || '23',
+      code: `BR0${branches.length + 1}`,
+      use_company_bank: true,
+      bank_name: comp?.bank_name || '',
+      bank_account_no: comp?.bank_account_no || '',
+      bank_ifsc: comp?.bank_ifsc || '',
+      bank_branch: comp?.bank_branch || '',
+    });
+    setIsBranchFormOpen(true);
+  };
+
+  const handleOpenEditBranch = (branch: Branch) => {
+    const comp = companies.find((c) => c.id === selectedCompanyId);
+    setEditingBranchId(branch.id);
+    setBranchFormData({
+      ...branch,
+      use_company_bank: branch.use_company_bank ?? true,
+      bank_name: (branch.use_company_bank ?? true) ? (comp?.bank_name || '') : (branch.bank_name || ''),
+      bank_account_no: (branch.use_company_bank ?? true) ? (comp?.bank_account_no || '') : (branch.bank_account_no || ''),
+      bank_ifsc: (branch.use_company_bank ?? true) ? (comp?.bank_ifsc || '') : (branch.bank_ifsc || ''),
+      bank_branch: (branch.use_company_bank ?? true) ? (comp?.bank_branch || '') : (branch.bank_branch || ''),
+    });
+    setIsBranchFormOpen(true);
+  };
+
+  const handleDeleteBranch = async (branch: Branch) => {
+    if (branches.length <= 1) {
+      alert('Cannot delete the only branch. Each company must have at least one operating branch.');
+      return;
+    }
+    if (branch.is_default) {
+      alert('Cannot delete the default Head Office branch. You can edit its details instead.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete branch "${branch.name}" (${branch.code})?`)) return;
+
+    try {
+      await api.deleteBranch(selectedCompanyId, branch.id);
+      const brs = await api.getBranches(selectedCompanyId);
+      setBranches(brs);
+      if (selectedBranchId === branch.id) {
+        const def = brs.find((b) => b.is_default) || brs[0];
+        setSelectedBranchId(def ? def.id : '');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error deleting branch');
+    }
+  };
+
+  const handleSaveBranch = async () => {
+    if (!branchFormData.name?.trim()) {
       alert('Branch name is required');
       return;
     }
     const comp = companies.find((c) => c.id === selectedCompanyId);
     try {
-      const code = newBranch.code?.trim() || `BR0${branches.length + 1}`;
-      const useCompBank = newBranch.use_company_bank ?? true;
-      const created = await api.createBranch(selectedCompanyId, {
-        ...newBranch,
-        name: newBranch.name.trim(),
+      const code = branchFormData.code?.trim() || `BR0${branches.length + 1}`;
+      const useCompBank = branchFormData.use_company_bank ?? true;
+      const payload: Partial<Branch> = {
+        ...branchFormData,
+        name: branchFormData.name.trim(),
         code: code.toUpperCase(),
-        state: newBranch.state || comp?.state || 'Madhya Pradesh',
-        state_code: newBranch.state_code || comp?.state_code || '23',
+        state: branchFormData.state || comp?.state || 'Madhya Pradesh',
+        state_code: branchFormData.state_code || comp?.state_code || '23',
         use_company_bank: useCompBank,
-        bank_name: useCompBank ? (comp?.bank_name || undefined) : newBranch.bank_name,
-        bank_account_no: useCompBank ? (comp?.bank_account_no || undefined) : newBranch.bank_account_no,
-        bank_ifsc: useCompBank ? (comp?.bank_ifsc || undefined) : newBranch.bank_ifsc,
-        bank_branch: useCompBank ? (comp?.bank_branch || undefined) : newBranch.bank_branch,
-      });
+        bank_name: useCompBank ? (comp?.bank_name || undefined) : branchFormData.bank_name,
+        bank_account_no: useCompBank ? (comp?.bank_account_no || undefined) : branchFormData.bank_account_no,
+        bank_ifsc: useCompBank ? (comp?.bank_ifsc || undefined) : branchFormData.bank_ifsc,
+        bank_branch: useCompBank ? (comp?.bank_branch || undefined) : branchFormData.bank_branch,
+      };
+
+      if (editingBranchId) {
+        await api.updateBranch(selectedCompanyId, editingBranchId, payload);
+      } else {
+        const created = await api.createBranch(selectedCompanyId, payload);
+        setSelectedBranchId(created.id);
+      }
+
       const brs = await api.getBranches(selectedCompanyId);
       setBranches(brs);
-      setSelectedBranchId(created.id);
-      setShowAddBranch(false);
-      setNewBranch({});
+      setIsBranchFormOpen(false);
+      setEditingBranchId(null);
+      setBranchFormData({});
     } catch (err: any) {
-      alert(err.message || 'Error creating branch');
+      alert(err.message || 'Error saving branch');
     }
   };
 
@@ -389,7 +453,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
               </div>
 
               {/* Branch Selector & Multiple Branch Management */}
-              {branches.length > 0 && (
+              {branches.length > 0 && (() => {
+                const selectedBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+                return (
                 <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
@@ -410,38 +476,146 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       </select>
                       <button
                         type="button"
-                        onClick={() => {
-                          const comp = companies.find((c) => c.id === selectedCompanyId);
-                          setNewBranch({
-                            state: comp?.state || 'Madhya Pradesh',
-                            state_code: comp?.state_code || '23',
-                            code: `BR0${branches.length + 1}`,
-                            use_company_bank: true,
-                            bank_name: comp?.bank_name || '',
-                            bank_account_no: comp?.bank_account_no || '',
-                            bank_ifsc: comp?.bank_ifsc || '',
-                            bank_branch: comp?.bank_branch || '',
-                          });
-                          setShowAddBranch(true);
-                        }}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold rounded-md border border-brand-200 transition-colors"
+                        onClick={handleOpenAddBranch}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-md border border-emerald-200 transition-colors"
+                        title="Add a new branch"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Add Branch</span>
+                        <span>Add</span>
+                      </button>
+                      {selectedBranch && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditBranch(selectedBranch)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md border border-slate-200 transition-colors"
+                          title="Edit selected branch details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      {selectedBranch && !selectedBranch.is_default && branches.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBranch(selectedBranch)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-md border border-rose-200 transition-colors"
+                          title="Delete selected sub-branch"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowBranchesList(!showBranchesList)}
+                        className={`inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
+                          showBranchesList
+                            ? 'bg-brand-600 text-white border-brand-700 shadow-sm'
+                            : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                        }`}
+                        title="View all branches table"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>{showBranchesList ? 'Hide Branches' : `View Branches (${branches.length})`}</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Add Branch Inline Form */}
-                  {showAddBranch && (
+                  {/* Branches Table List (when View Branches is clicked) */}
+                  {showBranchesList && (
+                    <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                      <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                          All Branches of Selected Company
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Click row to select as operating branch
+                        </span>
+                      </div>
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                          <tr>
+                            <th className="py-2 px-3 w-10">#</th>
+                            <th className="py-2 px-3">Branch Name</th>
+                            <th className="py-2 px-3 w-20">Code</th>
+                            <th className="py-2 px-3">State & Code</th>
+                            <th className="py-2 px-3">Bank Details</th>
+                            <th className="py-2 px-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {branches.map((b, idx) => {
+                            const isSelected = b.id === selectedBranchId;
+                            return (
+                              <tr
+                                key={b.id}
+                                onClick={() => setSelectedBranchId(b.id)}
+                                className={`cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-sky-50 font-medium text-brand-900' : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <td className="py-2 px-3 text-slate-400 font-mono">{idx + 1}</td>
+                                <td className="py-2 px-3 font-semibold">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span>{b.name}</span>
+                                    {b.is_default && (
+                                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
+                                        Default
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2 px-3 font-mono font-bold text-slate-600">{b.code}</td>
+                                <td className="py-2 px-3">{b.state} ({b.state_code})</td>
+                                <td className="py-2 px-3 text-slate-500">
+                                  {b.use_company_bank ? (
+                                    <span className="text-slate-500 italic">Company Bank</span>
+                                  ) : (
+                                    <span className="font-mono text-[11px] text-emerald-700 font-medium">
+                                      {b.bank_name || 'Custom'} ({b.bank_ifsc || '-'})
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-right space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditBranch(b)}
+                                    className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold text-[11px] border border-slate-200"
+                                  >
+                                    Edit
+                                  </button>
+                                  {!b.is_default && branches.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteBranch(b)}
+                                      className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded font-semibold text-[11px] border border-rose-200"
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Add / Edit Branch Inline Form */}
+                  {isBranchFormOpen && (
                     <div className="mt-3 p-3.5 bg-white border border-brand-200 rounded-lg shadow-sm space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                         <span className="text-xs font-bold text-brand-800 uppercase tracking-wide">
-                          Create New Operating Branch
+                          {editingBranchId ? `Edit Operating Branch: ${branchFormData.name || ''}` : 'Create New Operating Branch'}
                         </span>
                         <button
                           type="button"
-                          onClick={() => setShowAddBranch(false)}
+                          onClick={() => {
+                            setIsBranchFormOpen(false);
+                            setEditingBranchId(null);
+                            setBranchFormData({});
+                          }}
                           className="text-xs text-slate-400 hover:text-slate-600 font-bold px-1"
                         >
                           ✕
@@ -453,8 +627,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="e.g. Hyderabad Regional Office"
-                            value={newBranch.name || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, name: e.target.value })}
+                            value={branchFormData.name || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, name: e.target.value })}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
@@ -463,19 +637,19 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="e.g. HYD01"
-                            value={newBranch.code || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, code: e.target.value.toUpperCase() })}
+                            value={branchFormData.code || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, code: e.target.value.toUpperCase() })}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
                         <div>
                           <label className="block font-semibold text-slate-700 mb-1">State & Code</label>
                           <select
-                            value={newBranch.state_code || '23'}
+                            value={branchFormData.state_code || '23'}
                             onChange={(e) => {
                               const s = INDIAN_STATES.find((st) => st.code === e.target.value);
-                              setNewBranch({
-                                ...newBranch,
+                              setBranchFormData({
+                                ...branchFormData,
                                 state_code: e.target.value,
                                 state: s ? s.name : '',
                               });
@@ -494,8 +668,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="e.g. +91 98260 12345"
-                            value={newBranch.phone || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, phone: e.target.value })}
+                            value={branchFormData.phone || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, phone: e.target.value })}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
@@ -504,8 +678,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="Plot / Street / Locality"
-                            value={newBranch.address || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, address: e.target.value })}
+                            value={branchFormData.address || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, address: e.target.value })}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
@@ -516,17 +690,17 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             <label className="flex items-center space-x-2 text-xs font-semibold text-brand-900 cursor-pointer select-none">
                               <input
                                 type="checkbox"
-                                checked={newBranch.use_company_bank ?? true}
+                                checked={branchFormData.use_company_bank ?? true}
                                 onChange={(e) => {
                                   const checked = e.target.checked;
                                   const comp = companies.find((c) => c.id === selectedCompanyId);
-                                  setNewBranch({
-                                    ...newBranch,
+                                  setBranchFormData({
+                                    ...branchFormData,
                                     use_company_bank: checked,
-                                    bank_name: checked ? (comp?.bank_name || '') : (newBranch.bank_name || ''),
-                                    bank_account_no: checked ? (comp?.bank_account_no || '') : (newBranch.bank_account_no || ''),
-                                    bank_ifsc: checked ? (comp?.bank_ifsc || '') : (newBranch.bank_ifsc || ''),
-                                    bank_branch: checked ? (comp?.bank_branch || '') : (newBranch.bank_branch || ''),
+                                    bank_name: checked ? (comp?.bank_name || '') : (branchFormData.bank_name || ''),
+                                    bank_account_no: checked ? (comp?.bank_account_no || '') : (branchFormData.bank_account_no || ''),
+                                    bank_ifsc: checked ? (comp?.bank_ifsc || '') : (branchFormData.bank_ifsc || ''),
+                                    bank_branch: checked ? (comp?.bank_branch || '') : (branchFormData.bank_branch || ''),
                                   });
                                 }}
                                 className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
@@ -534,7 +708,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                               <span>Use Main Branch / Company Bank Details</span>
                             </label>
                             <span className="text-[11px] font-medium text-slate-500">
-                              {(newBranch.use_company_bank ?? true) ? 'Using Company Bank' : 'Custom Branch Bank'}
+                              {(branchFormData.use_company_bank ?? true) ? 'Using Company Bank' : 'Custom Branch Bank'}
                             </span>
                           </div>
                         </div>
@@ -544,11 +718,11 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="e.g. State Bank of India"
-                            disabled={newBranch.use_company_bank ?? true}
-                            value={newBranch.bank_name || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, bank_name: e.target.value })}
+                            disabled={branchFormData.use_company_bank ?? true}
+                            value={branchFormData.bank_name || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, bank_name: e.target.value })}
                             className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
                             }`}
                           />
                         </div>
@@ -557,11 +731,11 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="Account Number"
-                            disabled={newBranch.use_company_bank ?? true}
-                            value={newBranch.bank_account_no || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, bank_account_no: e.target.value })}
+                            disabled={branchFormData.use_company_bank ?? true}
+                            value={branchFormData.bank_account_no || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, bank_account_no: e.target.value })}
                             className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
                             }`}
                           />
                         </div>
@@ -570,11 +744,11 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="e.g. SBIN0001234"
-                            disabled={newBranch.use_company_bank ?? true}
-                            value={newBranch.bank_ifsc || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, bank_ifsc: e.target.value.toUpperCase() })}
+                            disabled={branchFormData.use_company_bank ?? true}
+                            value={branchFormData.bank_ifsc || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, bank_ifsc: e.target.value.toUpperCase() })}
                             className={`w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
                             }`}
                           />
                         </div>
@@ -583,11 +757,11 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             placeholder="e.g. Main Branch, MG Road"
-                            disabled={newBranch.use_company_bank ?? true}
-                            value={newBranch.bank_branch || ''}
-                            onChange={(e) => setNewBranch({ ...newBranch, bank_branch: e.target.value })}
+                            disabled={branchFormData.use_company_bank ?? true}
+                            value={branchFormData.bank_branch || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, bank_branch: e.target.value })}
                             className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
                             }`}
                           />
                         </div>
@@ -595,23 +769,28 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       <div className="flex justify-end space-x-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => setShowAddBranch(false)}
+                          onClick={() => {
+                            setIsBranchFormOpen(false);
+                            setEditingBranchId(null);
+                            setBranchFormData({});
+                          }}
                           className="px-3 py-1 border border-slate-300 text-slate-600 rounded text-xs hover:bg-slate-50"
                         >
                           Cancel
                         </button>
                         <button
                           type="button"
-                          onClick={handleCreateBranch}
+                          onClick={handleSaveBranch}
                           className="px-3.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold shadow-sm"
                         >
-                          Save Branch
+                          {editingBranchId ? 'Update Branch' : 'Save Branch'}
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+              );
+              })()}
             </>
           ) : (
             /* Company Edit Form */
