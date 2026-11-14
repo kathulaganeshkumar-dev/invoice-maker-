@@ -225,6 +225,7 @@ export class InvoiceService {
       if (input.mark_as_paid) {
         await this.finalizeInvoiceInTrx(trx, companyId, invoiceId);
         return await this.markPaidInTrx(trx, companyId, invoiceId, {
+          amount: input.payment_amount,
           paymentMethod: input.payment_method,
           paymentDate: input.payment_date || input.invoice_date,
           referenceNumber: input.payment_reference,
@@ -406,7 +407,7 @@ export class InvoiceService {
     trx: Knex.Transaction,
     companyId: string,
     invoiceId: string,
-    options?: { paymentMethod?: string; paymentDate?: string; referenceNumber?: string; notes?: string }
+    options?: { amount?: string | number; paymentMethod?: string; paymentDate?: string; referenceNumber?: string; notes?: string }
   ): Promise<Invoice> {
     let inv = await trx('invoices').where({ company_id: companyId, id: invoiceId }).first();
     if (!inv) {
@@ -428,6 +429,19 @@ export class InvoiceService {
       return (await this.getInvoiceById(companyId, invoiceId, trx))!;
     }
 
+    // Determine payment amount (full balance or partial pay)
+    let payAmt = outstanding;
+    if (options?.amount !== undefined && options?.amount !== null && options?.amount !== '') {
+      const parsedAmt = new Decimal(options.amount);
+      if (parsedAmt.gt(0)) {
+        if (parsedAmt.gt(outstanding)) {
+          throw new Error(`Payment amount (₹ ${parsedAmt.toFixed(2)}) cannot exceed remaining balance (₹ ${outstanding.toFixed(2)}).`);
+        }
+        payAmt = parsedAmt;
+      }
+    }
+
+    const isPartial = payAmt.lt(outstanding);
     const paymentDate = options?.paymentDate || inv.invoice_date || now.split('T')[0];
     const paymentMethod = options?.paymentMethod || 'BANK_TRANSFER';
     const paymentId = uuidv4();
@@ -448,10 +462,10 @@ export class InvoiceService {
       payment_date: paymentDate,
       customer_id: inv.customer_id,
       customer_name: inv.customer_name,
-      amount: outstanding.toFixed(2),
+      amount: payAmt.toFixed(2),
       payment_method: paymentMethod,
       reference_number: options?.referenceNumber || inv.invoice_number,
-      notes: options?.notes || `Full payment marked for invoice ${inv.invoice_number}`,
+      notes: options?.notes || `${isPartial ? 'Partial' : 'Full'} payment marked for invoice ${inv.invoice_number}`,
       unallocated_amount: '0.00',
       created_at: now,
     });
@@ -462,20 +476,21 @@ export class InvoiceService {
       document_type: 'INVOICE',
       document_id: inv.id,
       document_number: inv.invoice_number,
-      allocated_amount: outstanding.toFixed(2),
+      allocated_amount: payAmt.toFixed(2),
       allocated_at: now,
     });
 
-    const newPaid = new Decimal(inv.paid_amount || 0).add(outstanding);
+    const newPaid = new Decimal(inv.paid_amount || 0).add(payAmt);
+    const newBalance = outstanding.sub(payAmt);
     await trx('invoices').where({ id: inv.id }).update({
       paid_amount: newPaid.toFixed(2),
-      balance_amount: '0.00',
+      balance_amount: newBalance.toFixed(2),
       updated_at: now,
     });
 
     const customer = await trx('customers').where({ id: inv.customer_id, company_id: companyId }).first();
     if (customer) {
-      const updatedBal = new Decimal(customer.current_balance || 0).sub(outstanding);
+      const updatedBal = new Decimal(customer.current_balance || 0).sub(payAmt);
       await trx('customers')
         .where({ id: inv.customer_id, company_id: companyId })
         .update({
@@ -489,8 +504,8 @@ export class InvoiceService {
       company_id: companyId,
       entity_type: 'INVOICE',
       entity_id: invoiceId,
-      action: 'MARK_PAID',
-      details: `Marked ${inv.invoice_number} as PAID (₹ ${outstanding.toFixed(2)} via ${paymentMethod}, Voucher ${payNum})`,
+      action: isPartial ? 'PARTIAL_PAYMENT' : 'MARK_PAID',
+      details: `${isPartial ? 'Partial payment' : 'Marked PAID'} for ${inv.invoice_number} (₹ ${payAmt.toFixed(2)} via ${paymentMethod}, Voucher ${payNum})`,
       timestamp: now,
     });
 
@@ -498,22 +513,12 @@ export class InvoiceService {
   }
 
   /**
-   * Finalizes an invoice: locks financial figures, generates sequential document number atomically,
-   * updates customer current balance, and dispatches physical inventory.
-   */
-  async finalizeInvoice(companyId: string, invoiceId: string): Promise<Invoice> {
-    return this.db.transaction(async (trx) => {
-      return this.finalizeInvoiceInTrx(trx, companyId, invoiceId);
-    });
-  }
-
-  /**
-   * Marks an existing invoice as fully Paid (finalizing first if still Draft), recording payment voucher & allocation.
+   * Marks an existing invoice as fully Paid or partially Paid (finalizing first if still Draft), recording payment voucher & allocation.
    */
   async markInvoiceAsPaid(
     companyId: string,
     invoiceId: string,
-    options?: { paymentMethod?: string; paymentDate?: string; referenceNumber?: string; notes?: string }
+    options?: { amount?: string | number; paymentMethod?: string; paymentDate?: string; referenceNumber?: string; notes?: string }
   ): Promise<Invoice> {
     return this.db.transaction(async (trx) => {
       return this.markPaidInTrx(trx, companyId, invoiceId, options);

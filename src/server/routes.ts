@@ -511,6 +511,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, invoiceId } = getParams(req);
       const invoice = await invoiceService.markInvoiceAsPaid(companyId, invoiceId, {
+        amount: req.body?.amount,
         paymentMethod: req.body?.payment_method,
         paymentDate: req.body?.payment_date,
         referenceNumber: req.body?.reference_number,

@@ -163,7 +163,7 @@ export const api = {
   markInvoiceAsPaid: (
     companyId: string,
     id: string,
-    data?: { payment_method?: string; payment_date?: string; reference_number?: string; notes?: string }
+    data?: { amount?: string | number; payment_method?: string; payment_date?: string; reference_number?: string; notes?: string }
   ) =>
     request<Invoice>(`/companies/${companyId}/invoices/${id}/mark-paid`, {
       method: 'POST',

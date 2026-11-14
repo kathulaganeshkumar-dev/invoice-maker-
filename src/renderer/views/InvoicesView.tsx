@@ -50,7 +50,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [invoicePaymentStatus, setInvoicePaymentStatus] = useState<'DRAFT' | 'UNPAID' | 'PAID'>('UNPAID');
+  const [invoicePaymentStatus, setInvoicePaymentStatus] = useState<'DRAFT' | 'UNPAID' | 'PARTIAL' | 'PAID'>('UNPAID');
+  const [invoicePartialAmount, setInvoicePartialAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('BANK_TRANSFER');
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentReference, setPaymentReference] = useState<string>('');
@@ -74,6 +75,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
 
   // Mark-Paid modal state for existing invoices
   const [markPaidInvoice, setMarkPaidInvoice] = useState<Invoice | null>(null);
+  const [markPaidType, setMarkPaidType] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [markPaidAmount, setMarkPaidAmount] = useState<string>('');
   const [markPaidMethod, setMarkPaidMethod] = useState<string>('BANK_TRANSFER');
   const [markPaidDate, setMarkPaidDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [markPaidRef, setMarkPaidRef] = useState<string>('');
@@ -93,7 +96,12 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     setLoading(true);
     try {
       const filters: any = {};
-      if (filterStatus === 'PAID' || filterStatus === 'UNPAID' || filterStatus === 'FINALIZED') {
+      if (
+        filterStatus === 'PAID' ||
+        filterStatus === 'PARTIAL PAY' ||
+        filterStatus === 'UNPAID' ||
+        filterStatus === 'FINALIZED'
+      ) {
         filters.status = 'FINALIZED';
       } else if (filterStatus === 'DRAFT') {
         filters.status = 'DRAFT';
@@ -244,11 +252,17 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         invoice_date: invoiceDate,
         due_date: dueDate,
         letterhead_template_id: selectedTemplateId || undefined,
-        finalize_on_create: invoicePaymentStatus === 'UNPAID' || invoicePaymentStatus === 'PAID',
-        mark_as_paid: invoicePaymentStatus === 'PAID',
-        payment_method: invoicePaymentStatus === 'PAID' ? paymentMethod : undefined,
-        payment_date: invoicePaymentStatus === 'PAID' ? paymentDate || invoiceDate : undefined,
-        payment_reference: invoicePaymentStatus === 'PAID' ? paymentReference : undefined,
+        finalize_on_create: invoicePaymentStatus !== 'DRAFT',
+        mark_as_paid: invoicePaymentStatus === 'PAID' || invoicePaymentStatus === 'PARTIAL',
+        payment_amount: invoicePaymentStatus === 'PARTIAL' ? invoicePartialAmount : undefined,
+        payment_method:
+          invoicePaymentStatus === 'PAID' || invoicePaymentStatus === 'PARTIAL' ? paymentMethod : undefined,
+        payment_date:
+          invoicePaymentStatus === 'PAID' || invoicePaymentStatus === 'PARTIAL'
+            ? paymentDate || invoiceDate
+            : undefined,
+        payment_reference:
+          invoicePaymentStatus === 'PAID' || invoicePaymentStatus === 'PARTIAL' ? paymentReference : undefined,
         items: validItems.map((it) => ({
           item_id: it.item_id || undefined,
           item_type: it.item_type || 'PRODUCT',
@@ -272,18 +286,41 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
-  const handleOpenMarkPaid = (inv: Invoice) => {
+  const handleOpenMarkPaid = (inv: Invoice, defaultType: 'FULL' | 'PARTIAL' = 'FULL') => {
     setMarkPaidInvoice(inv);
+    setMarkPaidType(defaultType);
+    setMarkPaidAmount(inv.balance_amount || '0.00');
     setMarkPaidMethod('BANK_TRANSFER');
     setMarkPaidDate(new Date().toISOString().split('T')[0]);
     setMarkPaidRef(inv.invoice_number || '');
-    setMarkPaidNotes(`Full payment received for ${inv.invoice_number}`);
+    setMarkPaidNotes(
+      defaultType === 'PARTIAL'
+        ? `Partial payment for invoice ${inv.invoice_number}`
+        : `Full payment for invoice ${inv.invoice_number}`
+    );
   };
 
   const handleConfirmMarkPaid = async () => {
     if (!markPaidInvoice) return;
     try {
+      let payAmt = markPaidInvoice.balance_amount;
+      if (markPaidType === 'PARTIAL') {
+        const parsed = parseFloat(markPaidAmount);
+        if (isNaN(parsed) || parsed <= 0) {
+          alert('Please enter a valid partial payment amount greater than zero.');
+          return;
+        }
+        if (new Decimal(parsed).gt(new Decimal(markPaidInvoice.balance_amount || 0))) {
+          alert(
+            `Partial payment amount (₹ ${parsed}) cannot exceed remaining balance (₹ ${markPaidInvoice.balance_amount}).`
+          );
+          return;
+        }
+        payAmt = parsed.toFixed(2);
+      }
+
       const updated = await api.markInvoiceAsPaid(companyId, markPaidInvoice.id, {
+        amount: payAmt,
         payment_method: markPaidMethod,
         payment_date: markPaidDate,
         reference_number: markPaidRef,
@@ -295,7 +332,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
       setMarkPaidInvoice(null);
       await loadInvoices();
     } catch (err: any) {
-      alert(err.message || 'Error marking invoice as paid');
+      alert(err.message || 'Error recording payment');
     }
   };
 
@@ -393,8 +430,18 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
       const isPaid = inv.status === 'FINALIZED' && new Decimal(inv.balance_amount || 0).lte(0);
       if (!isPaid) return false;
     }
+    if (filterStatus === 'PARTIAL PAY') {
+      const isPartial =
+        inv.status === 'FINALIZED' &&
+        new Decimal(inv.paid_amount || 0).gt(0) &&
+        new Decimal(inv.balance_amount || 0).gt(0);
+      if (!isPartial) return false;
+    }
     if (filterStatus === 'UNPAID') {
-      const isUnpaid = inv.status === 'FINALIZED' && new Decimal(inv.balance_amount || 0).gt(0);
+      const isUnpaid =
+        inv.status === 'FINALIZED' &&
+        new Decimal(inv.paid_amount || 0).lte(0) &&
+        new Decimal(inv.balance_amount || 0).gt(0);
       if (!isUnpaid) return false;
     }
     if (searchQuery) {
@@ -434,8 +481,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <div className="flex items-center space-x-2">
-          {['ALL', 'FINALIZED', 'PAID', 'UNPAID', 'DRAFT'].map((st) => (
+        <div className="flex flex-wrap items-center gap-2">
+          {['ALL', 'FINALIZED', 'PAID', 'PARTIAL PAY', 'UNPAID', 'DRAFT'].map((st) => (
             <button
               key={st}
               onClick={() => setFilterStatus(st)}
@@ -521,19 +568,41 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                       {formatIndianCurrency(inv.balance_amount)}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          inv.status === 'FINALIZED'
-                            ? isPaid
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                            : inv.status === 'CANCELLED'
-                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                            : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {inv.status === 'FINALIZED' ? (isPaid ? 'PAID' : 'UNPAID') : inv.status}
-                      </span>
+                      {(() => {
+                        if (inv.status === 'FINALIZED') {
+                          if (new Decimal(inv.balance_amount || 0).lte(0)) {
+                            return (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                PAID
+                              </span>
+                            );
+                          }
+                          if (new Decimal(inv.paid_amount || 0).gt(0)) {
+                            return (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                PARTIAL PAY
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                              UNPAID
+                            </span>
+                          );
+                        }
+                        if (inv.status === 'CANCELLED') {
+                          return (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                              CANCELLED
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                            DRAFT
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center space-x-1.5">
@@ -551,12 +620,12 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                         {inv.status !== 'CANCELLED' && Number(inv.balance_amount) > 0 && (
                           <button
                             type="button"
-                            onClick={() => handleOpenMarkPaid(inv)}
-                            className="inline-flex items-center space-x-1 px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-sm"
-                            title="Mark this invoice as Paid & record payment receipt"
+                            onClick={() => handleOpenMarkPaid(inv, Number(inv.paid_amount) > 0 ? 'PARTIAL' : 'FULL')}
+                            className="inline-flex items-center space-x-1 px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-sm"
+                            title="Record full or partial customer payment"
                           >
                             <CheckCircle2 className="w-3 h-3" />
-                            <span>Mark Paid</span>
+                            <span>{Number(inv.paid_amount) > 0 ? 'Pay / Partial' : 'Record Pay'}</span>
                           </button>
                         )}
 
@@ -614,10 +683,24 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                 <div>
                   <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                     <span>{viewingInvoice.document_type.replace(/_/g, ' ')}: {viewingInvoice.invoice_number}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300">
+                    <span
+                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                        viewingInvoice.status === 'FINALIZED'
+                          ? Number(viewingInvoice.balance_amount) <= 0
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : Number(viewingInvoice.paid_amount) > 0
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                          : viewingInvoice.status === 'CANCELLED'
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                          : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                      }`}
+                    >
                       {viewingInvoice.status === 'FINALIZED'
                         ? Number(viewingInvoice.balance_amount) <= 0
                           ? 'PAID'
+                          : Number(viewingInvoice.paid_amount) > 0
+                          ? 'PARTIAL PAY'
                           : 'UNPAID'
                         : viewingInvoice.status}
                     </span>
@@ -795,11 +878,20 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                 {viewingInvoice.status !== 'CANCELLED' && Number(viewingInvoice.balance_amount) > 0 && (
                   <button
                     type="button"
-                    onClick={() => handleOpenMarkPaid(viewingInvoice)}
+                    onClick={() =>
+                      handleOpenMarkPaid(
+                        viewingInvoice,
+                        Number(viewingInvoice.paid_amount) > 0 ? 'PARTIAL' : 'FULL'
+                      )
+                    }
                     className="inline-flex items-center space-x-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Mark as Paid</span>
+                    <span>
+                      {Number(viewingInvoice.paid_amount) > 0
+                        ? 'Pay Remaining / Partial'
+                        : 'Record / Partial Pay'}
+                    </span>
                   </button>
                 )}
 
@@ -934,49 +1026,80 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     onChange={(e) => setInvoicePaymentStatus(e.target.value as any)}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-semibold"
                   >
-                    <option value="UNPAID">Finalize (Unpaid / Credit Invoice)</option>
-                    <option value="PAID">Paid (Finalize & Record Full Payment Now)</option>
+                    <option value="UNPAID">Finalize (Unpaid / Full Credit)</option>
+                    <option value="PARTIAL">Partial Pay (Finalize & Record Partial Payment Now)</option>
+                    <option value="PAID">Paid in Full (Finalize & Record Full Payment Now)</option>
                     <option value="DRAFT">Save as Draft (Edit Later)</option>
                   </select>
                 </div>
               </div>
 
-              {/* Payment Receipt Fields if Paid is selected */}
-              {invoicePaymentStatus === 'PAID' && (
-                <div className="grid grid-cols-3 gap-4 p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-                  <div>
-                    <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Payment Mode</label>
-                    <select
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800"
-                    >
-                      <option value="BANK_TRANSFER">Bank Transfer (NEFT / RTGS / IMPS)</option>
-                      <option value="UPI">UPI</option>
-                      <option value="CASH">Cash</option>
-                      <option value="CHEQUE">Cheque</option>
-                      <option value="CARD">Card</option>
-                    </select>
+              {/* Payment Receipt Fields if Paid or Partial is selected */}
+              {(invoicePaymentStatus === 'PAID' || invoicePaymentStatus === 'PARTIAL') && (
+                <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-3">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Payment Mode</label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                      >
+                        <option value="BANK_TRANSFER">Bank Transfer (NEFT / RTGS / IMPS)</option>
+                        <option value="UPI">UPI</option>
+                        <option value="CASH">Cash</option>
+                        <option value="CHEQUE">Cheque</option>
+                        <option value="CARD">Card</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Payment Date</label>
+                      <input
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                        className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Reference / UTR #</label>
+                      <input
+                        type="text"
+                        placeholder="Optional UTR / Cheque No."
+                        value={paymentReference}
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                        className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Payment Date</label>
-                    <input
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                      className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Reference / UTR #</label>
-                    <input
-                      type="text"
-                      placeholder="Optional UTR / Cheque No."
-                      value={paymentReference}
-                      onChange={(e) => setPaymentReference(e.target.value)}
-                      className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono"
-                    />
-                  </div>
+
+                  {invoicePaymentStatus === 'PARTIAL' && (
+                    <div className="pt-2 border-t border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <label className="block font-semibold text-emerald-950 dark:text-emerald-200 mb-1">
+                          Partial Payment Amount Received Now (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 5000.00"
+                          value={invoicePartialAmount}
+                          onChange={(e) => setInvoicePartialAmount(e.target.value)}
+                          className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-3 py-1.5 bg-white dark:bg-slate-800 font-bold"
+                        />
+                      </div>
+                      <div className="text-right text-xs pt-4">
+                        <span className="text-slate-500">Remaining Balance: </span>
+                        <span className="font-bold text-rose-600">
+                          {(() => {
+                            const tot = parseFloat(previewDocTotals.grandTotal || '0');
+                            const part = parseFloat(invoicePartialAmount || '0');
+                            return formatIndianCurrency(Math.max(0, tot - (isNaN(part) ? 0 : part)).toFixed(2));
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1218,6 +1341,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               >
                 {invoicePaymentStatus === 'PAID'
                   ? 'Finalize & Mark as Paid'
+                  : invoicePaymentStatus === 'PARTIAL'
+                  ? 'Finalize & Record Partial Pay'
                   : invoicePaymentStatus === 'UNPAID'
                   ? 'Finalize Unpaid Invoice'
                   : 'Save as Draft'}
@@ -1227,26 +1352,131 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         </div>
       )}
 
-      {/* Mark Invoice as Paid Modal */}
+      {/* Mark Invoice as Paid / Partial Pay Modal */}
       {markPaidInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-5 w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
               <h3 className="font-bold text-sm text-emerald-700 dark:text-emerald-400 flex items-center space-x-2">
                 <CheckCircle2 className="w-5 h-5" />
-                <span>Mark Invoice Paid ({markPaidInvoice.invoice_number})</span>
+                <span>Record Customer Payment ({markPaidInvoice.invoice_number})</span>
               </h3>
               <button onClick={() => setMarkPaidInvoice(null)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-between items-center">
-              <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Amount Being Settled:</span>
-              <span className="font-extrabold text-base text-emerald-700 dark:text-emerald-300">
-                {formatIndianCurrency(markPaidInvoice.balance_amount)}
-              </span>
+            {/* Financial Overview Card */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700 grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Total Amount</div>
+                <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  {formatIndianCurrency(markPaidInvoice.grand_total)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Already Paid</div>
+                <div className="font-bold text-emerald-600 text-xs">
+                  {formatIndianCurrency(markPaidInvoice.paid_amount)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Remaining Balance</div>
+                <div className="font-bold text-rose-600 text-xs">
+                  {formatIndianCurrency(markPaidInvoice.balance_amount)}
+                </div>
+              </div>
             </div>
+
+            {/* Full Payment vs Partial Pay Selection */}
+            <div className="flex bg-slate-100 dark:bg-slate-700/60 p-1 rounded-lg border border-slate-200 dark:border-slate-600">
+              <button
+                type="button"
+                onClick={() => {
+                  setMarkPaidType('FULL');
+                  setMarkPaidAmount(markPaidInvoice.balance_amount);
+                  setMarkPaidNotes(`Full payment received for invoice ${markPaidInvoice.invoice_number}`);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                  markPaidType === 'FULL'
+                    ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                }`}
+              >
+                Full Pay ({formatIndianCurrency(markPaidInvoice.balance_amount)})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMarkPaidType('PARTIAL');
+                  if (markPaidAmount === markPaidInvoice.balance_amount) {
+                    setMarkPaidAmount('');
+                  }
+                  setMarkPaidNotes(`Partial payment received for invoice ${markPaidInvoice.invoice_number}`);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                  markPaidType === 'PARTIAL'
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                }`}
+              >
+                Partial Pay (Custom Amount)
+              </button>
+            </div>
+
+            {/* Dynamic Amount Section */}
+            {markPaidType === 'PARTIAL' ? (
+              <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-amber-900 dark:text-amber-200">
+                    Partial Payment Amount (₹) *
+                  </label>
+                  <span className="text-[11px] text-slate-500">
+                    Max: {formatIndianCurrency(markPaidInvoice.balance_amount)}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={markPaidInvoice.balance_amount}
+                  placeholder="Enter amount customer is paying now"
+                  value={markPaidAmount}
+                  onChange={(e) => setMarkPaidAmount(e.target.value)}
+                  className="w-full border border-amber-300 dark:border-amber-700 rounded px-3 py-1.5 text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {(() => {
+                  const amt = parseFloat(markPaidAmount);
+                  const bal = parseFloat(markPaidInvoice.balance_amount || '0');
+                  if (!isNaN(amt) && amt > 0) {
+                    if (amt > bal) {
+                      return (
+                        <div className="text-[11px] text-rose-600 font-bold">
+                          Amount cannot exceed remaining balance of {formatIndianCurrency(markPaidInvoice.balance_amount)}.
+                        </div>
+                      );
+                    }
+                    const remaining = (bal - amt).toFixed(2);
+                    return (
+                      <div className="flex justify-between items-center text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                        <span>Remaining balance after this payment:</span>
+                        <span className="font-bold text-amber-700 dark:text-amber-300">
+                          {formatIndianCurrency(remaining)}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            ) : (
+              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-between items-center">
+                <span className="text-emerald-900 dark:text-emerald-200 font-semibold">Full Amount Being Settled:</span>
+                <span className="font-extrabold text-base text-emerald-700 dark:text-emerald-300">
+                  {formatIndianCurrency(markPaidInvoice.balance_amount)}
+                </span>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1308,7 +1538,9 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                 onClick={handleConfirmMarkPaid}
                 className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
               >
-                Confirm Payment & Mark Paid
+                {markPaidType === 'PARTIAL'
+                  ? `Confirm Partial Payment (${formatIndianCurrency(markPaidAmount || '0')})`
+                  : `Confirm Full Payment (${formatIndianCurrency(markPaidInvoice.balance_amount)})`}
               </button>
             </div>
           </div>
