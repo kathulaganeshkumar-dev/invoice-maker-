@@ -39,6 +39,51 @@ export function createApiRouter(db: Knex): Router {
 
   const getParams = (req: Request): Record<string, string> => req.params as any;
 
+  // ===================== RESET ALL APPLICATION DATA =====================
+  router.post('/reset-all-data', async (_req: Request, res: Response) => {
+    try {
+      await db.transaction(async (trx) => {
+        const tablesToClear = [
+          'payment_allocations',
+          'customer_payments',
+          'supplier_payments',
+          'inventory_transactions',
+          'stock_balances',
+          'invoice_items',
+          'invoices',
+          'quotation_items',
+          'quotations',
+          'purchase_order_items',
+          'purchase_orders',
+          'purchase_invoice_items',
+          'purchase_invoices',
+          'customer_addresses',
+          'customers',
+          'suppliers',
+          'products',
+          'units',
+          'categories',
+          'warehouses',
+          'numbering_sequences',
+          'letterhead_templates',
+          'audit_logs',
+          'branches',
+          'company_settings',
+          'companies',
+        ];
+        for (const table of tablesToClear) {
+          const exists = await trx.schema.hasTable(table);
+          if (exists) {
+            await trx(table).del();
+          }
+        }
+      });
+      res.json({ success: true, message: 'All companies and data have been cleared successfully.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ===================== APP SETTINGS =====================
   router.get('/settings', async (req: Request, res: Response) => {
     try {

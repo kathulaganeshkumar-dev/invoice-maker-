@@ -15,6 +15,7 @@ export const BackupRestoreView: React.FC = () => {
   const [backups, setBackups] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [creating, setCreating] = useState<boolean>(false);
+  const [resetting, setResetting] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
 
   useEffect(() => {
@@ -62,6 +63,27 @@ export const BackupRestoreView: React.FC = () => {
       window.location.reload();
     } catch (err: any) {
       alert(err.message || 'Error restoring database');
+    }
+  };
+
+  const handleResetAllData = async () => {
+    const confirmation = window.prompt(
+      'DANGER: This will permanently delete ALL companies, invoices, customers, products, payments, and business data from the database.\n\nType RESET to confirm:'
+    );
+    if (confirmation !== 'RESET') {
+      if (confirmation !== null) alert('Confirmation text did not match "RESET". Action cancelled.');
+      return;
+    }
+
+    setResetting(true);
+    try {
+      await api.resetAllData();
+      alert('All companies and data have been completely wiped. The application will now reload.');
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message || 'Error clearing data');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -146,6 +168,26 @@ export const BackupRestoreView: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Danger Zone: Factory Reset */}
+      <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-xl p-5 shadow-sm space-y-3">
+        <div className="flex items-center space-x-2 text-red-700 dark:text-red-400 font-bold text-sm">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span>Danger Zone: Clear All Companies & Data (Factory Reset)</span>
+        </div>
+        <p className="text-xs text-red-600/90 dark:text-red-300">
+          Permanently erase all companies, operating branches, invoices, customers, suppliers, inventory, and payment records. Preserves application settings in a pristine clean state.
+        </p>
+        <button
+          type="button"
+          onClick={handleResetAllData}
+          disabled={resetting}
+          className="inline-flex items-center space-x-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+        >
+          <RotateCcw className="w-4 h-4" />
+          <span>{resetting ? 'Resetting Data...' : 'Reset & Wipe All Data'}</span>
+        </button>
       </div>
     </div>
   );

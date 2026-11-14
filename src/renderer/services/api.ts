@@ -83,6 +83,8 @@ export const api = {
     request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   testDatabaseConnection: (data: any) =>
     request<{ success: boolean; message?: string }>('/settings/test-db', { method: 'POST', body: JSON.stringify(data) }),
+  resetAllData: () =>
+    request<{ success: boolean; message: string }>('/reset-all-data', { method: 'POST' }),
 
   // Companies & Branches
   getCompanies: () => request<Company[]>('/companies'),
