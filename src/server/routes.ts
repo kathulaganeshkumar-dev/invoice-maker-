@@ -991,10 +991,11 @@ export function createApiRouter(db: Knex): Router {
 
   router.post('/companies/:companyId/letterheads/analyze', async (req: Request, res: Response) => {
     try {
-      const analysis = await letterheadService.analyzeLetterhead(req.body.file_path);
+      const { companyId } = getParams(req);
+      const analysis = await letterheadService.analyzeLetterhead(req.body.file_path, companyId);
       res.json(analysis);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   });
 

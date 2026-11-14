@@ -46,8 +46,8 @@ This application is a commercial-grade, desktop-first Invoicing, Quotation, Inve
 - Phase 7: Backup, Restore, Excel/CSV Import/Export, Audit Logs & System Settings.
 - Phase 8: Cross-platform Packaging, Documentation, and Automated Quality Testing.
 
-## 5. Mandatory Workflow Directive: Automatic Desktop Launch After Every Update
-- **CRITICAL DIRECTIVE**: After completing ANY code modification, update, bug fix, or feature request:
-  1. Always rebuild the frontend and electron packages (`cmd.exe /c "npm run build"`).
-  2. Kill any stale Electron background task.
-  3. Automatically launch / restart the Electron application on the desktop (`cmd.exe /c "npx electron ."`) as a daemon task so the user immediately sees the live running software on their screen without needing to request it.
+## 5. Mandatory Workflow Directive: Vercel Web Preview Before Local Software Installation
+- **CRITICAL DIRECTIVE**: Whenever any code modification, frontend polish, bug fix, or feature request is made:
+  1. **Deploy to Vercel First**: Commit and push changes to the repository (`git push origin main`) to trigger the live Vercel deployment so the user can immediately review and inspect changes on the web.
+  2. **Provide Web Preview to User**: Share and open the Vercel web preview link so the user can verify the visual UI, layout, and functionality before applying changes to the local software file.
+  3. **Local Software Sync After Web Review**: Only after the changes are verified on the Vercel web build, compile the local packages (`cmd.exe /c "npm run build"`), update the local installation files, and refresh the desktop Electron application.

@@ -465,17 +465,17 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
       {/* Invoices Data Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+          <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
             <tr>
-              <th className="py-3 px-4">Invoice # (Click to View)</th>
-              <th className="py-3 px-4">Type</th>
-              <th className="py-3 px-4">Date</th>
-              <th className="py-3 px-4">Customer</th>
-              <th className="py-3 px-4 text-right">Grand Total</th>
-              <th className="py-3 px-4 text-right">Paid</th>
-              <th className="py-3 px-4 text-right">Balance</th>
-              <th className="py-3 px-4 text-center">Status</th>
-              <th className="py-3 px-4 text-center">Actions</th>
+              <th className="py-2.5 px-4">Invoice #</th>
+              <th className="py-2.5 px-4">Type</th>
+              <th className="py-2.5 px-4">Date</th>
+              <th className="py-2.5 px-4">Customer</th>
+              <th className="py-2.5 px-4 text-right">Grand total</th>
+              <th className="py-2.5 px-4 text-right">Paid</th>
+              <th className="py-2.5 px-4 text-right">Balance</th>
+              <th className="py-2.5 px-4 text-center">Status</th>
+              <th className="py-2.5 px-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -662,14 +662,14 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               {/* Items Table */}
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
+                  <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
                     <tr>
-                      <th className="py-2.5 px-3">Item Description</th>
-                      <th className="py-2.5 px-2">HSN/SAC</th>
-                      <th className="py-2.5 px-2 text-right">Qty</th>
-                      <th className="py-2.5 px-2 text-right">Rate</th>
-                      <th className="py-2.5 px-2 text-right">GST %</th>
-                      <th className="py-2.5 px-3 text-right">Total</th>
+                      <th className="py-2 px-3">Item description</th>
+                      <th className="py-2 px-2">HSN/SAC</th>
+                      <th className="py-2 px-2 text-right">Qty</th>
+                      <th className="py-2 px-2 text-right">Rate</th>
+                      <th className="py-2 px-2 text-right">GST %</th>
+                      <th className="py-2 px-3 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -983,10 +983,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               {/* Line Items Table */}
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
+                  <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
                     <tr>
-                      <th className="p-2 w-44">Catalog / Custom Mode</th>
-                      <th className="p-2">Item Name, HSN & Unit</th>
+                      <th className="p-2 w-44">Catalog / custom mode</th>
+                      <th className="p-2">Item name, HSN & unit</th>
                       <th className="p-2 w-20">Qty</th>
                       <th className="p-2 w-24">Rate (₹)</th>
                       <th className="p-2 w-24">GST %</th>

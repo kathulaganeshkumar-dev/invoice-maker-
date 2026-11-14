@@ -87,10 +87,24 @@ export class LetterheadService {
     };
   }
 
+  validateFilePathInsideUploadDir(companyId: string, targetPath?: string): string {
+    if (!targetPath) return '';
+    const uploadDir = path.resolve(this.getLetterheadUploadDir(companyId));
+    const resolved = path.resolve(targetPath);
+    if (!resolved.startsWith(uploadDir + path.sep)) {
+      throw new Error('Access denied: Letterhead template file must reside inside company upload directory');
+    }
+    return resolved;
+  }
+
   async createTemplate(companyId: string, data: Partial<LetterheadTemplate>): Promise<LetterheadTemplate> {
     const id = uuidv4();
     const now = new Date().toISOString();
     const layoutConfig = data.layout_config || getDefaultLayoutConfig(id);
+
+    if (data.file_path) {
+      this.validateFilePathInsideUploadDir(companyId, data.file_path);
+    }
 
     const template: LetterheadTemplate = {
       id,
@@ -134,7 +148,10 @@ export class LetterheadService {
     const updatePayload: any = { updated_at: now };
 
     if (data.name) updatePayload.name = data.name;
-    if (data.file_path) updatePayload.file_path = data.file_path;
+    if (data.file_path) {
+      this.validateFilePathInsideUploadDir(companyId, data.file_path);
+      updatePayload.file_path = data.file_path;
+    }
     if (data.file_type) updatePayload.file_type = data.file_type;
     if (data.orientation) updatePayload.orientation = data.orientation;
     if (data.layout_config) updatePayload.layout_config_json = JSON.stringify(data.layout_config);
@@ -246,7 +263,7 @@ export class LetterheadService {
       throw new Error('Template binary file not found on disk');
     }
 
-    const resolved = path.resolve(tpl.file_path);
+    const resolved = this.validateFilePathInsideUploadDir(companyId, tpl.file_path);
     const ext = path.extname(resolved).toLowerCase();
     const contentType =
       tpl.file_type === 'PNG' || ext === '.png'
@@ -811,11 +828,17 @@ export class LetterheadService {
   /**
    * Offline OCR Analysis and Zone Detection from file path on disk
    */
-  async analyzeLetterhead(filePath: string): Promise<LetterheadOCRResult> {
+  async analyzeLetterhead(filePath: string, companyId?: string): Promise<LetterheadOCRResult> {
     let buffer = Buffer.alloc(0);
     try {
-      if (filePath && fs.existsSync(filePath)) {
-        buffer = fs.readFileSync(filePath);
+      if (filePath) {
+        let safePath = filePath;
+        if (companyId) {
+          safePath = this.validateFilePathInsideUploadDir(companyId, filePath);
+        }
+        if (fs.existsSync(safePath)) {
+          buffer = fs.readFileSync(safePath);
+        }
       }
     } catch {
       buffer = Buffer.alloc(0);

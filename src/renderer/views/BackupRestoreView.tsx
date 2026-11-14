@@ -103,12 +103,12 @@ export const BackupRestoreView: React.FC = () => {
         </div>
 
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+          <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
             <tr>
-              <th className="py-3 px-4">Backup File Name</th>
-              <th className="py-3 px-4">Created Date & Time</th>
-              <th className="py-3 px-4 text-right">Size</th>
-              <th className="py-3 px-4 text-center">Safety Action</th>
+              <th className="py-2.5 px-4">Backup file name</th>
+              <th className="py-2.5 px-4">Created date & time</th>
+              <th className="py-2.5 px-4 text-right">Size</th>
+              <th className="py-2.5 px-4 text-center">Safety action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

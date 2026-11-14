@@ -411,16 +411,16 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         {activeTab === 'customer' ? (
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
               <tr>
-                <th className="py-3 px-4">Receipt #</th>
-                <th className="py-3 px-4">Receipt Date</th>
-                <th className="py-3 px-4">Received From (Customer)</th>
-                <th className="py-3 px-4">Method</th>
-                <th className="py-3 px-4">UTR / Ref #</th>
-                <th className="py-3 px-4 text-right">Amount Received</th>
-                <th className="py-3 px-4 text-right">Invoices Settled</th>
-                <th className="py-3 px-4 text-center w-16">Actions</th>
+                <th className="py-2.5 px-4">Receipt #</th>
+                <th className="py-2.5 px-4">Receipt date</th>
+                <th className="py-2.5 px-4">Received from</th>
+                <th className="py-2.5 px-4">Method</th>
+                <th className="py-2.5 px-4">UTR / Ref #</th>
+                <th className="py-2.5 px-4 text-right">Amount received</th>
+                <th className="py-2.5 px-4 text-right">Invoices settled</th>
+                <th className="py-2.5 px-4 text-center w-16">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -473,16 +473,16 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           </table>
         ) : (
           <table className="w-full text-left text-xs">
-            <thead className="bg-rose-50/70 dark:bg-slate-900/50 border-b border-rose-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
               <tr>
-                <th className="py-3 px-4">Payment Voucher #</th>
-                <th className="py-3 px-4">Payment Date</th>
-                <th className="py-3 px-4">Paid To (Supplier / Vendor)</th>
-                <th className="py-3 px-4">Payment Mode</th>
-                <th className="py-3 px-4">UTR / Cheque / Ref #</th>
-                <th className="py-3 px-4 text-right">Amount Paid (Outflow)</th>
-                <th className="py-3 px-4 text-right">Purchase Bills Settled</th>
-                <th className="py-3 px-4 text-center w-16">Actions</th>
+                <th className="py-2.5 px-4">Voucher #</th>
+                <th className="py-2.5 px-4">Payment date</th>
+                <th className="py-2.5 px-4">Paid to</th>
+                <th className="py-2.5 px-4">Method</th>
+                <th className="py-2.5 px-4">UTR / Ref #</th>
+                <th className="py-2.5 px-4 text-right">Amount paid</th>
+                <th className="py-2.5 px-4 text-right">Bills settled</th>
+                <th className="py-2.5 px-4 text-center w-16">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

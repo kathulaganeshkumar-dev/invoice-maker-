@@ -131,6 +131,28 @@ async function createMainWindow() {
     backgroundColor: '#ffffff',
   });
 
+  // Secure Window Open Handler: Deny in-app new windows and open external http/https links in default OS browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      shell.openExternal(url).catch((err) => console.error('[Electron] Failed to open external URL:', err));
+    }
+    return { action: 'deny' };
+  });
+
+  // Navigation Guard: Prevent top-level navigation away from the local application bundle
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (
+      !url.startsWith('http://127.0.0.1:') &&
+      !url.startsWith('http://localhost:') &&
+      !url.startsWith('file://')
+    ) {
+      event.preventDefault();
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        shell.openExternal(url).catch((err) => console.error('[Electron] Failed to open external URL:', err));
+      }
+    }
+  });
+
   mainWindow.webContents.on('console-message', (details: any) => {
     const message = details?.message || '';
     if (message) {

@@ -10,9 +10,29 @@ import { createApiRouter } from './routes';
 export async function startServer(port = 4200): Promise<express.Express> {
   const app = express();
 
-  // Enable CORS for frontend and local network clients
+  // Restrict CORS to local origins and desktop application clients
   app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (desktop shell, file://, local curl, IPC)
+      if (!origin) {
+        return callback(null, true);
+      }
+      try {
+        const parsed = new URL(origin);
+        const host = parsed.hostname;
+        if (
+          host === '127.0.0.1' ||
+          host === 'localhost' ||
+          host === '::1' ||
+          parsed.protocol === 'file:'
+        ) {
+          return callback(null, true);
+        }
+      } catch {
+        // Invalid origin format
+      }
+      return callback(new Error('Cross-Origin Request Blocked by Security Policy'));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }));
@@ -52,10 +72,12 @@ export async function startServer(port = 4200): Promise<express.Express> {
     res.sendFile(indexFile);
   });
 
+  const host = process.env.SERVER_HOST || '127.0.0.1';
+
   return new Promise((resolve, reject) => {
     function tryListen(p: number, maxAttempts = 10) {
-      const server = app.listen(p, () => {
-        console.log(`[Server] Enterprise Invoice Backend running on http://127.0.0.1:${p}`);
+      const server = app.listen(p, host, () => {
+        console.log(`[Server] Enterprise Invoice Backend running on http://${host}:${p}`);
         process.env.ACTUAL_SERVER_PORT = String(p);
         resolve(app);
       });

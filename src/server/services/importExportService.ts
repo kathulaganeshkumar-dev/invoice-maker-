@@ -3,6 +3,17 @@ import { Knex } from 'knex';
 import ExcelJS from 'exceljs';
 import { MasterDataService } from './masterDataService';
 
+/**
+ * Sanitizes cell values to prevent CSV / Excel formula injection (CWE-1236).
+ * Any string value starting with formula indicators (=, +, -, @, \t, \r) is prefixed with a single quote (').
+ */
+export function sanitizeCellValue<T>(val: T): T {
+  if (typeof val === 'string' && /^[=+@\-\t\r]/.test(val)) {
+    return ("'" + val) as unknown as T;
+  }
+  return val;
+}
+
 export class ImportExportService {
   constructor(private db: Knex, private masterDataService: MasterDataService) {}
 
@@ -42,19 +53,19 @@ export class ImportExportService {
 
     for (const c of customers) {
       sheet.addRow({
-        customer_type: c.customer_type,
-        name: c.name,
-        company_name: c.company_name || '',
-        contact_person: c.contact_person || '',
-        mobile: c.mobile,
-        email: c.email || '',
-        gstin: c.gstin || '',
-        pan: c.pan || '',
-        billing_address: c.billing_address,
-        city: c.city,
-        state: c.state,
-        state_code: c.state_code,
-        pin_code: c.pin_code,
+        customer_type: sanitizeCellValue(c.customer_type),
+        name: sanitizeCellValue(c.name),
+        company_name: sanitizeCellValue(c.company_name || ''),
+        contact_person: sanitizeCellValue(c.contact_person || ''),
+        mobile: sanitizeCellValue(c.mobile),
+        email: sanitizeCellValue(c.email || ''),
+        gstin: sanitizeCellValue(c.gstin || ''),
+        pan: sanitizeCellValue(c.pan || ''),
+        billing_address: sanitizeCellValue(c.billing_address),
+        city: sanitizeCellValue(c.city),
+        state: sanitizeCellValue(c.state),
+        state_code: sanitizeCellValue(c.state_code),
+        pin_code: sanitizeCellValue(c.pin_code),
         current_balance: c.current_balance,
       });
     }
@@ -95,12 +106,12 @@ export class ImportExportService {
 
     for (const p of products) {
       sheet.addRow({
-        item_type: p.item_type,
-        name: p.name,
-        sku: p.sku || '',
-        category_name: p.category_name || '',
-        hsn_or_sac: p.hsn_or_sac,
-        unit: p.unit,
+        item_type: sanitizeCellValue(p.item_type),
+        name: sanitizeCellValue(p.name),
+        sku: sanitizeCellValue(p.sku || ''),
+        category_name: sanitizeCellValue(p.category_name || ''),
+        hsn_or_sac: sanitizeCellValue(p.hsn_or_sac),
+        unit: sanitizeCellValue(p.unit),
         gst_rate: p.gst_rate,
         purchase_price: p.purchase_price,
         selling_price: p.selling_price,

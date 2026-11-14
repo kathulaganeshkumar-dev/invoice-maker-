@@ -88,11 +88,25 @@ export class BackupRestoreService {
    * Restores database from a selected backup snapshot with automatic safety backup
    */
   async restoreFromBackup(backupFilename: string): Promise<void> {
-    const backupDir = this.getBackupDir();
-    const backupPath = path.join(backupDir, backupFilename);
+    if (!backupFilename || typeof backupFilename !== 'string') {
+      throw new Error('Backup filename is required.');
+    }
 
-    if (!fs.existsSync(backupPath)) {
-      throw new Error(`Backup file ${backupFilename} does not exist.`);
+    const cleanName = path.basename(backupFilename.trim());
+    if (!/^[A-Za-z0-9._-]+\.(?:sqlite3|sqlite|db)$/i.test(cleanName)) {
+      throw new Error('Invalid backup archive file format. Only .sqlite3 database files are permitted.');
+    }
+
+    const backupDir = path.resolve(this.getBackupDir());
+    const backupPath = path.resolve(backupDir, cleanName);
+
+    if (!backupPath.startsWith(backupDir + path.sep) || !fs.existsSync(backupPath)) {
+      throw new Error(`Backup file ${cleanName} does not exist in authorized backups directory.`);
+    }
+
+    const stat = fs.statSync(backupPath);
+    if (!stat.isFile()) {
+      throw new Error('Specified backup path is not a valid regular file.');
     }
 
     // 1. Take safety snapshot of current DB before restoration

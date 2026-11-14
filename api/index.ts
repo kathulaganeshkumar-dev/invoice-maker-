@@ -11,7 +11,27 @@ async function createApp(): Promise<express.Express> {
   const app = express();
 
   app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      try {
+        const parsed = new URL(origin);
+        const host = parsed.hostname;
+        if (
+          host === '127.0.0.1' ||
+          host === 'localhost' ||
+          host === '::1' ||
+          parsed.protocol === 'file:' ||
+          parsed.protocol === 'vscode-webview:'
+        ) {
+          return callback(null, true);
+        }
+      } catch {
+        // Invalid origin format
+      }
+      return callback(new Error('Cross-Origin Request Blocked by Security Policy'));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }));
