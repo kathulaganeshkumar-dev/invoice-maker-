@@ -516,6 +516,20 @@ export function createApiRouter(db: Knex): Router {
         paymentDate: req.body?.payment_date,
         referenceNumber: req.body?.reference_number,
         notes: req.body?.notes,
+        closeRemainingBalance: req.body?.close_remaining_balance,
+      });
+      res.json(invoice);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post('/companies/:companyId/invoices/:invoiceId/close', async (req: Request, res: Response) => {
+    try {
+      const { companyId, invoiceId } = getParams(req);
+      const invoice = await invoiceService.closeInvoice(companyId, invoiceId, {
+        reason: req.body?.reason,
+        notes: req.body?.notes,
       });
       res.json(invoice);
     } catch (err: any) {

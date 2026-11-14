@@ -163,9 +163,25 @@ export const api = {
   markInvoiceAsPaid: (
     companyId: string,
     id: string,
-    data?: { amount?: string | number; payment_method?: string; payment_date?: string; reference_number?: string; notes?: string }
+    data?: {
+      amount?: string | number;
+      payment_method?: string;
+      payment_date?: string;
+      reference_number?: string;
+      notes?: string;
+      close_remaining_balance?: boolean;
+    }
   ) =>
     request<Invoice>(`/companies/${companyId}/invoices/${id}/mark-paid`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+  closeInvoice: (
+    companyId: string,
+    id: string,
+    data?: { reason?: string; notes?: string }
+  ) =>
+    request<Invoice>(`/companies/${companyId}/invoices/${id}/close`, {
       method: 'POST',
       body: JSON.stringify(data || {}),
     }),

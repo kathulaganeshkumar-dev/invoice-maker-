@@ -480,17 +480,28 @@ export class InvoiceService {
       allocated_at: now,
     });
 
+    const shouldClose = Boolean(options?.closeRemainingBalance);
     const newPaid = new Decimal(inv.paid_amount || 0).add(payAmt);
-    const newBalance = outstanding.sub(payAmt);
+    const newBalance = shouldClose ? new Decimal(0) : outstanding.sub(payAmt);
+    const waivedBal = shouldClose ? outstanding.sub(payAmt) : new Decimal(0);
+
+    let updatedNotes = inv.notes;
+    if (shouldClose && waivedBal.gt(0)) {
+      const annot = `[Closed with ₹ ${payAmt.toFixed(2)} payment - Remaining ₹ ${waivedBal.toFixed(2)} waived into PAID]`;
+      updatedNotes = inv.notes ? `${inv.notes}\n${annot}` : annot;
+    }
+
     await trx('invoices').where({ id: inv.id }).update({
       paid_amount: newPaid.toFixed(2),
       balance_amount: newBalance.toFixed(2),
+      notes: updatedNotes,
       updated_at: now,
     });
 
     const customer = await trx('customers').where({ id: inv.customer_id, company_id: companyId }).first();
     if (customer) {
-      const updatedBal = new Decimal(customer.current_balance || 0).sub(payAmt);
+      const totalReduction = shouldClose ? outstanding : payAmt;
+      const updatedBal = new Decimal(customer.current_balance || 0).sub(totalReduction);
       await trx('customers')
         .where({ id: inv.customer_id, company_id: companyId })
         .update({
@@ -504,8 +515,14 @@ export class InvoiceService {
       company_id: companyId,
       entity_type: 'INVOICE',
       entity_id: invoiceId,
-      action: isPartial ? 'PARTIAL_PAYMENT' : 'MARK_PAID',
-      details: `${isPartial ? 'Partial payment' : 'Marked PAID'} for ${inv.invoice_number} (₹ ${payAmt.toFixed(2)} via ${paymentMethod}, Voucher ${payNum})`,
+      action: shouldClose ? 'CLOSE_AND_MARK_PAID' : isPartial ? 'PARTIAL_PAYMENT' : 'MARK_PAID',
+      details: `${
+        shouldClose
+          ? `Recorded ₹ ${payAmt.toFixed(2)} and CLOSED invoice at paid amount (₹ ${waivedBal.toFixed(2)} waived into PAID)`
+          : isPartial
+          ? 'Partial payment'
+          : 'Marked PAID'
+      } for ${inv.invoice_number} (₹ ${payAmt.toFixed(2)} via ${paymentMethod}, Voucher ${payNum})`,
       timestamp: now,
     });
 
@@ -518,10 +535,74 @@ export class InvoiceService {
   async markInvoiceAsPaid(
     companyId: string,
     invoiceId: string,
-    options?: { amount?: string | number; paymentMethod?: string; paymentDate?: string; referenceNumber?: string; notes?: string }
+    options?: {
+      amount?: string | number;
+      paymentMethod?: string;
+      paymentDate?: string;
+      referenceNumber?: string;
+      notes?: string;
+      closeRemainingBalance?: boolean;
+    }
   ): Promise<Invoice> {
     return this.db.transaction(async (trx) => {
       return this.markPaidInTrx(trx, companyId, invoiceId, options);
+    });
+  }
+
+  /**
+   * Closes and settles an invoice at the amount already paid (waiving the remaining balance),
+   * sets balance_amount to 0.00, clears customer outstanding liability, and transports it to PAID.
+   */
+  async closeInvoice(
+    companyId: string,
+    invoiceId: string,
+    options?: { reason?: string; notes?: string }
+  ): Promise<Invoice> {
+    return this.db.transaction(async (trx) => {
+      const inv = await trx('invoices').where({ company_id: companyId, id: invoiceId }).first();
+      if (!inv) throw new Error('Invoice not found');
+      if (inv.status === 'CANCELLED') throw new Error('Cannot close a cancelled invoice.');
+
+      const now = new Date().toISOString();
+      const remainingBalance = new Decimal(inv.balance_amount || 0);
+
+      if (remainingBalance.lte(0)) {
+        return (await this.getInvoiceById(companyId, invoiceId, trx))!;
+      }
+
+      const settlementReason =
+        options?.reason?.trim() || options?.notes?.trim() || 'Settled and closed invoice at collected amount; remaining balance waived.';
+      const annot = `[Closed at collected amount ₹ ${inv.paid_amount} - Remaining ₹ ${remainingBalance.toFixed(2)} waived into PAID: ${settlementReason}]`;
+      const updatedNotes = inv.notes ? `${inv.notes}\n${annot}` : annot;
+
+      await trx('invoices').where({ id: inv.id }).update({
+        balance_amount: '0.00',
+        notes: updatedNotes,
+        updated_at: now,
+      });
+
+      const customer = await trx('customers').where({ id: inv.customer_id, company_id: companyId }).first();
+      if (customer) {
+        const updatedBal = new Decimal(customer.current_balance || 0).sub(remainingBalance);
+        await trx('customers')
+          .where({ id: inv.customer_id, company_id: companyId })
+          .update({
+            current_balance: updatedBal.toFixed(2),
+            updated_at: now,
+          });
+      }
+
+      await trx('audit_logs').insert({
+        id: uuidv4(),
+        company_id: companyId,
+        entity_type: 'INVOICE',
+        entity_id: invoiceId,
+        action: 'CLOSE_INVOICE',
+        details: `Closed and settled invoice ${inv.invoice_number} at paid amount of ₹ ${inv.paid_amount}. Remaining balance of ₹ ${remainingBalance.toFixed(2)} waived into PAID (Reason: ${settlementReason})`,
+        timestamp: now,
+      });
+
+      return (await this.getInvoiceById(companyId, invoiceId, trx))!;
     });
   }
 

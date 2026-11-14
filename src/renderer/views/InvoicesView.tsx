@@ -25,6 +25,8 @@ import {
   ArrowRightCircle,
   CreditCard,
   BookmarkPlus,
+  CheckCheck,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
@@ -75,8 +77,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
 
   // Mark-Paid modal state for existing invoices
   const [markPaidInvoice, setMarkPaidInvoice] = useState<Invoice | null>(null);
-  const [markPaidType, setMarkPaidType] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [markPaidType, setMarkPaidType] = useState<'FULL' | 'PARTIAL' | 'CLOSE'>('FULL');
   const [markPaidAmount, setMarkPaidAmount] = useState<string>('');
+  const [closeRemainingOnPartial, setCloseRemainingOnPartial] = useState<boolean>(false);
+  const [closeReason, setCloseReason] = useState<string>('');
   const [markPaidMethod, setMarkPaidMethod] = useState<string>('BANK_TRANSFER');
   const [markPaidDate, setMarkPaidDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [markPaidRef, setMarkPaidRef] = useState<string>('');
@@ -286,16 +290,20 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
-  const handleOpenMarkPaid = (inv: Invoice, defaultType: 'FULL' | 'PARTIAL' = 'FULL') => {
+  const handleOpenMarkPaid = (inv: Invoice, defaultType: 'FULL' | 'PARTIAL' | 'CLOSE' = 'FULL') => {
     setMarkPaidInvoice(inv);
     setMarkPaidType(defaultType);
+    setCloseRemainingOnPartial(false);
     setMarkPaidAmount(inv.balance_amount || '0.00');
     setMarkPaidMethod('BANK_TRANSFER');
     setMarkPaidDate(new Date().toISOString().split('T')[0]);
     setMarkPaidRef(inv.invoice_number || '');
+    setCloseReason('Settled and closed invoice at collected amount; remaining balance waived.');
     setMarkPaidNotes(
       defaultType === 'PARTIAL'
         ? `Partial payment for invoice ${inv.invoice_number}`
+        : defaultType === 'CLOSE'
+        ? `Closed invoice ${inv.invoice_number} at paid amount of ₹ ${inv.paid_amount}`
         : `Full payment for invoice ${inv.invoice_number}`
     );
   };
@@ -303,6 +311,24 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
   const handleConfirmMarkPaid = async () => {
     if (!markPaidInvoice) return;
     try {
+      if (markPaidType === 'CLOSE') {
+        const reason =
+          closeReason.trim() || 'Settled and closed invoice at collected amount; remaining balance waived.';
+        const updated = await api.closeInvoice(companyId, markPaidInvoice.id, {
+          reason,
+          notes: markPaidNotes,
+        });
+        if (viewingInvoice?.id === markPaidInvoice.id) {
+          setViewingInvoice(updated);
+        }
+        setMarkPaidInvoice(null);
+        await loadInvoices();
+        alert(
+          `Invoice ${markPaidInvoice.invoice_number} has been closed at paid amount of ₹ ${markPaidInvoice.paid_amount} and moved to PAID!`
+        );
+        return;
+      }
+
       let payAmt = markPaidInvoice.balance_amount;
       if (markPaidType === 'PARTIAL') {
         const parsed = parseFloat(markPaidAmount);
@@ -325,12 +351,18 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         payment_date: markPaidDate,
         reference_number: markPaidRef,
         notes: markPaidNotes,
+        close_remaining_balance: markPaidType === 'PARTIAL' ? closeRemainingOnPartial : false,
       });
       if (viewingInvoice?.id === markPaidInvoice.id) {
         setViewingInvoice(updated);
       }
       setMarkPaidInvoice(null);
       await loadInvoices();
+      if (markPaidType === 'PARTIAL' && closeRemainingOnPartial) {
+        alert(
+          `Recorded partial payment of ₹ ${payAmt} and closed ${markPaidInvoice.invoice_number} into PAID!`
+        );
+      }
     } catch (err: any) {
       alert(err.message || 'Error recording payment');
     }
@@ -1388,8 +1420,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               </div>
             </div>
 
-            {/* Full Payment vs Partial Pay Selection */}
-            <div className="flex bg-slate-100 dark:bg-slate-700/60 p-1 rounded-lg border border-slate-200 dark:border-slate-600">
+            {/* Full Payment vs Partial Pay vs Close Invoice Selection */}
+            <div className="flex bg-slate-100 dark:bg-slate-700/60 p-1 rounded-lg border border-slate-200 dark:border-slate-600 gap-1">
               <button
                 type="button"
                 onClick={() => {
@@ -1397,7 +1429,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                   setMarkPaidAmount(markPaidInvoice.balance_amount);
                   setMarkPaidNotes(`Full payment received for invoice ${markPaidInvoice.invoice_number}`);
                 }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                className={`flex-1 py-1.5 px-2 text-center text-xs font-bold rounded-md transition-all ${
                   markPaidType === 'FULL'
                     ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-sm'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
@@ -1414,18 +1446,68 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                   }
                   setMarkPaidNotes(`Partial payment received for invoice ${markPaidInvoice.invoice_number}`);
                 }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                className={`flex-1 py-1.5 px-2 text-center text-xs font-bold rounded-md transition-all ${
                   markPaidType === 'PARTIAL'
                     ? 'bg-brand-600 text-white shadow-sm'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                 }`}
               >
-                Partial Pay (Custom Amount)
+                Partial Pay (Custom)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMarkPaidType('CLOSE');
+                  setCloseReason('Settled and closed invoice at collected amount; remaining balance waived.');
+                }}
+                className={`flex-1 py-1.5 px-2 text-center text-xs font-bold rounded-md transition-all ${
+                  markPaidType === 'CLOSE'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                }`}
+              >
+                Close Invoice (At Paid)
               </button>
             </div>
 
-            {/* Dynamic Amount Section */}
-            {markPaidType === 'PARTIAL' ? (
+            {/* Dynamic Amount / Settlement Section */}
+            {markPaidType === 'CLOSE' ? (
+              <div className="p-4 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 space-y-3">
+                <div className="flex items-start space-x-2.5">
+                  <CheckCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-sm text-indigo-950 dark:text-indigo-200">
+                      Close & Settle Invoice at Paid Amount
+                    </h4>
+                    <p className="text-slate-600 dark:text-slate-300 text-xs mt-1 leading-relaxed">
+                      This will close this invoice at the collected amount of{' '}
+                      <strong className="text-emerald-700 dark:text-emerald-400">
+                        {formatIndianCurrency(markPaidInvoice.paid_amount)}
+                      </strong>
+                      . The remaining balance of{' '}
+                      <strong className="text-rose-600 dark:text-rose-400">
+                        {formatIndianCurrency(markPaidInvoice.balance_amount)}
+                      </strong>{' '}
+                      will be cleared/waived, reducing customer account liability to ₹ 0.00 and transporting this invoice into{' '}
+                      <strong className="text-emerald-700 dark:text-emerald-400 font-bold">PAID</strong> invoices.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-indigo-950 dark:text-indigo-200 mb-1">
+                    Reason / Settlement Note *
+                  </label>
+                  <input
+                    type="text"
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                    placeholder="e.g. Settled with customer; remaining balance waived / cash discount"
+                    className="w-full border border-indigo-200 dark:border-indigo-700 rounded px-3 py-1.5 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            ) : markPaidType === 'PARTIAL' ? (
               <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-amber-900 dark:text-amber-200">
@@ -1468,6 +1550,18 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                   }
                   return null;
                 })()}
+
+                <div className="pt-2 border-t border-amber-200/80 dark:border-amber-800/60">
+                  <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={closeRemainingOnPartial}
+                      onChange={(e) => setCloseRemainingOnPartial(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                    />
+                    <span>Close invoice after this payment (waive/clear remaining balance into PAID)</span>
+                  </label>
+                </div>
               </div>
             ) : (
               <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-between items-center">
@@ -1478,52 +1572,56 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Mode</label>
-                <select
-                  value={markPaidMethod}
-                  onChange={(e) => setMarkPaidMethod(e.target.value)}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                >
-                  <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS/IMPS)</option>
-                  <option value="UPI">UPI</option>
-                  <option value="CASH">Cash</option>
-                  <option value="CHEQUE">Cheque</option>
-                  <option value="CARD">Card</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Date</label>
-                <input
-                  type="date"
-                  value={markPaidDate}
-                  onChange={(e) => setMarkPaidDate(e.target.value)}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
-                />
-              </div>
-            </div>
+            {markPaidType !== 'CLOSE' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Mode</label>
+                    <select
+                      value={markPaidMethod}
+                      onChange={(e) => setMarkPaidMethod(e.target.value)}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    >
+                      <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                      <option value="UPI">UPI</option>
+                      <option value="CASH">Cash</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="CARD">Card</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Date</label>
+                    <input
+                      type="date"
+                      value={markPaidDate}
+                      onChange={(e) => setMarkPaidDate(e.target.value)}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Reference / UTR / Cheque #</label>
-              <input
-                type="text"
-                value={markPaidRef}
-                onChange={(e) => setMarkPaidRef(e.target.value)}
-                placeholder="Transaction reference number"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono"
-              />
-            </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Reference / UTR / Cheque #</label>
+                  <input
+                    type="text"
+                    value={markPaidRef}
+                    onChange={(e) => setMarkPaidRef(e.target.value)}
+                    placeholder="Transaction reference number"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono"
+                  />
+                </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Notes</label>
-              <input
-                type="text"
-                value={markPaidNotes}
-                onChange={(e) => setMarkPaidNotes(e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
-              />
-            </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Notes</label>
+                  <input
+                    type="text"
+                    value={markPaidNotes}
+                    onChange={(e) => setMarkPaidNotes(e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="flex justify-end space-x-2 pt-1">
               <button
@@ -1536,10 +1634,18 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               <button
                 type="button"
                 onClick={handleConfirmMarkPaid}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
+                className={`px-4 py-1.5 text-white rounded text-xs font-bold shadow-sm ${
+                  markPaidType === 'CLOSE'
+                    ? 'bg-indigo-600 hover:bg-indigo-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
               >
-                {markPaidType === 'PARTIAL'
-                  ? `Confirm Partial Payment (${formatIndianCurrency(markPaidAmount || '0')})`
+                {markPaidType === 'CLOSE'
+                  ? `Close Invoice & Move to PAID (${formatIndianCurrency(markPaidInvoice.paid_amount)})`
+                  : markPaidType === 'PARTIAL'
+                  ? `Confirm Partial Payment (${formatIndianCurrency(markPaidAmount || '0')})${
+                      closeRemainingOnPartial ? ' & Close Invoice' : ''
+                    }`
                   : `Confirm Full Payment (${formatIndianCurrency(markPaidInvoice.balance_amount)})`}
               </button>
             </div>
