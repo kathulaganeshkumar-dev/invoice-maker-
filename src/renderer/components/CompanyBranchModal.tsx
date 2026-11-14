@@ -85,16 +85,20 @@ export const CompanyBranchModal: React.FC<Props> = ({
     }
     setLoading(true);
     try {
+      const companyPayload = {
+        ...editingCompany,
+        legal_name: editingCompany.legal_name || editingCompany.name,
+      };
       let savedId = editingCompany.id;
       if (editingCompany.id) {
-        const updated = await api.updateCompany(editingCompany.id, editingCompany);
+        const updated = await api.updateCompany(editingCompany.id, companyPayload);
         if (editingCompany.id === currentCompanyId) {
           const brs = await api.getBranches(updated.id);
           const defBranch = brs.find((b) => b.is_default) || brs[0] || null;
           onSelect(updated, defBranch);
         }
       } else {
-        const created = await api.createCompany(editingCompany);
+        const created = await api.createCompany(companyPayload);
         savedId = created.id;
         setSelectedCompanyId(created.id);
         if (!currentCompanyId || companies.length === 0) {
@@ -338,23 +342,13 @@ export const CompanyBranchModal: React.FC<Props> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Company Trade Name *</label>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Company Name *</label>
                   <input
                     type="text"
                     value={editingCompany.name || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, name: e.target.value })}
                     placeholder="e.g. Acme Trading Co."
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Legal Registered Name</label>
-                  <input
-                    type="text"
-                    value={editingCompany.legal_name || ''}
-                    onChange={(e) => setEditingCompany({ ...editingCompany, legal_name: e.target.value })}
-                    placeholder="e.g. Acme Trading Pvt Ltd"
                     className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
