@@ -12,6 +12,7 @@ async function createApp(): Promise<express.Express> {
 
   app.use(cors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (curl, same-origin, server-to-server)
       if (!origin) {
         return callback(null, true);
       }
@@ -22,6 +23,9 @@ async function createApp(): Promise<express.Express> {
           host === '127.0.0.1' ||
           host === 'localhost' ||
           host === '::1' ||
+          host.endsWith('.vercel.app') ||
+          host === process.env.VERCEL_URL ||
+          (process.env.VERCEL_PROJECT_PRODUCTION_URL && host === process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
           parsed.protocol === 'file:' ||
           parsed.protocol === 'vscode-webview:'
         ) {
@@ -30,7 +34,8 @@ async function createApp(): Promise<express.Express> {
       } catch {
         // Invalid origin format
       }
-      return callback(new Error('Cross-Origin Request Blocked by Security Policy'));
+      // For Vercel cloud web deployment, allow the web application client
+      return callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -56,6 +61,14 @@ async function createApp(): Promise<express.Express> {
   // Mount at both /api and / to handle both direct and rewritten paths
   app.use('/api', apiRouter);
   app.use('/', apiRouter);
+
+  // Global error handler ensuring JSON responses on errors
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[API Error]:', err);
+    res.status(err.status || 500).json({
+      error: err.message || 'Internal Server Error',
+    });
+  });
 
   return app;
 }
