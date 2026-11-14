@@ -29,6 +29,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
   const [error, setError] = useState<string>('');
   const [stateQuery, setStateQuery] = useState<string>('');
   const [isStateOpen, setIsStateOpen] = useState<boolean>(false);
+  const [showAddBranch, setShowAddBranch] = useState<boolean>(false);
+  const [newBranch, setNewBranch] = useState<Partial<Branch>>({});
   const stateDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,6 +80,31 @@ export const CompanyBranchModal: React.FC<Props> = ({
     }));
     setStateQuery(`${s.name} (${s.code})`);
     setIsStateOpen(false);
+  };
+
+  const handleCreateBranch = async () => {
+    if (!newBranch.name?.trim()) {
+      alert('Branch name is required');
+      return;
+    }
+    const comp = companies.find((c) => c.id === selectedCompanyId);
+    try {
+      const code = newBranch.code?.trim() || `BR0${branches.length + 1}`;
+      const created = await api.createBranch(selectedCompanyId, {
+        ...newBranch,
+        name: newBranch.name.trim(),
+        code: code.toUpperCase(),
+        state: newBranch.state || comp?.state || 'Madhya Pradesh',
+        state_code: newBranch.state_code || comp?.state_code || '23',
+      });
+      const brs = await api.getBranches(selectedCompanyId);
+      setBranches(brs);
+      setSelectedBranchId(created.id);
+      setShowAddBranch(false);
+      setNewBranch({});
+    } catch (err: any) {
+      alert(err.message || 'Error creating branch');
+    }
   };
 
   const loadData = async (preferredCompanyId?: string) => {
@@ -355,24 +382,141 @@ export const CompanyBranchModal: React.FC<Props> = ({
                 </table>
               </div>
 
-              {/* Branch Selector */}
+              {/* Branch Selector & Multiple Branch Management */}
               {branches.length > 0 && (
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <GitBranch className="w-4 h-4 text-slate-500" />
-                    <span className="text-sm font-semibold text-slate-700">Operating Branch:</span>
+                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <GitBranch className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-semibold text-slate-700">Operating Branch:</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={selectedBranchId}
+                        onChange={(e) => setSelectedBranchId(e.target.value)}
+                        className="bg-white border border-slate-300 rounded-md px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none"
+                      >
+                        {branches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.code}) {b.is_default ? '• Default' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const comp = companies.find((c) => c.id === selectedCompanyId);
+                          setNewBranch({
+                            state: comp?.state || 'Madhya Pradesh',
+                            state_code: comp?.state_code || '23',
+                            code: `BR0${branches.length + 1}`,
+                          });
+                          setShowAddBranch(true);
+                        }}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold rounded-md border border-brand-200 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Branch</span>
+                      </button>
+                    </div>
                   </div>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-md px-3 py-1 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none"
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.code}) {b.is_default ? '• Default' : ''}
-                      </option>
-                    ))}
-                  </select>
+
+                  {/* Add Branch Inline Form */}
+                  {showAddBranch && (
+                    <div className="mt-3 p-3.5 bg-white border border-brand-200 rounded-lg shadow-sm space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                        <span className="text-xs font-bold text-brand-800 uppercase tracking-wide">
+                          Create New Operating Branch
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddBranch(false)}
+                          className="text-xs text-slate-400 hover:text-slate-600 font-bold px-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Branch Name *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Hyderabad Regional Office"
+                            value={newBranch.name || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, name: e.target.value })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Branch Code *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. HYD01"
+                            value={newBranch.code || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, code: e.target.value.toUpperCase() })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">State & Code</label>
+                          <select
+                            value={newBranch.state_code || '23'}
+                            onChange={(e) => {
+                              const s = INDIAN_STATES.find((st) => st.code === e.target.value);
+                              setNewBranch({
+                                ...newBranch,
+                                state_code: e.target.value,
+                                state: s ? s.name : '',
+                              });
+                            }}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          >
+                            {INDIAN_STATES.map((s) => (
+                              <option key={s.code} value={s.code}>
+                                {s.name} ({s.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. +91 98260 12345"
+                            value={newBranch.phone || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, phone: e.target.value })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block font-semibold text-slate-700 mb-1">Branch Address</label>
+                          <input
+                            type="text"
+                            placeholder="Plot / Street / Locality"
+                            value={newBranch.address || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, address: e.target.value })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddBranch(false)}
+                          className="px-3 py-1 border border-slate-300 text-slate-600 rounded text-xs hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCreateBranch}
+                          className="px-3.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold shadow-sm"
+                        >
+                          Save Branch
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
