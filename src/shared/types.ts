@@ -64,6 +64,11 @@ export interface Branch {
   gstin?: string;
   state: string;
   state_code: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
+  use_company_bank?: boolean;
   is_default: boolean;
   is_archived: boolean;
   created_at: string;

@@ -90,12 +90,18 @@ export const CompanyBranchModal: React.FC<Props> = ({
     const comp = companies.find((c) => c.id === selectedCompanyId);
     try {
       const code = newBranch.code?.trim() || `BR0${branches.length + 1}`;
+      const useCompBank = newBranch.use_company_bank ?? true;
       const created = await api.createBranch(selectedCompanyId, {
         ...newBranch,
         name: newBranch.name.trim(),
         code: code.toUpperCase(),
         state: newBranch.state || comp?.state || 'Madhya Pradesh',
         state_code: newBranch.state_code || comp?.state_code || '23',
+        use_company_bank: useCompBank,
+        bank_name: useCompBank ? (comp?.bank_name || undefined) : newBranch.bank_name,
+        bank_account_no: useCompBank ? (comp?.bank_account_no || undefined) : newBranch.bank_account_no,
+        bank_ifsc: useCompBank ? (comp?.bank_ifsc || undefined) : newBranch.bank_ifsc,
+        bank_branch: useCompBank ? (comp?.bank_branch || undefined) : newBranch.bank_branch,
       });
       const brs = await api.getBranches(selectedCompanyId);
       setBranches(brs);
@@ -410,6 +416,11 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             state: comp?.state || 'Madhya Pradesh',
                             state_code: comp?.state_code || '23',
                             code: `BR0${branches.length + 1}`,
+                            use_company_bank: true,
+                            bank_name: comp?.bank_name || '',
+                            bank_account_no: comp?.bank_account_no || '',
+                            bank_ifsc: comp?.bank_ifsc || '',
+                            bank_branch: comp?.bank_branch || '',
                           });
                           setShowAddBranch(true);
                         }}
@@ -496,6 +507,88 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             value={newBranch.address || ''}
                             onChange={(e) => setNewBranch({ ...newBranch, address: e.target.value })}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+
+                        {/* Option: Use Main Branch / Company Bank Details */}
+                        <div className="col-span-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between bg-sky-50/70 p-2.5 rounded-lg border border-sky-200">
+                            <label className="flex items-center space-x-2 text-xs font-semibold text-brand-900 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={newBranch.use_company_bank ?? true}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const comp = companies.find((c) => c.id === selectedCompanyId);
+                                  setNewBranch({
+                                    ...newBranch,
+                                    use_company_bank: checked,
+                                    bank_name: checked ? (comp?.bank_name || '') : (newBranch.bank_name || ''),
+                                    bank_account_no: checked ? (comp?.bank_account_no || '') : (newBranch.bank_account_no || ''),
+                                    bank_ifsc: checked ? (comp?.bank_ifsc || '') : (newBranch.bank_ifsc || ''),
+                                    bank_branch: checked ? (comp?.bank_branch || '') : (newBranch.bank_branch || ''),
+                                  });
+                                }}
+                                className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                              />
+                              <span>Use Main Branch / Company Bank Details</span>
+                            </label>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {(newBranch.use_company_bank ?? true) ? 'Using Company Bank' : 'Custom Branch Bank'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Bank Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. State Bank of India"
+                            disabled={newBranch.use_company_bank ?? true}
+                            value={newBranch.bank_name || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, bank_name: e.target.value })}
+                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Bank Account Number</label>
+                          <input
+                            type="text"
+                            placeholder="Account Number"
+                            disabled={newBranch.use_company_bank ?? true}
+                            value={newBranch.bank_account_no || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, bank_account_no: e.target.value })}
+                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">IFSC Code</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. SBIN0001234"
+                            disabled={newBranch.use_company_bank ?? true}
+                            value={newBranch.bank_ifsc || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, bank_ifsc: e.target.value.toUpperCase() })}
+                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Branch Details</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Main Branch, MG Road"
+                            disabled={newBranch.use_company_bank ?? true}
+                            value={newBranch.bank_branch || ''}
+                            onChange={(e) => setNewBranch({ ...newBranch, bank_branch: e.target.value })}
+                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (newBranch.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            }`}
                           />
                         </div>
                       </div>

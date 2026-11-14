@@ -716,4 +716,21 @@ export async function runMigrations(db: Knex): Promise<void> {
       });
     }
   }
+
+  const branchCols = [
+    { name: 'bank_name', type: 'string' },
+    { name: 'bank_account_no', type: 'string' },
+    { name: 'bank_ifsc', type: 'string' },
+    { name: 'bank_branch', type: 'string' },
+    { name: 'use_company_bank', type: 'boolean' },
+  ];
+  for (const col of branchCols) {
+    const exists = await db.schema.hasColumn('branches', col.name);
+    if (!exists) {
+      await db.schema.alterTable('branches', (table) => {
+        if (col.type === 'string') table.string(col.name).nullable();
+        else if (col.type === 'boolean') table.boolean(col.name).defaultTo(true);
+      });
+    }
+  }
 }
