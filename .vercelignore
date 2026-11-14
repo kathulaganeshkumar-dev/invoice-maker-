@@ -1,0 +1,11 @@
+version 2.0
+win-unpacked
+node_modules
+.git
+dist-electron
+dist-server
+build
+*.exe
+*.zip
+*.asar
+.playwright-mcp
