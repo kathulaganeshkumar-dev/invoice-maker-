@@ -1,8 +1,9 @@
 // src/renderer/components/CompanyBranchModal.tsx - Modern Company & Branch Selector
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Company, Branch } from '../../shared/types';
+import { INDIAN_STATES } from '../../shared/constants';
 import { api } from '../services/api';
-import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -26,12 +27,58 @@ export const CompanyBranchModal: React.FC<Props> = ({
   const [editingCompany, setEditingCompany] = useState<Partial<Company>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [stateQuery, setStateQuery] = useState<string>('');
+  const [isStateOpen, setIsStateOpen] = useState<boolean>(false);
+  const stateDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (stateDropdownRef.current && !stateDropdownRef.current.contains(event.target as Node)) {
+        setIsStateOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
       loadData();
     }
   }, [isOpen]);
+
+  const handleGstinChange = (val: string) => {
+    const gstin = val.toUpperCase();
+    const prefix = gstin.substring(0, 2);
+    const matched = INDIAN_STATES.find((s) => s.code === prefix);
+    if (matched && (!editingCompany.state || editingCompany.state === 'Madhya Pradesh')) {
+      setEditingCompany((prev) => ({
+        ...prev,
+        gstin,
+        state: matched.name,
+        state_code: matched.code,
+      }));
+      setStateQuery(`${matched.name} (${matched.code})`);
+    } else {
+      setEditingCompany((prev) => ({ ...prev, gstin }));
+    }
+  };
+
+  const filteredStates = INDIAN_STATES.filter((s) => {
+    const q = stateQuery.trim().toLowerCase();
+    if (!q) return true;
+    return s.name.toLowerCase().includes(q) || s.code.includes(q);
+  });
+
+  const selectState = (s: typeof INDIAN_STATES[0]) => {
+    setEditingCompany((prev) => ({
+      ...prev,
+      state: s.name,
+      state_code: s.code,
+    }));
+    setStateQuery(`${s.name} (${s.code})`);
+    setIsStateOpen(false);
+  };
 
   const loadData = async (preferredCompanyId?: string) => {
     setLoading(true);
@@ -182,6 +229,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       state_code: '23',
                       pin_code: '452001',
                     });
+                    setStateQuery('Madhya Pradesh (23)');
+                    setIsStateOpen(false);
                     setIsEditing(true);
                   }}
                   className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
@@ -196,6 +245,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     const comp = companies.find((c) => c.id === selectedCompanyId);
                     if (comp) {
                       setEditingCompany({ ...comp });
+                      setStateQuery(comp.state ? `${comp.state} (${comp.state_code || ''})` : '');
+                      setIsStateOpen(false);
                       setIsEditing(true);
                     }
                   }}
@@ -357,8 +408,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                   <input
                     type="text"
                     value={editingCompany.gstin || ''}
-                    onChange={(e) => setEditingCompany({ ...editingCompany, gstin: e.target.value.toUpperCase() })}
-                    placeholder="e.g. 23AABCA1234D1Z5"
+                    onChange={(e) => handleGstinChange(e.target.value)}
+                    placeholder="e.g. 36AABCA1234D1Z5"
                     className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
@@ -372,15 +423,58 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">State & Code</label>
-                  <input
-                    type="text"
-                    value={editingCompany.state || ''}
-                    onChange={(e) => setEditingCompany({ ...editingCompany, state: e.target.value })}
-                    placeholder="Madhya Pradesh"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
-                  />
+                <div className="relative" ref={stateDropdownRef}>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">State & Code *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={stateQuery}
+                      onChange={(e) => {
+                        setStateQuery(e.target.value);
+                        setIsStateOpen(true);
+                      }}
+                      onFocus={() => setIsStateOpen(true)}
+                      placeholder="Type state name or code (e.g. Telangana or 36)"
+                      className="w-full border border-slate-300 rounded-md pl-3 pr-8 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setIsStateOpen((prev) => !prev)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {isStateOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      {filteredStates.length === 0 ? (
+                        <div className="px-3 py-2.5 text-xs text-slate-400 text-center">
+                          No matching state or code found
+                        </div>
+                      ) : (
+                        filteredStates.map((s) => {
+                          const isSelected = editingCompany.state_code === s.code;
+                          return (
+                            <button
+                              key={s.code}
+                              type="button"
+                              onClick={() => selectState(s)}
+                              className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${
+                                isSelected ? 'bg-sky-50 text-brand-700 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <span>{s.name}</span>
+                              <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                {s.code}
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
