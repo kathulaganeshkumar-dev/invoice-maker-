@@ -47,7 +47,9 @@ This application is a commercial-grade, desktop-first Invoicing, Quotation, Inve
 - Phase 8: Cross-platform Packaging, Documentation, and Automated Quality Testing.
 
 ## 5. Mandatory Workflow Directive: Vercel Web Preview Before Local Software Installation
+- **Live Vercel Web URL**: https://invoice-maker-delta-black.vercel.app/
+- **GitHub Repository**: https://github.com/kathulaganeshkumar-dev/invoice-maker-.git
 - **CRITICAL DIRECTIVE**: Whenever any code modification, frontend polish, bug fix, or feature request is made:
   1. **Deploy to Vercel First**: Commit and push changes to the repository (`git push origin main`) to trigger the live Vercel deployment so the user can immediately review and inspect changes on the web.
-  2. **Provide Web Preview to User**: Share and open the Vercel web preview link so the user can verify the visual UI, layout, and functionality before applying changes to the local software file.
+  2. **Provide Web Preview to User**: Share and open the Vercel web preview link (`https://invoice-maker-delta-black.vercel.app/`) so the user can verify the visual UI, layout, and functionality before applying changes to the local software file.
   3. **Local Software Sync After Web Review**: Only after the changes are verified on the Vercel web build, compile the local packages (`cmd.exe /c "npm run build"`), update the local installation files, and refresh the desktop Electron application.
