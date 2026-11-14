@@ -49,6 +49,7 @@ This application is a commercial-grade, desktop-first Invoicing, Quotation, Inve
 ## 5. Mandatory Workflow Directive: Vercel Web Preview Before Local Software Installation
 - **Live Vercel Web URL**: https://invoice-maker-delta-black.vercel.app/
 - **GitHub Repository**: https://github.com/kathulaganeshkumar-dev/invoice-maker-.git
+- **User Launch Directive**: Whenever the user requests to "open" or "open the software", directly launch the web application in a browser tab (`https://invoice-maker-delta-black.vercel.app/`) using the system browser launcher (`Start-Process "https://invoice-maker-delta-black.vercel.app/"`).
 - **CRITICAL DIRECTIVE**: Whenever any code modification, frontend polish, bug fix, or feature request is made:
   1. **Deploy to Vercel First**: Commit and push changes to the repository (`git push origin main`) to trigger the live Vercel deployment so the user can immediately review and inspect changes on the web.
   2. **Provide Web Preview to User**: Share and open the Vercel web preview link (`https://invoice-maker-delta-black.vercel.app/`) so the user can verify the visual UI, layout, and functionality before applying changes to the local software file.
