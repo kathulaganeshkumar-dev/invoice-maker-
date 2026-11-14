@@ -83,21 +83,21 @@ export const App: React.FC = () => {
 
   if (initializing) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-stone-950 text-stone-100 select-none">
-        <div className="w-10 h-10 rounded-lg bg-stone-900 border border-stone-800 flex items-center justify-center font-medium text-xs tracking-wider text-stone-200 shadow-2xs mb-3">
-          EI
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white select-none">
+        <div className="w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-2xl shadow-lg mb-4">
+          Σ
         </div>
-        <div className="text-sm font-medium text-stone-200">Enterprise Invoice Manager</div>
-        <div className="flex items-center text-xs text-stone-400 mt-2 space-x-2">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin text-stone-400" />
-          <span>Starting local database...</span>
+        <div className="text-lg font-bold">Enterprise Invoice & Business Manager</div>
+        <div className="flex items-center text-xs text-slate-400 mt-2 space-x-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-brand-400" />
+          <span>Starting local database & engine...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 ${isDarkMode ? 'dark' : ''}`}>
+    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${isDarkMode ? 'dark' : ''}`}>
       {/* Top Navbar */}
       <Navbar
         company={activeCompany}
@@ -117,26 +117,26 @@ export const App: React.FC = () => {
           onOpenSettings={() => setIsConfigModalOpen(true)}
         />
 
-        <main className="flex-1 overflow-y-auto bg-stone-50 dark:bg-stone-950">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
           {!activeCompany ? (
             activeTab === 'backup_restore' ? (
               <BackupRestoreView />
             ) : (
               <div className="h-full w-full flex flex-col items-center justify-center p-8 text-center">
-                <div className="w-12 h-12 rounded-xl bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 flex items-center justify-center mb-3">
-                  <Building2 className="w-6 h-6 text-stone-500" />
+                <div className="w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800 flex items-center justify-center mb-4 shadow-sm">
+                  <Building2 className="w-8 h-8 text-brand-600" />
                 </div>
-                <h2 className="text-base font-semibold text-stone-800 dark:text-stone-200">No company selected</h2>
-                <p className="text-xs text-stone-500 dark:text-stone-400 max-w-sm mt-1">
-                  Create or select a company profile to access invoices, stock, and reports.
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">No Business Profile Selected</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mt-2">
+                  Create your company profile to start managing GST invoices, quotations, purchases, warehouses, payments, and letterhead templates.
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsCompanyModalOpen(true)}
-                  className="mt-4 inline-flex items-center space-x-1.5 px-3.5 py-2 bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white text-white dark:text-stone-900 rounded-lg text-xs font-medium transition-colors"
+                  className="mt-5 inline-flex items-center space-x-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-bold shadow-md transition-colors"
                 >
                   <PlusCircle className="w-4 h-4" />
-                  <span>Select or create company</span>
+                  <span>Create or Select Company Profile</span>
                 </button>
               </div>
             )

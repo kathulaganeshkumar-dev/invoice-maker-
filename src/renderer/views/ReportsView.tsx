@@ -103,16 +103,16 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
         </div>
 
         <table className="w-full text-left text-xs">
-          <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
             <tr>
               <th className="py-2.5 px-3">HSN / SAC</th>
               <th className="py-2.5 px-3">UQC (Unit)</th>
-              <th className="py-2.5 px-3 text-right">Total qty</th>
-              <th className="py-2.5 px-3 text-right">Taxable value</th>
+              <th className="py-2.5 px-3 text-right">Total Qty</th>
+              <th className="py-2.5 px-3 text-right">Taxable Value</th>
               <th className="py-2.5 px-3 text-right">CGST</th>
               <th className="py-2.5 px-3 text-right">SGST</th>
               <th className="py-2.5 px-3 text-right">IGST</th>
-              <th className="py-2.5 px-3 text-right">Total tax</th>
+              <th className="py-2.5 px-3 text-right">Total Tax Amount</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

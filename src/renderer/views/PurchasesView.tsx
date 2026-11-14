@@ -271,15 +271,15 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         <table className="w-full text-left text-xs">
-          <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
             <tr>
-              <th className="py-2.5 px-4">Bill #</th>
-              <th className="py-2.5 px-4">Date</th>
-              <th className="py-2.5 px-4">Supplier</th>
-              <th className="py-2.5 px-4 text-right">Grand total</th>
-              <th className="py-2.5 px-4 text-right">Balance due</th>
-              <th className="py-2.5 px-4 text-center">Status</th>
-              <th className="py-2.5 px-4 text-center">Inward stock action</th>
+              <th className="py-3 px-4">Bill #</th>
+              <th className="py-3 px-4">Date</th>
+              <th className="py-3 px-4">Supplier</th>
+              <th className="py-3 px-4 text-right">Grand Total</th>
+              <th className="py-3 px-4 text-right">Balance Due</th>
+              <th className="py-3 px-4 text-center">Status</th>
+              <th className="py-3 px-4 text-center">Inward Stock Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -582,32 +582,32 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
             <div className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
               <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-4">
                 <div>
-                  <div className="font-medium text-stone-500 dark:text-stone-400 text-xs">Vendor / supplier</div>
-                  <div className="font-semibold text-sm text-stone-900 dark:text-stone-100 mt-0.5">{viewingBill.supplier_name}</div>
+                  <div className="font-semibold text-slate-400 uppercase text-[10px]">Vendor / Supplier</div>
+                  <div className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-0.5">{viewingBill.supplier_name}</div>
                   {viewingBill.supplier_gstin && (
-                    <div className="font-mono text-stone-500 text-xs mt-1">GSTIN: {viewingBill.supplier_gstin}</div>
+                    <div className="font-mono text-slate-500 mt-1">GSTIN: {viewingBill.supplier_gstin}</div>
                   )}
                 </div>
 
                 <div>
-                  <div className="font-medium text-stone-500 dark:text-stone-400 text-xs">Accounts payable summary</div>
-                  <div className="mt-1 text-stone-700 dark:text-stone-300">
-                    <div>Balance due: <span className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">{formatIndianCurrency(viewingBill.balance_amount)}</span></div>
-                    <div>Paid amount: <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatIndianCurrency(viewingBill.paid_amount)}</span></div>
+                  <div className="font-semibold text-slate-400 uppercase text-[10px]">Accounts Payable Summary</div>
+                  <div className="mt-1 text-slate-700 dark:text-slate-300">
+                    <div>Balance Due: <span className="font-bold text-rose-600">{formatIndianCurrency(viewingBill.balance_amount)}</span></div>
+                    <div>Paid Amount: <span className="font-bold text-emerald-600">{formatIndianCurrency(viewingBill.paid_amount)}</span></div>
                   </div>
                 </div>
               </div>
 
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
+                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
-                      <th className="py-2 px-3">Item name</th>
-                      <th className="py-2 px-2">HSN</th>
-                      <th className="py-2 px-2 text-right">Qty</th>
-                      <th className="py-2 px-2 text-right">Rate</th>
-                      <th className="py-2 px-2 text-right">GST %</th>
-                      <th className="py-2 px-3 text-right">Line total</th>
+                      <th className="py-2.5 px-3">Item Name</th>
+                      <th className="py-2.5 px-2">HSN</th>
+                      <th className="py-2.5 px-2 text-right">Qty</th>
+                      <th className="py-2.5 px-2 text-right">Rate</th>
+                      <th className="py-2.5 px-2 text-right">GST %</th>
+                      <th className="py-2.5 px-3 text-right">Line Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -785,7 +785,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
 
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-left">
-                  <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
+                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
                       <th className="py-2 px-3">Name</th>
                       <th className="py-2 px-3">Code</th>

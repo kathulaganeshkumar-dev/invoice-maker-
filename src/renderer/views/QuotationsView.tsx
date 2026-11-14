@@ -251,15 +251,15 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
       {/* Quotations Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         <table className="w-full text-left text-xs">
-          <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
             <tr>
-              <th className="py-2.5 px-4">Quote #</th>
-              <th className="py-2.5 px-4">Date</th>
-              <th className="py-2.5 px-4">Valid until</th>
-              <th className="py-2.5 px-4">Customer</th>
-              <th className="py-2.5 px-4 text-right">Grand total</th>
-              <th className="py-2.5 px-4 text-center">Status</th>
-              <th className="py-2.5 px-4 text-center">Actions</th>
+              <th className="py-3 px-4">Quote # (Click to View)</th>
+              <th className="py-3 px-4">Date</th>
+              <th className="py-3 px-4">Valid Until</th>
+              <th className="py-3 px-4">Customer</th>
+              <th className="py-3 px-4 text-right">Grand Total</th>
+              <th className="py-3 px-4 text-center">Status</th>
+              <th className="py-3 px-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -382,24 +382,24 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
               {/* Customer Information Box */}
               <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-4">
                 <div>
-                  <div className="font-medium text-stone-500 dark:text-stone-400 text-xs">Client / recipient</div>
-                  <div className="font-semibold text-sm text-stone-900 dark:text-stone-100 mt-0.5">{viewingQuotation.customer_name}</div>
+                  <div className="font-semibold text-slate-400 uppercase text-[10px]">Client / Recipient</div>
+                  <div className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-0.5">{viewingQuotation.customer_name}</div>
                   {viewingQuotation.billing_address && (
-                    <div className="text-stone-600 dark:text-stone-400 text-xs mt-1">{viewingQuotation.billing_address}</div>
+                    <div className="text-slate-600 dark:text-slate-400 mt-1">{viewingQuotation.billing_address}</div>
                   )}
                   {viewingQuotation.customer_gstin && (
-                    <div className="font-mono text-stone-500 text-xs mt-1">GSTIN: {viewingQuotation.customer_gstin}</div>
+                    <div className="font-mono text-slate-500 mt-1">GSTIN: {viewingQuotation.customer_gstin}</div>
                   )}
                 </div>
 
                 <div>
-                  <div className="font-medium text-stone-500 dark:text-stone-400 text-xs">Tax & place of supply</div>
-                  <div className="font-medium text-stone-700 dark:text-stone-300 mt-0.5 text-xs">
+                  <div className="font-semibold text-slate-400 uppercase text-[10px]">Tax & Place of Supply</div>
+                  <div className="font-medium text-slate-700 dark:text-slate-300 mt-0.5">
                     {viewingQuotation.place_of_supply_state} (State Code: {viewingQuotation.place_of_supply_code})
                   </div>
                   {viewingQuotation.notes && (
-                    <div className="mt-2 text-stone-500 bg-white dark:bg-stone-800 p-2 rounded border border-stone-200 dark:border-stone-700 text-xs">
-                      <span className="font-medium text-stone-600 dark:text-stone-400">Notes: </span>
+                    <div className="mt-2 text-slate-500 bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
+                      <span className="font-semibold text-slate-600 dark:text-slate-400">Notes: </span>
                       {viewingQuotation.notes}
                     </div>
                   )}
@@ -409,14 +409,14 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
               {/* Items Table */}
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
+                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
-                      <th className="py-2 px-3">Item description</th>
-                      <th className="py-2 px-2">HSN/SAC</th>
-                      <th className="py-2 px-2 text-right">Qty</th>
-                      <th className="py-2 px-2 text-right">Rate</th>
-                      <th className="py-2 px-2 text-right">GST %</th>
-                      <th className="py-2 px-3 text-right">Total</th>
+                      <th className="py-2.5 px-3">Item Description</th>
+                      <th className="py-2.5 px-2">HSN/SAC</th>
+                      <th className="py-2.5 px-2 text-right">Qty</th>
+                      <th className="py-2.5 px-2 text-right">Rate</th>
+                      <th className="py-2.5 px-2 text-right">GST %</th>
+                      <th className="py-2.5 px-3 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -625,13 +625,13 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
               {/* Items Table */}
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <table className="w-full text-left">
-                  <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
+                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
-                      <th className="p-2">Select catalog item</th>
-                      <th className="p-2">Custom description</th>
+                      <th className="p-2">Select Catalog Item</th>
+                      <th className="p-2">Custom Description</th>
                       <th className="p-2 w-20">Qty</th>
                       <th className="p-2 w-28">Rate (₹)</th>
-                      <th className="p-2 w-24">GST rate</th>
+                      <th className="p-2 w-24">GST Rate</th>
                       <th className="p-2 w-10 text-center"></th>
                     </tr>
                   </thead>

@@ -199,11 +199,11 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         {/* Body Container: Sidebar + Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left Category Sidebar */}
-          <div className="w-64 border-r border-slate-200 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/40 p-3 overflow-y-auto space-y-4 text-xs font-medium select-none">
+          <div className="w-64 border-r border-slate-200 bg-slate-50/70 p-3 overflow-y-auto space-y-4 text-xs font-medium select-none">
             {/* Business Group */}
             <div>
-              <div className="font-medium text-stone-500 dark:text-stone-400 px-2 mb-1 flex items-center space-x-1.5">
-                <Settings className="w-3.5 h-3.5 text-stone-400" />
+              <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <Settings className="w-3.5 h-3.5 text-slate-400" />
                 <span>Business</span>
               </div>
               <div className="space-y-0.5">
@@ -216,7 +216,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     key={item.id}
                     onClick={() => setActiveCategory(item.id)}
                     className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                      activeCategory === item.id ? 'bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-200/50'
+                      activeCategory === item.id ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
                     }`}
                   >
                     {item.label}
@@ -227,8 +227,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* Sales Documents Group */}
             <div>
-              <div className="font-medium text-stone-500 dark:text-stone-400 px-2 mb-1 flex items-center space-x-1.5">
-                <FileText className="w-3.5 h-3.5 text-stone-400" />
+              <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
                 <span>Sales & Quotations</span>
               </div>
               <div className="space-y-0.5">
@@ -241,7 +241,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     key={item.id}
                     onClick={() => setActiveCategory(item.id)}
                     className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                      activeCategory === item.id ? 'bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-200/50'
+                      activeCategory === item.id ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
                     }`}
                   >
                     {item.label}
@@ -252,15 +252,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* Saving Paths by Category */}
             <div>
-              <div className="font-medium text-stone-500 dark:text-stone-400 px-2 mb-1 flex items-center space-x-1.5">
-                <FolderOpen className="w-3.5 h-3.5 text-stone-400" />
+              <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <FolderOpen className="w-3.5 h-3.5 text-slate-400" />
                 <span>Saving Paths</span>
               </div>
               <div className="space-y-0.5">
                 <button
                   onClick={() => setActiveCategory('Category_Save_Paths')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'Category_Save_Paths' ? 'bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-200/50'
+                    activeCategory === 'Category_Save_Paths' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
                   }`}
                 >
                   Local Folders by Category
@@ -270,15 +270,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* Inventory Group */}
             <div>
-              <div className="font-medium text-stone-500 dark:text-stone-400 px-2 mb-1 flex items-center space-x-1.5">
-                <Package className="w-3.5 h-3.5 text-stone-400" />
+              <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <Package className="w-3.5 h-3.5 text-slate-400" />
                 <span>Inventory & Stock</span>
               </div>
               <div className="space-y-0.5">
                 <button
                   onClick={() => setActiveCategory('Inventory_Rules')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'Inventory_Rules' ? 'bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-200/50'
+                    activeCategory === 'Inventory_Rules' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
                   }`}
                 >
                   Valuation & Alerts
@@ -288,15 +288,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* Deployment & LAN Group */}
             <div>
-              <div className="font-medium text-stone-500 dark:text-stone-400 px-2 mb-1 flex items-center space-x-1.5">
-                <Server className="w-3.5 h-3.5 text-stone-400" />
+              <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <Server className="w-3.5 h-3.5 text-slate-400" />
                 <span>Deployment & Network</span>
               </div>
               <div className="space-y-0.5">
                 <button
                   onClick={() => setActiveCategory('Deployment_Mode')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'Deployment_Mode' ? 'bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-200/50'
+                    activeCategory === 'Deployment_Mode' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
                   }`}
                 >
                   LAN Multi-User (IP Connect)
@@ -654,13 +654,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-stone-50/80 dark:bg-stone-900/60 text-stone-600 dark:text-stone-400 font-medium text-xs border-b border-stone-200 dark:border-stone-800">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px]">
                       <tr>
-                        <th className="py-2.5 px-3">Document type</th>
+                        <th className="py-2.5 px-3">Document Type</th>
                         <th className="py-2.5 px-3">Prefix</th>
                         <th className="py-2.5 px-3">Current #</th>
                         <th className="py-2.5 px-3">Padding</th>
-                        <th className="py-2.5 px-3">Last generated</th>
+                        <th className="py-2.5 px-3">Last Generated</th>
                         <th className="py-2.5 px-3 text-center">Actions</th>
                       </tr>
                     </thead>

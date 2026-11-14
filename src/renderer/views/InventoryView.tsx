@@ -296,11 +296,11 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
           )}
         </div>
 
-        <div className="bg-stone-50/80 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800 rounded-xl px-4 py-2.5 flex flex-col justify-center">
-          <span className="text-xs font-medium text-stone-500 dark:text-stone-400">
-            Total stock valuation
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex flex-col justify-center">
+          <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300">
+            Total Stock Valuation
           </span>
-          <span className="text-base font-semibold text-stone-900 dark:text-stone-100 tabular-nums">
+          <span className="text-lg font-extrabold text-emerald-900 dark:text-emerald-100">
             {formatIndianCurrency(totalValuation)}
           </span>
         </div>
@@ -310,14 +310,14 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
       {activeTab === 'balances' ? (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
           <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+            <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-2.5 px-4">Product name</th>
-                <th className="py-2.5 px-4">Warehouse</th>
-                <th className="py-2.5 px-4 text-right">Quantity on hand</th>
-                <th className="py-2.5 px-4 text-right">Avg unit cost</th>
-                <th className="py-2.5 px-4 text-right">Total valuation</th>
-                <th className="py-2.5 px-4 text-center">Status</th>
+                <th className="py-3 px-4">Product Name</th>
+                <th className="py-3 px-4">Warehouse</th>
+                <th className="py-3 px-4 text-right">Quantity on Hand</th>
+                <th className="py-3 px-4 text-right">Avg Unit Cost</th>
+                <th className="py-3 px-4 text-right">Total Valuation</th>
+                <th className="py-3 px-4 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -370,15 +370,15 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
         /* Inventory Movements Ledger */
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
           <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+            <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-2.5 px-4">Date</th>
-                <th className="py-2.5 px-4">Product</th>
-                <th className="py-2.5 px-4">Movement type</th>
-                <th className="py-2.5 px-4">Reference document</th>
-                <th className="py-2.5 px-4 text-right">Quantity</th>
-                <th className="py-2.5 px-4 text-right">Unit cost</th>
-                <th className="py-2.5 px-4">Notes</th>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Product</th>
+                <th className="py-3 px-4">Movement Type</th>
+                <th className="py-3 px-4">Reference Document</th>
+                <th className="py-3 px-4 text-right">Quantity</th>
+                <th className="py-3 px-4 text-right">Unit Cost</th>
+                <th className="py-3 px-4">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -444,13 +444,13 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
             </button>
           </div>
           <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+            <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-2.5 px-4">Warehouse name</th>
-                <th className="py-2.5 px-4">Code</th>
-                <th className="py-2.5 px-4">Address / location</th>
-                <th className="py-2.5 px-4 text-center">Default</th>
-                <th className="py-2.5 px-4 text-center">Actions</th>
+                <th className="py-3 px-4">Warehouse Name</th>
+                <th className="py-3 px-4">Code</th>
+                <th className="py-3 px-4">Address / Location</th>
+                <th className="py-3 px-4 text-center">Default</th>
+                <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

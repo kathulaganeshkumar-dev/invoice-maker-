@@ -97,28 +97,32 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
 
   const statCards = [
     {
-      title: 'Sales revenue',
+      title: 'Total Sales Revenue',
       value: formatIndianCurrency(metrics?.totalSales || 0),
-      subtitle: `${metrics?.totalInvoicesCount || 0} invoices generated`,
+      subtitle: `${metrics?.totalInvoicesCount || 0} Invoices Generated`,
       icon: TrendingUp,
+      color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
     },
     {
-      title: 'Customer receivables',
+      title: 'Customer Receivables',
       value: formatIndianCurrency(metrics?.outstandingReceivables || 0),
-      subtitle: `Unpaid balance: ${formatIndianCurrency(metrics?.unpaidInvoicesAmount || 0)}`,
+      subtitle: `Unpaid: ${formatIndianCurrency(metrics?.unpaidInvoicesAmount || 0)}`,
       icon: ArrowDownLeft,
+      color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
     },
     {
-      title: 'Purchases',
+      title: 'Total Purchases',
       value: formatIndianCurrency(metrics?.totalPurchases || 0),
-      subtitle: `Supplier payables: ${formatIndianCurrency(metrics?.outstandingPayables || 0)}`,
+      subtitle: `Payables: ${formatIndianCurrency(metrics?.outstandingPayables || 0)}`,
       icon: ShoppingCart,
+      color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
     },
     {
-      title: 'Inventory valuation',
+      title: 'Current Inventory Value',
       value: formatIndianCurrency(metrics?.currentStockValue || 0),
-      subtitle: `${metrics?.lowStockCount || 0} items low in stock`,
+      subtitle: `${metrics?.lowStockCount || 0} Products Low in Stock`,
       icon: Package,
+      color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800',
     },
   ];
 
@@ -127,19 +131,19 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
       {/* View Header with Date Filters */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-100 tracking-tight">
-            Financial Overview
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Executive Financial Dashboard
           </h1>
-          <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-            Operational and transaction ledger summary for active period
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Real-time business performance calculated directly from transactional records
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Custom From Date & To Date Pickers */}
-          <div className="flex items-center space-x-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-2.5 py-1 text-xs text-stone-600 dark:text-stone-300">
-            <Calendar className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />
-            <span className="text-stone-500 dark:text-stone-400 font-medium">From</span>
+          <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 shadow-sm text-xs">
+            <Calendar className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
+            <span className="font-semibold text-slate-500 dark:text-slate-400">From:</span>
             <input
               type="date"
               value={fromDate}
@@ -148,10 +152,10 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
                 setFromDate(e.target.value);
               }}
               aria-label="From Date"
-              className="bg-transparent text-xs text-stone-800 dark:text-stone-200 outline-none"
+              className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none"
             />
-            <span className="text-stone-300 dark:text-stone-700">·</span>
-            <span className="text-stone-500 dark:text-stone-400 font-medium">To</span>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <span className="font-semibold text-slate-500 dark:text-slate-400">To:</span>
             <input
               type="date"
               value={toDate}
@@ -160,44 +164,40 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
                 setToDate(e.target.value);
               }}
               aria-label="To Date"
-              className="bg-transparent text-xs text-stone-800 dark:text-stone-200 outline-none"
+              className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none"
             />
           </div>
 
-          <div className="inline-flex items-center p-0.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-100/80 dark:bg-stone-900/60 text-xs">
-            {['today', 'this_week', 'this_month', 'this_fy', 'all_time'].map((key) => {
-              const labels: Record<string, string> = {
-                today: 'Today',
-                this_week: 'Week',
-                this_month: 'Month',
-                this_fy: 'This FY',
-                all_time: 'All time',
-              };
-              const active = dateRange === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handlePresetClick(key)}
-                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                    active
-                      ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium shadow-2xs'
-                      : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
-                  }`}
-                >
-                  {labels[key]}
-                </button>
-              );
-            })}
-          </div>
-
+          {['today', 'this_week', 'this_month', 'this_fy', 'all_time'].map((key) => {
+            const labels: Record<string, string> = {
+              today: 'Today',
+              this_week: 'This Week',
+              this_month: 'This Month',
+              this_fy: 'This FY',
+              all_time: 'All Time',
+            };
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => handlePresetClick(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  dateRange === key
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {labels[key]}
+              </button>
+            );
+          })}
           <button
             type="button"
             onClick={loadMetrics}
-            className="p-1.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-colors"
+            className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
             title="Refresh figures"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -209,17 +209,17 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
           return (
             <div
               key={idx}
-              className="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 shadow-2xs flex flex-col justify-between"
+              className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-stone-500 dark:text-stone-400">{card.title}</span>
-                <div className="w-7 h-7 rounded-md border border-stone-200/80 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/60 flex items-center justify-center text-stone-500 dark:text-stone-400">
-                  <Icon className="w-3.5 h-3.5" />
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{card.title}</span>
+                <div className={`p-2 rounded-lg border ${card.color}`}>
+                  <Icon className="w-4 h-4" />
                 </div>
               </div>
               <div>
-                <div className="text-2xl font-semibold text-stone-900 dark:text-stone-100 tabular-nums tracking-tight">{card.value}</div>
-                <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">{card.subtitle}</div>
+                <div className="text-xl font-extrabold text-slate-900 dark:text-white">{card.value}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">{card.subtitle}</div>
               </div>
             </div>
           );
@@ -229,63 +229,63 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
       {/* Financial Health Summary Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cashflow & Collections */}
-        <div className="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-5 shadow-2xs space-y-4">
-          <h2 className="font-medium text-sm text-stone-900 dark:text-stone-100 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+          <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center justify-between">
             <span>Cashflow & Collections</span>
-            <CreditCard className="w-4 h-4 text-stone-400" />
+            <CreditCard className="w-4 h-4 text-slate-400" />
           </h2>
 
-          <div className="space-y-2.5 text-xs">
-            <div className="flex justify-between items-center p-2.5 border border-stone-100 dark:border-stone-800/80 bg-stone-50/60 dark:bg-stone-800/30 rounded-lg">
-              <span className="text-stone-600 dark:text-stone-400">Customer collections</span>
-              <span className="font-semibold text-stone-900 dark:text-stone-100 tabular-nums text-sm">
+          <div className="space-y-3 text-xs">
+            <div className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+              <span className="text-slate-600 dark:text-slate-400">Total Customer Collections:</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
                 {formatIndianCurrency(metrics?.totalPaymentsReceived || 0)}
               </span>
             </div>
 
-            <div className="flex justify-between items-center p-2.5 border border-stone-100 dark:border-stone-800/80 bg-stone-50/60 dark:bg-stone-800/30 rounded-lg">
-              <span className="text-stone-600 dark:text-stone-400">Supplier disbursements</span>
-              <span className="font-semibold text-stone-900 dark:text-stone-100 tabular-nums text-sm">
+            <div className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+              <span className="text-slate-600 dark:text-slate-400">Payments Disbursed to Suppliers:</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">
                 {formatIndianCurrency(metrics?.totalSupplierPayments || 0)}
               </span>
             </div>
 
-            <div className="flex justify-between items-center p-2.5 border border-stone-100 dark:border-stone-800/80 bg-stone-50/60 dark:bg-stone-800/30 rounded-lg">
-              <span className="text-stone-600 dark:text-stone-400">Paid invoices settled</span>
-              <span className="font-medium text-stone-900 dark:text-stone-100 tabular-nums">
+            <div className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+              <span className="text-slate-600 dark:text-slate-400">Paid Invoices Volume:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
                 {formatIndianCurrency(metrics?.paidInvoicesAmount || 0)}
               </span>
             </div>
 
-            <div className="flex justify-between items-center p-2.5 border border-stone-100 dark:border-stone-800/80 bg-stone-50/60 dark:bg-stone-800/30 rounded-lg">
-              <span className="text-stone-600 dark:text-stone-400">Active quotations</span>
-              <span className="font-medium text-stone-900 dark:text-stone-100 tabular-nums">
-                {metrics?.totalQuotationsCount || 0} open offers
+            <div className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+              <span className="text-slate-600 dark:text-slate-400">Total Active Quotations:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {metrics?.totalQuotationsCount || 0} Active Offers
               </span>
             </div>
           </div>
         </div>
 
         {/* Monthly Performance Visualizer */}
-        <div className="lg:col-span-2 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-5 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-medium text-sm text-stone-900 dark:text-stone-100 flex items-center space-x-2">
-              <TrendingUp className="w-4 h-4 text-stone-500" />
-              <span>Monthly Sales & Purchases (FY 2026-27)</span>
+            <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4 text-brand-600" />
+              <span>Financial Year Monthly Trajectory (FY 2026-27)</span>
             </h2>
-            <div className="flex items-center space-x-4 text-xs">
-              <span className="flex items-center space-x-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-stone-800 dark:bg-stone-200 inline-block" />
-                <span className="text-stone-600 dark:text-stone-400">Sales</span>
+            <div className="flex items-center space-x-3 text-xs">
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-brand-600 inline-block" />
+                <span className="text-slate-600 dark:text-slate-400">Sales</span>
               </span>
-              <span className="flex items-center space-x-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-stone-400 dark:bg-stone-600 inline-block" />
-                <span className="text-stone-600 dark:text-stone-400">Purchases</span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" />
+                <span className="text-slate-600 dark:text-slate-400">Purchases</span>
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-12 gap-1.5 h-36 items-end pt-4 border-b border-stone-100 dark:border-stone-800">
+          <div className="grid grid-cols-12 gap-1.5 h-36 items-end pt-4 border-b border-slate-100 dark:border-slate-700">
             {metrics?.monthlySales?.map((m: any, i: number) => {
               const seriesMax = Math.max(
                 ...(metrics?.monthlySales?.map((x: any) => Math.max(Number(x.sales) || 0, Number(x.purchases) || 0)) || [0]),
@@ -301,16 +301,16 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
                   <div className="flex items-end space-x-0.5 w-full justify-center h-full">
                     <div
                       style={{ height: `${salesHeight}%` }}
-                      className={`w-2 sm:w-3 rounded-t-xs transition-all ${salesVal > 0 ? 'bg-stone-800 dark:bg-stone-200 hover:opacity-80' : 'bg-stone-200 dark:bg-stone-800'}`}
+                      className={`w-2 sm:w-3 rounded-t transition-all ${salesVal > 0 ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-200 dark:bg-slate-700'}`}
                       title={`${m.month} Sales: ₹ ${m.sales}`}
                     />
                     <div
                       style={{ height: `${purchasesHeight}%` }}
-                      className={`w-2 sm:w-3 rounded-t-xs transition-all ${purchasesVal > 0 ? 'bg-stone-400 dark:bg-stone-600 hover:opacity-80' : 'bg-stone-200 dark:bg-stone-800'}`}
+                      className={`w-2 sm:w-3 rounded-t transition-all ${purchasesVal > 0 ? 'bg-sky-400 hover:bg-sky-500' : 'bg-slate-200 dark:bg-slate-700'}`}
                       title={`${m.month} Purchases: ₹ ${m.purchases}`}
                     />
                   </div>
-                  <span className="text-[11px] text-stone-500 dark:text-stone-500 mt-1.5 font-medium tabular-nums">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-medium">
                     {m.month}
                   </span>
                 </div>
@@ -318,19 +318,18 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
             })}
           </div>
 
-          <div className="flex items-center justify-between text-xs text-stone-500 pt-3">
-            <span className="tabular-nums">
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-3">
+            <span>
               {fromDate || toDate
-                ? `Period: ${fromDate || 'Start'} to ${toDate || 'Latest'}`
-                : 'Period: All records'}{' '}
-              · Total sales: {formatIndianCurrency(metrics?.totalSales || 0)}
+                ? `Showing: ${fromDate || 'Start'} to ${toDate || 'Latest'}`
+                : 'Showing: All Time Records'}{' '}
+              • Sales: {formatIndianCurrency(metrics?.totalSales || 0)}
             </span>
             <button
               onClick={() => onNavigate('reports')}
-              className="text-stone-800 dark:text-stone-200 font-medium hover:underline inline-flex items-center space-x-1"
+              className="text-brand-600 dark:text-brand-400 font-bold hover:underline"
             >
-              <span>View full reports</span>
-              <span>→</span>
+              View Full GST & Business Reports →
             </button>
           </div>
         </div>

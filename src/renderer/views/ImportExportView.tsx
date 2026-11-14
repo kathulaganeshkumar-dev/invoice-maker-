@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Company } from '../../shared/types';
-import { FileDown, FileUp, FileSpreadsheet, Stamp, CheckCircle, ScanLine } from 'lucide-react';
+import { FileDown, FileUp, FileSpreadsheet, Stamp, CheckCircle, Sparkles } from 'lucide-react';
 
 interface Props {
   companyId: string;
@@ -83,12 +83,12 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
   return (
     <div className="p-6 space-y-6 overflow-y-auto">
       <div>
-        <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-100 tracking-tight flex items-center space-x-2">
-          <FileDown className="w-5 h-5 text-stone-600 dark:text-stone-300" />
-          <span>Import & Export</span>
+        <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
+          <FileDown className="w-5 h-5 text-brand-600" />
+          <span>Excel, CSV & Template Import / Export Engine</span>
         </h1>
-        <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-          Export master records to Excel spreadsheets or import stationery templates
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          Export full company data, download standardized Excel templates, or import PDF/Image letterhead templates
         </p>
       </div>
 
@@ -164,13 +164,13 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
           className="md:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4"
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 font-medium text-sm text-stone-900 dark:text-stone-100">
-              <Stamp className="w-4 h-4 text-stone-500" />
-              <span>Import Stationery Template (PDF / PNG / JPG)</span>
+            <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
+              <Stamp className="w-5 h-5 text-brand-600" />
+              <span>Import New Template to Letterheads & Templates (PDF / PNG / JPG)</span>
             </div>
-            <span className="text-xs font-medium px-2 py-0.5 rounded border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 text-stone-600 dark:text-stone-300 flex items-center space-x-1.5">
-              <ScanLine className="w-3.5 h-3.5 text-stone-500" />
-              <span>Layout scanner</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300 flex items-center space-x-1">
+              <Sparkles className="w-3 h-3" />
+              <span>Offline AI Layout Detection</span>
             </span>
           </div>
 
@@ -255,8 +255,8 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
                   onChange={(e) => setAutoDetect(e.target.checked)}
                   className="rounded text-brand-600"
                 />
-                <span className="font-medium text-stone-700 dark:text-stone-300">
-                  Auto-detect layout and margins
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Auto-Detect Margins via Offline AI
                 </span>
               </label>
 

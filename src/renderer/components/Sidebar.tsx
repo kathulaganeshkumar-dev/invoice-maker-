@@ -41,9 +41,9 @@ export const Sidebar: React.FC<Props> = ({ activeTab, onSelectTab, onOpenSetting
   ];
 
   return (
-    <aside className="w-56 border-r border-stone-200/80 bg-stone-50/50 dark:bg-stone-900/60 dark:border-stone-800/80 flex flex-col py-3 select-none flex-shrink-0">
-      <div className="px-3 pb-2 text-xs font-medium text-stone-400 dark:text-stone-500">
-        Workspace
+    <aside className="w-56 border-r border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex flex-col py-3 select-none flex-shrink-0">
+      <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        Navigation
       </div>
       <nav className="flex-1 space-y-0.5 px-2 overflow-y-auto">
         {menuItems.map((item) => {
@@ -54,13 +54,13 @@ export const Sidebar: React.FC<Props> = ({ activeTab, onSelectTab, onOpenSetting
               key={item.id}
               type="button"
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                 isActive
-                  ? 'bg-stone-200/80 text-stone-900 dark:bg-stone-800 dark:text-stone-100 font-medium'
-                  : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200/40 dark:hover:bg-stone-800/50 hover:text-stone-900 dark:hover:text-stone-200 font-normal'
+                  ? 'bg-brand-600 text-white shadow-sm shadow-brand-500/20'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 dark:text-stone-500'}`} />
+              <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
               <span className="truncate">{item.label}</span>
             </button>
           );
@@ -69,22 +69,22 @@ export const Sidebar: React.FC<Props> = ({ activeTab, onSelectTab, onOpenSetting
 
       {/* Settings Shortcut Button */}
       {onOpenSettings && (
-        <div className="px-2 pt-2 border-t border-stone-200/60 dark:border-stone-800/60">
+        <div className="px-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md text-xs font-normal text-stone-600 dark:text-stone-400 hover:bg-stone-200/40 dark:hover:bg-stone-800/50 hover:text-stone-900 dark:hover:text-stone-200 transition-colors"
+            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 transition-all"
           >
-            <Settings className="w-4 h-4 text-stone-400 dark:text-stone-500" />
+            <Settings className="w-4 h-4 text-slate-400 dark:text-slate-500" />
             <span className="truncate">Settings & Preferences</span>
           </button>
         </div>
       )}
 
       {/* Software Build Info */}
-      <div className="px-3 pt-2 text-[11px] text-stone-400 space-y-0.5">
-        <div className="font-medium text-stone-500 dark:text-stone-400">Enterprise Invoicer 2.0</div>
-        <div className="text-stone-400 text-[10px]">Local offline mode</div>
+      <div className="px-4 pt-2.5 text-[10px] text-slate-400 space-y-0.5">
+        <div className="font-semibold text-slate-600 dark:text-slate-400">Enterprise Invoicer v2.0.0</div>
+        <div>Offline Enterprise Edition</div>
       </div>
     </aside>
   );

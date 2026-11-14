@@ -137,14 +137,14 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         <table className="w-full text-left text-xs">
-          <thead className="bg-stone-50/80 dark:bg-stone-900/60 border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 font-medium text-xs">
+          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
             <tr>
-              <th className="py-2.5 px-4">Supplier name</th>
-              <th className="py-2.5 px-4">Contact & mobile</th>
-              <th className="py-2.5 px-4">GSTIN / PAN</th>
-              <th className="py-2.5 px-4">State</th>
-              <th className="py-2.5 px-4 text-right">Outstanding payable</th>
-              <th className="py-2.5 px-4 text-center">Actions</th>
+              <th className="py-3 px-4">Supplier Name</th>
+              <th className="py-3 px-4">Contact & Mobile</th>
+              <th className="py-3 px-4">GSTIN / PAN</th>
+              <th className="py-3 px-4">State</th>
+              <th className="py-3 px-4 text-right">Outstanding Payable</th>
+              <th className="py-3 px-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
