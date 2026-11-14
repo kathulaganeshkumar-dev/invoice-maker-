@@ -46,11 +46,11 @@ This application is a commercial-grade, desktop-first Invoicing, Quotation, Inve
 - Phase 7: Backup, Restore, Excel/CSV Import/Export, Audit Logs & System Settings.
 - Phase 8: Cross-platform Packaging, Documentation, and Automated Quality Testing.
 
-## 5. Mandatory Workflow Directive: Vercel Web Preview Before Local Software Installation
-- **Live Vercel Web URL**: https://invoice-maker-delta-black.vercel.app/
-- **GitHub Repository**: https://github.com/kathulaganeshkumar-dev/invoice-maker-.git
-- **User Launch Directive**: Whenever the user requests to "open" or "open the software", directly launch the web application in a browser tab (`https://invoice-maker-delta-black.vercel.app/`) using the system browser launcher (`Start-Process "https://invoice-maker-delta-black.vercel.app/"`).
-- **CRITICAL DIRECTIVE**: Whenever any code modification, frontend polish, bug fix, or feature request is made:
-  1. **Deploy to Vercel First**: Commit and push changes to the repository (`git push origin main`) to trigger the live Vercel deployment so the user can immediately review and inspect changes on the web.
-  2. **Provide Web Preview to User**: Share and open the Vercel web preview link (`https://invoice-maker-delta-black.vercel.app/`) so the user can verify the visual UI, layout, and functionality before applying changes to the local software file.
-  3. **Local Software Sync After Web Review**: Only after the changes are verified on the Vercel web build, compile the local packages (`cmd.exe /c "npm run build"`), update the local installation files, and refresh the desktop Electron application.
+## 5. Local Software & Development Directives (Version 2.0)
+- **Local Application URL**: `http://127.0.0.1:4200` (Local embedded server running directly on user's machine)
+- **Local Desktop Executable**: `version 2.0\win-unpacked\Enterprise Invoice Manager.exe`
+- **User Launch Directive**: When the user requests to "open", "open the software", or review changes, open the **local Version 2 software** directly on their PC (`http://127.0.0.1:4200` and the desktop application), NOT the remote Vercel link unless explicitly asked.
+- **Development & Review Workflow**:
+  1. Make requested code changes directly in the local workspace (`src/`).
+  2. Build and update local files with `npm run build` (or run Vite dev server `npm run dev:vite` on port 5173 with proxy to 4200 for instant live reload).
+  3. Verify changes locally on `http://127.0.0.1:4200` and in the Version 2 desktop application.
