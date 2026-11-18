@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
+import { DateInput } from '../components/DateInput';
 import {
   TrendingUp,
   Receipt,
@@ -65,6 +66,14 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
     if (companyId) {
       loadMetrics();
     }
+  }, [companyId, fromDate, toDate]);
+
+  useEffect(() => {
+    const onDataChanged = () => {
+      if (companyId) loadMetrics();
+    };
+    window.addEventListener('eim-data-changed', onDataChanged);
+    return () => window.removeEventListener('eim-data-changed', onDataChanged);
   }, [companyId, fromDate, toDate]);
 
   const handlePresetClick = (preset: string) => {
@@ -144,28 +153,28 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
           <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 shadow-sm text-xs">
             <Calendar className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
             <span className="font-semibold text-slate-500 dark:text-slate-400">From:</span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => {
-                setDateRange('custom');
-                setFromDate(e.target.value);
-              }}
-              aria-label="From Date"
-              className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none"
-            />
+            <div className="w-32">
+              <DateInput
+                value={fromDate}
+                onChange={(val) => {
+                  setDateRange('custom');
+                  setFromDate(val);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 border-none px-0 py-0 shadow-none focus:ring-0"
+              />
+            </div>
             <span className="text-slate-300 dark:text-slate-600">|</span>
             <span className="font-semibold text-slate-500 dark:text-slate-400">To:</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => {
-                setDateRange('custom');
-                setToDate(e.target.value);
-              }}
-              aria-label="To Date"
-              className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none"
-            />
+            <div className="w-32">
+              <DateInput
+                value={toDate}
+                onChange={(val) => {
+                  setDateRange('custom');
+                  setToDate(val);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 border-none px-0 py-0 shadow-none focus:ring-0"
+              />
+            </div>
           </div>
 
           {['today', 'this_week', 'this_month', 'this_fy', 'all_time'].map((key) => {

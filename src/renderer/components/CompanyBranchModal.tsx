@@ -1,8 +1,10 @@
 // src/renderer/components/CompanyBranchModal.tsx - Modern Company & Branch Selector
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Company, Branch } from '../../shared/types';
 import { INDIAN_STATES } from '../../shared/constants';
 import { api } from '../services/api';
+import { SearchableSelect } from './SearchableSelect';
+import { ModalPortal } from './ModalPortal';
 import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown, Eye } from 'lucide-react';
 
 interface Props {
@@ -27,22 +29,17 @@ export const CompanyBranchModal: React.FC<Props> = ({
   const [editingCompany, setEditingCompany] = useState<Partial<Company>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [stateQuery, setStateQuery] = useState<string>('');
-  const [isStateOpen, setIsStateOpen] = useState<boolean>(false);
   const [isBranchFormOpen, setIsBranchFormOpen] = useState<boolean>(false);
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [branchFormData, setBranchFormData] = useState<Partial<Branch>>({});
   const [showBranchesList, setShowBranchesList] = useState<boolean>(false);
-  const stateDropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (stateDropdownRef.current && !stateDropdownRef.current.contains(event.target as Node)) {
-        setIsStateOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+  const stateOptions = useMemo(() => {
+    return INDIAN_STATES.map((s) => ({
+      value: s.code,
+      label: s.name,
+      code: s.code,
+    }));
   }, []);
 
   useEffect(() => {
@@ -62,26 +59,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
         state: matched.name,
         state_code: matched.code,
       }));
-      setStateQuery(`${matched.name} (${matched.code})`);
     } else {
       setEditingCompany((prev) => ({ ...prev, gstin }));
     }
-  };
-
-  const filteredStates = INDIAN_STATES.filter((s) => {
-    const q = stateQuery.trim().toLowerCase();
-    if (!q) return true;
-    return s.name.toLowerCase().includes(q) || s.code.includes(q);
-  });
-
-  const selectState = (s: typeof INDIAN_STATES[0]) => {
-    setEditingCompany((prev) => ({
-      ...prev,
-      state: s.name,
-      state_code: s.code,
-    }));
-    setStateQuery(`${s.name} (${s.code})`);
-    setIsStateOpen(false);
   };
 
   const handleOpenAddBranch = () => {
@@ -91,6 +71,12 @@ export const CompanyBranchModal: React.FC<Props> = ({
       state: comp?.state || 'Madhya Pradesh',
       state_code: comp?.state_code || '23',
       code: `BR0${branches.length + 1}`,
+      email: comp?.email || '',
+      financial_year: comp?.financial_year || '2026-27',
+      tan: comp?.tan || '',
+      cin: comp?.cin || '',
+      iso: comp?.iso || '',
+      msme: comp?.msme || '',
       use_company_bank: true,
       bank_name: comp?.bank_name || '',
       bank_account_no: comp?.bank_account_no || '',
@@ -105,6 +91,12 @@ export const CompanyBranchModal: React.FC<Props> = ({
     setEditingBranchId(branch.id);
     setBranchFormData({
       ...branch,
+      email: branch.email || '',
+      financial_year: branch.financial_year || comp?.financial_year || '2026-27',
+      tan: branch.tan || '',
+      cin: branch.cin || '',
+      iso: branch.iso || '',
+      msme: branch.msme || '',
       use_company_bank: branch.use_company_bank ?? true,
       bank_name: (branch.use_company_bank ?? true) ? (comp?.bank_name || '') : (branch.bank_name || ''),
       bank_account_no: (branch.use_company_bank ?? true) ? (comp?.bank_account_no || '') : (branch.bank_account_no || ''),
@@ -133,6 +125,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
         const def = brs.find((b) => b.is_default) || brs[0];
         setSelectedBranchId(def ? def.id : '');
       }
+      setIsBranchFormOpen(false);
+      setEditingBranchId(null);
+      setBranchFormData({});
     } catch (err: any) {
       alert(err.message || 'Error deleting branch');
     }
@@ -153,6 +148,12 @@ export const CompanyBranchModal: React.FC<Props> = ({
         code: code.toUpperCase(),
         state: branchFormData.state || comp?.state || 'Madhya Pradesh',
         state_code: branchFormData.state_code || comp?.state_code || '23',
+        email: branchFormData.email ? branchFormData.email.trim() : (comp?.email || ''),
+        financial_year: branchFormData.financial_year ? branchFormData.financial_year.trim() : (comp?.financial_year || undefined),
+        tan: branchFormData.tan ? branchFormData.tan.toUpperCase().trim() : undefined,
+        cin: branchFormData.cin ? branchFormData.cin.toUpperCase().trim() : undefined,
+        iso: branchFormData.iso ? branchFormData.iso.trim() : undefined,
+        msme: branchFormData.msme ? branchFormData.msme.toUpperCase().trim() : undefined,
         use_company_bank: useCompBank,
         bank_name: useCompBank ? (comp?.bank_name || undefined) : branchFormData.bank_name,
         bank_account_no: useCompBank ? (comp?.bank_account_no || undefined) : branchFormData.bank_account_no,
@@ -174,6 +175,17 @@ export const CompanyBranchModal: React.FC<Props> = ({
       setBranchFormData({});
     } catch (err: any) {
       alert(err.message || 'Error saving branch');
+    }
+  };
+
+  const handleToggleBranchesList = () => {
+    if (showBranchesList || isBranchFormOpen) {
+      setShowBranchesList(false);
+      setIsBranchFormOpen(false);
+      setEditingBranchId(null);
+      setBranchFormData({});
+    } else {
+      setShowBranchesList(true);
     }
   };
 
@@ -212,6 +224,10 @@ export const CompanyBranchModal: React.FC<Props> = ({
 
   const handleCompanySelect = async (compId: string) => {
     setSelectedCompanyId(compId);
+    setShowBranchesList(false);
+    setIsBranchFormOpen(false);
+    setEditingBranchId(null);
+    setBranchFormData({});
     try {
       const brs = await api.getBranches(compId);
       setBranches(brs);
@@ -219,6 +235,44 @@ export const CompanyBranchModal: React.FC<Props> = ({
       if (defBranch) setSelectedBranchId(defBranch.id);
     } catch {
       // ignore
+    }
+  };
+
+  const handleDeleteCompany = async (comp: Company) => {
+    if (!comp) return;
+    const isLastCompany = companies.length <= 1;
+    const msg = isLastCompany
+      ? `Are you sure you want to delete your ONLY remaining business profile "${comp.name}" along with all its invoices, inventory, customers, and templates? This cannot be undone.`
+      : `Are you sure you want to permanently delete business profile "${comp.name}" and all its associated records?`;
+    if (!window.confirm(msg)) return;
+    try {
+      setLoading(true);
+      await api.deleteCompany(comp.id);
+      const remaining = await api.getCompanies();
+      setCompanies(remaining);
+
+      if (remaining.length === 0) {
+        setSelectedCompanyId('');
+        setBranches([]);
+        setSelectedBranchId('');
+        onSelect(null, null);
+      } else {
+        const nextComp = remaining.find((c) => c.is_default) || remaining[0];
+        setSelectedCompanyId(nextComp.id);
+        const brs = await api.getBranches(nextComp.id);
+        setBranches(brs);
+        const defBranch = brs.find((b) => b.is_default) || brs[0] || null;
+        setSelectedBranchId(defBranch ? defBranch.id : '');
+        if (comp.id === currentCompanyId || !currentCompanyId) {
+          onSelect(nextComp, defBranch);
+        }
+      }
+      setIsEditing(false);
+      setEditingCompany({});
+    } catch (err: any) {
+      setError(err.message || 'Error deleting business profile');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -232,6 +286,13 @@ export const CompanyBranchModal: React.FC<Props> = ({
       const companyPayload = {
         ...editingCompany,
         legal_name: editingCompany.legal_name || editingCompany.name,
+        is_default: Boolean(editingCompany.is_default),
+        tan: editingCompany.tan ? editingCompany.tan.toUpperCase().trim() : undefined,
+        cin: editingCompany.cin ? editingCompany.cin.toUpperCase().trim() : undefined,
+        iso: editingCompany.iso ? editingCompany.iso.trim() : undefined,
+        msme: editingCompany.msme ? editingCompany.msme.toUpperCase().trim() : undefined,
+        email: editingCompany.email ? editingCompany.email.trim() : '',
+        financial_year: editingCompany.financial_year ? editingCompany.financial_year.trim() : undefined,
       };
       let savedId = editingCompany.id;
       if (editingCompany.id) {
@@ -261,18 +322,31 @@ export const CompanyBranchModal: React.FC<Props> = ({
     }
   };
 
-  const handleConfirmSelect = async () => {
-    const comp = companies.find((c) => c.id === selectedCompanyId);
-    if (!comp) return;
-
+  const handleOpenCompany = async (comp: Company) => {
     try {
       await api.updateAppSettings({ show_company_selector_on_startup: showOnStartup });
     } catch {
       // ignore
     }
 
-    const br = branches.find((b) => b.id === selectedBranchId) || branches[0];
-    onSelect(comp, br);
+    let targetBranch: Branch | null = null;
+    if (comp.id === selectedCompanyId && branches.length > 0) {
+      targetBranch =
+        branches.find((b) => b.id === selectedBranchId) ||
+        branches.find((b) => b.is_default) ||
+        branches[0] ||
+        null;
+    } else {
+      try {
+        const brs = await api.getBranches(comp.id);
+        targetBranch = brs.find((b) => b.is_default) || brs[0] || null;
+      } catch {
+        // ignore
+      }
+    }
+
+    setSelectedCompanyId(comp.id);
+    onSelect(comp, targetBranch);
     onClose();
   };
 
@@ -289,7 +363,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+    <ModalPortal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Window Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -315,8 +390,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
           {!isEditing ? (
             <>
-              {/* Action Toolbar inspired by screenshot: New, Edit, Delete */}
-              <div className="flex items-center space-x-3">
+              {/* Action Toolbar: Only New button */}
+              <div className="flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => {
@@ -325,9 +400,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       state: 'Madhya Pradesh',
                       state_code: '23',
                       pin_code: '452001',
+                      financial_year: '2026-27',
                     });
-                    setStateQuery('Madhya Pradesh (23)');
-                    setIsStateOpen(false);
                     setIsEditing(true);
                   }}
                   className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
@@ -335,121 +409,62 @@ export const CompanyBranchModal: React.FC<Props> = ({
                   <Plus className="w-4 h-4" />
                   <span>New</span>
                 </button>
-                <button
-                  type="button"
-                  disabled={!selectedCompanyId}
-                  onClick={() => {
-                    const comp = companies.find((c) => c.id === selectedCompanyId);
-                    if (comp) {
-                      setEditingCompany({ ...comp });
-                      setStateQuery(comp.state ? `${comp.state} (${comp.state_code || ''})` : '');
-                      setIsStateOpen(false);
-                      setIsEditing(true);
-                    }
-                  }}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 rounded-lg text-sm font-semibold transition-all border border-slate-200"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  <span>Edit</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!selectedCompanyId}
-                  onClick={async () => {
-                    const comp = companies.find((c) => c.id === selectedCompanyId);
-                    if (!comp) return;
-                    const isLastCompany = companies.length <= 1;
-                    const msg = isLastCompany
-                      ? `Are you sure you want to delete your ONLY remaining business profile "${comp.name}" along with all its invoices, inventory, customers, and templates? This cannot be undone.`
-                      : `Are you sure you want to permanently delete business profile "${comp.name}" and all its associated records?`;
-                    if (!window.confirm(msg)) return;
-                    try {
-                      await api.deleteCompany(comp.id);
-                      const remaining = await api.getCompanies();
-                      setCompanies(remaining);
-
-                      if (remaining.length === 0) {
-                        setSelectedCompanyId('');
-                        setBranches([]);
-                        setSelectedBranchId('');
-                        onSelect(null, null);
-                      } else {
-                        const nextComp = remaining.find((c) => c.is_default) || remaining[0];
-                        setSelectedCompanyId(nextComp.id);
-                        const brs = await api.getBranches(nextComp.id);
-                        setBranches(brs);
-                        const defBranch = brs.find((b) => b.is_default) || brs[0] || null;
-                        setSelectedBranchId(defBranch ? defBranch.id : '');
-                        if (comp.id === currentCompanyId || !currentCompanyId) {
-                          onSelect(nextComp, defBranch);
-                        }
-                      }
-                    } catch (err: any) {
-                      alert(err.message || 'Error deleting business profile');
-                    }
-                  }}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 disabled:opacity-50 rounded-lg text-sm font-semibold transition-all border border-rose-200"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Delete</span>
-                </button>
+                <span className="text-xs text-slate-500">
+                  Click row to open company • Click company name to edit
+                </span>
               </div>
 
-              {/* Business Companies Table */}
+              {/* Business Companies Table (scrollable when companies exceed viewport space) */}
               <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold">
-                    <tr>
-                      <th className="py-2.5 px-4 w-16">ID</th>
-                      <th className="py-2.5 px-4 w-24 text-center">Default</th>
-                      <th className="py-2.5 px-4">Business Name</th>
-                      <th className="py-2.5 px-4">GSTIN</th>
-                      <th className="py-2.5 px-4">State</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {companies.length === 0 ? (
+                <div className="max-h-[42vh] overflow-y-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold sticky top-0 z-10 shadow-[inset_0_-1px_0_0_rgb(226,232,240)]">
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-400 text-sm">
-                          No companies found. Click <span className="font-semibold text-emerald-600">+ New</span> above to create your business profile.
-                        </td>
+                        <th className="py-2.5 px-4 w-16">ID</th>
+                        <th className="py-2.5 px-4">Business Name</th>
+                        <th className="py-2.5 px-4">GSTIN</th>
+                        <th className="py-2.5 px-4">State</th>
                       </tr>
-                    ) : (
-                      companies.map((c, idx) => {
-                      const isSelected = c.id === selectedCompanyId;
-                      return (
-                        <tr
-                          key={c.id}
-                          onClick={() => handleCompanySelect(c.id)}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected ? 'bg-sky-50/80 font-medium text-brand-900' : 'hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">{idx + 1}</td>
-                          <td className="py-2.5 px-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={c.is_default}
-                              onChange={(e) => handleSetDefault(c.id, e as any)}
-                              className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500 cursor-pointer"
-                            />
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {companies.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-8 text-center text-slate-400 text-sm">
+                            No companies found. Click <span className="font-semibold text-emerald-600">+ New</span> above to create your business profile.
                           </td>
-                          <td className="py-2.5 px-4 font-semibold flex items-center space-x-2">
-                            <span>{c.name}</span>
-                            {c.is_default && (
-                              <span className="text-[10px] bg-brand-100 text-brand-800 px-1.5 py-0.5 rounded font-bold">
-                                Default
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-4 font-mono text-xs text-slate-500">{c.gstin || '-'}</td>
-                          <td className="py-2.5 px-4 text-slate-600">{c.state} ({c.state_code})</td>
                         </tr>
-                      );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        companies.map((c, idx) => (
+                          <tr
+                            key={c.id}
+                            onClick={() => handleOpenCompany(c)}
+                            title="Click row to open this company"
+                            className="group/row cursor-pointer transition-colors bg-white text-slate-700 hover:bg-sky-50/80 hover:font-medium hover:text-brand-900"
+                          >
+                            <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">{idx + 1}</td>
+                            <td className="py-2.5 px-4 font-semibold">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCompanySelect(c.id);
+                                  setEditingCompany({ ...c });
+                                  setIsEditing(true);
+                                }}
+                                className="group/name text-left font-semibold text-brand-700 hover:text-brand-900 hover:underline inline-flex items-center space-x-2 cursor-pointer"
+                                title="Click to edit company details"
+                              >
+                                <span className="group-hover/name:underline">{c.name}</span>
+                              </button>
+                            </td>
+                            <td className="py-2.5 px-4 font-mono text-xs text-slate-500">{c.gstin || '-'}</td>
+                            <td className="py-2.5 px-4 text-slate-600 group-hover/row:text-brand-900">{c.state} ({c.state_code})</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* Branch Selector & Multiple Branch Management */}
@@ -463,17 +478,27 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       <span className="text-sm font-semibold text-slate-700">Operating Branch:</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <select
-                        value={selectedBranchId}
-                        onChange={(e) => setSelectedBranchId(e.target.value)}
-                        className="bg-white border border-slate-300 rounded-md px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none"
-                      >
-                        {branches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name} ({b.code}) {b.is_default ? '• Default' : ''}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="w-56">
+                        <SearchableSelect
+                          options={branches.map((b) => ({
+                            value: b.id,
+                            label: b.name,
+                            code: b.code,
+                            badge: b.is_default ? 'Default' : undefined,
+                          }))}
+                          value={selectedBranchId}
+                          onChange={(val) => {
+                            setSelectedBranchId(val);
+                            const comp = companies.find((c) => c.id === selectedCompanyId);
+                            const br = branches.find((b) => b.id === val);
+                            if (comp && br && comp.id === currentCompanyId) {
+                              onSelect(comp, br);
+                            }
+                          }}
+                          placeholder="Select branch..."
+                          size="sm"
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={handleOpenAddBranch}
@@ -483,40 +508,18 @@ export const CompanyBranchModal: React.FC<Props> = ({
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add</span>
                       </button>
-                      {selectedBranch && (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditBranch(selectedBranch)}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md border border-slate-200 transition-colors"
-                          title="Edit selected branch details"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Edit</span>
-                        </button>
-                      )}
-                      {selectedBranch && !selectedBranch.is_default && branches.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteBranch(selectedBranch)}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-md border border-rose-200 transition-colors"
-                          title="Delete selected sub-branch"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete</span>
-                        </button>
-                      )}
                       <button
                         type="button"
-                        onClick={() => setShowBranchesList(!showBranchesList)}
+                        onClick={handleToggleBranchesList}
                         className={`inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
-                          showBranchesList
+                          showBranchesList || isBranchFormOpen
                             ? 'bg-brand-600 text-white border-brand-700 shadow-sm'
                             : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
                         }`}
                         title="View all branches table"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        <span>{showBranchesList ? 'Hide Branches' : `View Branches (${branches.length})`}</span>
+                        <span>{showBranchesList || isBranchFormOpen ? 'Hide Branches' : `View Branches (${branches.length})`}</span>
                       </button>
                     </div>
                   </div>
@@ -529,7 +532,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           All Branches of Selected Company
                         </span>
                         <span className="text-[11px] text-slate-500">
-                          Click row to select as operating branch
+                          Click row to select, click branch name to edit or delete
                         </span>
                       </div>
                       <table className="w-full text-left text-xs">
@@ -540,7 +543,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             <th className="py-2 px-3 w-20">Code</th>
                             <th className="py-2 px-3">State & Code</th>
                             <th className="py-2 px-3">Bank Details</th>
-                            <th className="py-2 px-3 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -549,21 +551,40 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             return (
                               <tr
                                 key={b.id}
-                                onClick={() => setSelectedBranchId(b.id)}
+                                onClick={() => {
+                                  setSelectedBranchId(b.id);
+                                  const comp = companies.find((c) => c.id === selectedCompanyId);
+                                  if (comp && comp.id === currentCompanyId) {
+                                    onSelect(comp, b);
+                                  }
+                                }}
+                                onDoubleClick={() => {
+                                  setSelectedBranchId(b.id);
+                                  handleOpenEditBranch(b);
+                                }}
                                 className={`cursor-pointer transition-colors ${
                                   isSelected ? 'bg-sky-50 font-medium text-brand-900' : 'hover:bg-slate-50 text-slate-700'
                                 }`}
                               >
                                 <td className="py-2 px-3 text-slate-400 font-mono">{idx + 1}</td>
                                 <td className="py-2 px-3 font-semibold">
-                                  <div className="flex items-center space-x-1.5">
-                                    <span>{b.name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedBranchId(b.id);
+                                      handleOpenEditBranch(b);
+                                    }}
+                                    className="text-left font-semibold text-brand-700 hover:text-brand-900 hover:underline flex items-center space-x-1.5 cursor-pointer group"
+                                    title="Click to view & edit branch details"
+                                  >
+                                    <span className="group-hover:underline">{b.name}</span>
                                     {b.is_default && (
                                       <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
                                         Default
                                       </span>
                                     )}
-                                  </div>
+                                  </button>
                                 </td>
                                 <td className="py-2 px-3 font-mono font-bold text-slate-600">{b.code}</td>
                                 <td className="py-2 px-3">{b.state} ({b.state_code})</td>
@@ -574,24 +595,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
                                     <span className="font-mono text-[11px] text-emerald-700 font-medium">
                                       {b.bank_name || 'Custom'} ({b.bank_ifsc || '-'})
                                     </span>
-                                  )}
-                                </td>
-                                <td className="py-2 px-3 text-right space-x-1.5" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditBranch(b)}
-                                    className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold text-[11px] border border-slate-200"
-                                  >
-                                    Edit
-                                  </button>
-                                  {!b.is_default && branches.length > 1 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteBranch(b)}
-                                      className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded font-semibold text-[11px] border border-rose-200"
-                                    >
-                                      Delete
-                                    </button>
                                   )}
                                 </td>
                               </tr>
@@ -643,25 +646,81 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           />
                         </div>
                         <div>
+                          <label className="block font-semibold text-slate-700 mb-1">GSTIN</label>
+                          <input
+                            type="text"
+                            placeholder="Branch GSTIN (if separate)"
+                            value={branchFormData.gstin || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, gstin: e.target.value.toUpperCase() })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">Mail ID (Email)</label>
+                          <input
+                            type="email"
+                            placeholder="e.g. branch@company.com"
+                            value={branchFormData.email || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, email: e.target.value })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">TAN Number</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. BLRE12345F"
+                            value={branchFormData.tan || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, tan: e.target.value.toUpperCase() })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">CIN Number</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. U72900MH2023PTC123456"
+                            value={branchFormData.cin || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, cin: e.target.value.toUpperCase() })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">MSME / Udyam Number</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. UDYAM-XX-00-0000000"
+                            value={branchFormData.msme || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, msme: e.target.value.toUpperCase() })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 mb-1">ISO Number / Certification</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. ISO 9001:2015"
+                            value={branchFormData.iso || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, iso: e.target.value })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        </div>
+                        <div>
                           <label className="block font-semibold text-slate-700 mb-1">State & Code</label>
-                          <select
-                            value={branchFormData.state_code || '23'}
-                            onChange={(e) => {
-                              const s = INDIAN_STATES.find((st) => st.code === e.target.value);
+                          <SearchableSelect
+                            options={stateOptions}
+                            value={branchFormData.state_code || branchFormData.state || '23'}
+                            onChange={(val) => {
+                              const s = INDIAN_STATES.find((st) => st.code === val);
                               setBranchFormData({
                                 ...branchFormData,
-                                state_code: e.target.value,
-                                state: s ? s.name : '',
+                                state_code: val,
+                                state: s ? s.name : branchFormData.state,
                               });
                             }}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
-                          >
-                            {INDIAN_STATES.map((s) => (
-                              <option key={s.code} value={s.code}>
-                                {s.name} ({s.code})
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="Type state name or code..."
+                            size="sm"
+                          />
                         </div>
                         <div>
                           <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
@@ -672,6 +731,24 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             onChange={(e) => setBranchFormData({ ...branchFormData, phone: e.target.value })}
                             className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
                           />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block font-semibold text-slate-700 mb-1">Financial Year</label>
+                          <input
+                            type="text"
+                            list="fy-branch-list"
+                            placeholder="e.g. 2026-27"
+                            value={branchFormData.financial_year || ''}
+                            onChange={(e) => setBranchFormData({ ...branchFormData, financial_year: e.target.value })}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                          <datalist id="fy-branch-list">
+                            <option value="2026-27" />
+                            <option value="2025-26" />
+                            <option value="2027-28" />
+                            <option value="2024-25" />
+                            <option value="2023-24" />
+                          </datalist>
                         </div>
                         <div className="col-span-2">
                           <label className="block font-semibold text-slate-700 mb-1">Branch Address</label>
@@ -766,25 +843,45 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           />
                         </div>
                       </div>
-                      <div className="flex justify-end space-x-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsBranchFormOpen(false);
-                            setEditingBranchId(null);
-                            setBranchFormData({});
-                          }}
-                          className="px-3 py-1 border border-slate-300 text-slate-600 rounded text-xs hover:bg-slate-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSaveBranch}
-                          className="px-3.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold shadow-sm"
-                        >
-                          {editingBranchId ? 'Update Branch' : 'Save Branch'}
-                        </button>
+                      <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
+                        {editingBranchId ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const b = branches.find((br) => br.id === editingBranchId);
+                              if (b) handleDeleteBranch(b);
+                            }}
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold transition-all shadow-xs"
+                            title="Delete this branch"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Branch</span>
+                          </button>
+                        ) : (
+                          <div />
+                        )}
+
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsBranchFormOpen(false);
+                              setEditingBranchId(null);
+                              setBranchFormData({});
+                            }}
+                            className="px-3 py-1.5 border border-slate-300 text-slate-600 rounded text-xs font-semibold hover:bg-slate-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveBranch}
+                            className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold shadow-sm transition-all"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{editingBranchId ? 'Save Branch' : 'Create Branch'}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -839,58 +936,90 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
-                <div className="relative" ref={stateDropdownRef}>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">TAN Number</label>
+                  <input
+                    type="text"
+                    value={editingCompany.tan || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, tan: e.target.value.toUpperCase() })}
+                    placeholder="e.g. BLRE12345F"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">CIN Number</label>
+                  <input
+                    type="text"
+                    value={editingCompany.cin || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, cin: e.target.value.toUpperCase() })}
+                    placeholder="e.g. U72900MH2023PTC123456"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">MSME / Udyam Number</label>
+                  <input
+                    type="text"
+                    value={editingCompany.msme || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, msme: e.target.value.toUpperCase() })}
+                    placeholder="e.g. UDYAM-XX-00-0000000"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">ISO Number / Certification</label>
+                  <input
+                    type="text"
+                    value={editingCompany.iso || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, iso: e.target.value })}
+                    placeholder="e.g. ISO 9001:2015"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mail ID (Email)</label>
+                  <input
+                    type="email"
+                    value={editingCompany.email || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, email: e.target.value })}
+                    placeholder="e.g. info@company.com"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Financial Year</label>
+                  <input
+                    type="text"
+                    list="fy-company-list"
+                    value={editingCompany.financial_year || ''}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, financial_year: e.target.value })}
+                    placeholder="e.g. 2026-27"
+                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <datalist id="fy-company-list">
+                    <option value="2026-27" />
+                    <option value="2025-26" />
+                    <option value="2027-28" />
+                    <option value="2024-25" />
+                    <option value="2023-24" />
+                  </datalist>
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">State & Code *</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={stateQuery}
-                      onChange={(e) => {
-                        setStateQuery(e.target.value);
-                        setIsStateOpen(true);
-                      }}
-                      onFocus={() => setIsStateOpen(true)}
-                      placeholder="Type state name or code (e.g. Telangana or 36)"
-                      className="w-full border border-slate-300 rounded-md pl-3 pr-8 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setIsStateOpen((prev) => !prev)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {isStateOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
-                      {filteredStates.length === 0 ? (
-                        <div className="px-3 py-2.5 text-xs text-slate-400 text-center">
-                          No matching state or code found
-                        </div>
-                      ) : (
-                        filteredStates.map((s) => {
-                          const isSelected = editingCompany.state_code === s.code;
-                          return (
-                            <button
-                              key={s.code}
-                              type="button"
-                              onClick={() => selectState(s)}
-                              className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${
-                                isSelected ? 'bg-sky-50 text-brand-700 font-semibold' : 'hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <span>{s.name}</span>
-                              <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                                {s.code}
-                              </span>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
+                  <SearchableSelect
+                    options={stateOptions}
+                    value={editingCompany.state_code || editingCompany.state || '23'}
+                    onChange={(val) => {
+                      const s = INDIAN_STATES.find((st) => st.code === val);
+                      setEditingCompany((prev) => ({
+                        ...prev,
+                        state: s?.name || '',
+                        state_code: val,
+                      }));
+                    }}
+                    placeholder="Type state name or code (e.g. Telangana or 36)..."
+                    size="sm"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
@@ -952,51 +1081,85 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
+
+                {/* Optional manual selection for Default Company */}
+                <div className="col-span-2 pt-2 border-t border-slate-100">
+                  <label className="inline-flex items-center space-x-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingCompany.is_default)}
+                      onChange={(e) => setEditingCompany({ ...editingCompany, is_default: e.target.checked })}
+                      className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700">Set as Default Business Profile</span>
+                      <p className="text-[11px] text-slate-400">Manually check this if you want this company pre-selected automatically when opening the software.</p>
+                    </div>
+                  </label>
+                </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="px-4 py-1.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 text-sm font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveCompany}
-                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold shadow-sm"
-                >
-                  Save Business
-                </button>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                {editingCompany.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const comp = companies.find((c) => c.id === editingCompany.id);
+                      if (comp) handleDeleteCompany(comp);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-sm font-semibold transition-all shadow-xs"
+                    title="Permanently delete this business profile"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Company</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setEditingCompany({});
+                    }}
+                    className="px-4 py-1.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 text-sm font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCompany}
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{editingCompany.id ? 'Save Changes' : 'Save Business'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Modal Window Footer matching screenshot */}
+        {/* Modal Window Footer */}
         {!isEditing && (
           <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
             <label className="flex items-center space-x-2 text-xs font-medium text-slate-600 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={showOnStartup}
-                onChange={(e) => setShowOnStartup(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setShowOnStartup(checked);
+                  api.updateAppSettings({ show_company_selector_on_startup: checked }).catch(() => {});
+                }}
                 className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
               />
               <span>Show this window when program starts.</span>
             </label>
 
             <div className="flex items-center space-x-2.5">
-              <button
-                type="button"
-                onClick={handleConfirmSelect}
-                disabled={!selectedCompanyId}
-                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow transition-all disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                <span>Select</span>
-              </button>
               <button
                 type="button"
                 onClick={onClose}
@@ -1010,5 +1173,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 };

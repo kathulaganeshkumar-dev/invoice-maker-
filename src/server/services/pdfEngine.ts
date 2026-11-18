@@ -83,57 +83,13 @@ export class PdfEngine {
 
     const leftX = layout?.customer_name?.x || 45;
 
-    // 1. Company Header (Draw only if in DIGITAL mode WITHOUT an imported file background)
-    if (isDigital && !hasFileBackground) {
-      // Draw standard professional header
-      page.drawText(options.company.name.toUpperCase(), {
-        x: leftX,
-        y: toPdfY(50),
-        size: 16,
-        font: fontBold,
-        color: rgb(0.08, 0.2, 0.45),
-      });
+    // Print ONLY dynamic document values on top of the user's uploaded template
+    // (No default letterhead header, no default title banner, no opaque boxes, no default bank/signature/footer chrome)
 
-      page.drawText(options.company.registered_address, {
-        x: leftX,
-        y: toPdfY(68),
-        size: 9,
-        font: fontRegular,
-        color: rgb(0.2, 0.2, 0.2),
-      });
-
-      const taxInfo = `GSTIN: ${options.company.gstin || 'N/A'}  |  PAN: ${options.company.pan || 'N/A'}  |  Phone: ${options.company.phone}`;
-      page.drawText(taxInfo, {
-        x: leftX,
-        y: toPdfY(82),
-        size: 8,
-        font: fontRegular,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-
-      page.drawLine({
-        start: { x: leftX, y: toPdfY(98) },
-        end: { x: width - 45, y: toPdfY(98) },
-        thickness: 1,
-        color: rgb(0.8, 0.8, 0.8),
-      });
-    }
-
-    // 2. Document Title
+    // 1. Document Meta Information
     const invNumY = layout?.invoice_number?.y || 120;
-    const titleY = hasFileBackground ? Math.max(invNumY - 18, 90) : 120;
-    const docTitle = invoice.document_type.replace(/_/g, ' ');
-    page.drawText(docTitle, {
-      x: leftX,
-      y: toPdfY(titleY),
-      size: 13,
-      font: fontBold,
-      color: rgb(0.1, 0.1, 0.1),
-    });
-
-    // 3. Invoice Meta Information
     const invNumX = Math.min(layout?.invoice_number?.x || 400, width - 195);
-    page.drawText(`Invoice No: ${invoice.invoice_number}`, {
+    page.drawText(`No: ${invoice.invoice_number}`, {
       x: invNumX,
       y: toPdfY(invNumY),
       size: 10,
@@ -149,7 +105,7 @@ export class PdfEngine {
     });
 
     const dueDateY = layout?.due_date?.y || invDateY + 15;
-    page.drawText(`Due Date: ${invoice.due_date}`, {
+    page.drawText(`Due: ${invoice.due_date}`, {
       x: invNumX,
       y: toPdfY(dueDateY),
       size: 9,
@@ -157,64 +113,48 @@ export class PdfEngine {
     });
 
     const pos = layout?.place_of_supply?.y || dueDateY + 15;
-    page.drawText(`Place of Supply: ${invoice.place_of_supply_state} (${invoice.place_of_supply_code})`, {
+    page.drawText(`POS: ${invoice.place_of_supply_state} (${invoice.place_of_supply_code})`, {
       x: invNumX,
       y: toPdfY(pos),
       size: 9,
       font: fontRegular,
     });
 
-    // 4. Bill To Details
+    // 2. Customer Details
     const custX = layout?.customer_name?.x || leftX;
-    const custY = layout?.customer_name?.y || Math.max(titleY + 25, 145);
-
-    page.drawText('BILLED TO:', {
-      x: custX,
-      y: toPdfY(custY),
-      size: 8,
-      font: fontBold,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+    const custY = layout?.customer_name?.y || Math.max(invNumY + 10, 145);
 
     page.drawText(invoice.customer_name, {
       x: custX,
-      y: toPdfY(custY + 14),
+      y: toPdfY(custY),
       size: 10,
       font: fontBold,
     });
 
-    page.drawText(invoice.billing_address, {
-      x: custX,
-      y: toPdfY(custY + 28),
-      size: 8.5,
-      font: fontRegular,
-      maxWidth: 260,
-    });
+    if (invoice.billing_address) {
+      page.drawText(invoice.billing_address, {
+        x: custX,
+        y: toPdfY(custY + 14),
+        size: 8.5,
+        font: fontRegular,
+        maxWidth: 260,
+      });
+    }
 
     if (invoice.customer_gstin) {
       page.drawText(`GSTIN: ${invoice.customer_gstin}`, {
         x: custX,
-        y: toPdfY(custY + 54),
+        y: toPdfY(custY + 42),
         size: 8.5,
         font: fontBold,
       });
     }
 
-    // 5. Line Items Table
-    const tableTop = Math.max(layout?.table_top_y || 230, custY + 72);
+    // 3. Line Items Table (transparent — never draws opaque background rectangles over uploaded template)
+    const tableTop = Math.max(layout?.table_top_y || 230, custY + 62);
     let currentY = tableTop;
-
-    // Table Header Background
     const tableWidth = Math.max(460, width - leftX * 2);
-    page.drawRectangle({
-      x: leftX,
-      y: toPdfY(currentY + 18),
-      width: tableWidth,
-      height: 20,
-      color: rgb(0.93, 0.94, 0.96),
-    });
 
-    // Table Columns
     const cols = [
       { name: '#', x: leftX + 5 },
       { name: 'Item Description', x: leftX + 30 },
@@ -229,14 +169,21 @@ export class PdfEngine {
     for (const c of cols) {
       page.drawText(c.name, {
         x: c.x,
-        y: toPdfY(currentY + 13),
+        y: toPdfY(currentY + 12),
         size: 8,
         font: fontBold,
         color: rgb(0.15, 0.2, 0.25),
       });
     }
 
-    currentY += 26;
+    page.drawLine({
+      start: { x: leftX, y: toPdfY(currentY + 17) },
+      end: { x: leftX + tableWidth, y: toPdfY(currentY + 17) },
+      thickness: 0.75,
+      color: rgb(0.75, 0.75, 0.75),
+    });
+
+    currentY += 28;
 
     // Render Items
     for (let i = 0; i < invoice.items.length; i++) {
@@ -252,50 +199,48 @@ export class PdfEngine {
       page.drawText(`${it.gst_rate}%`, { x: leftX + 430, y: toPdfY(rowY), size: 8, font: fontRegular });
       page.drawText(it.line_total, { x: leftX + 465, y: toPdfY(rowY), size: 8.5, font: fontBold });
 
-      // Row separator line
+      let noteBottomY = rowY;
+      if (it.description && it.description.trim()) {
+        const rawLines = it.description
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0);
+        for (const line of rawLines) {
+          noteBottomY += 10;
+          page.drawText(line.substring(0, 46), {
+            x: leftX + 30,
+            y: toPdfY(noteBottomY),
+            size: 7,
+            font: fontRegular,
+            color: rgb(0.35, 0.35, 0.35),
+          });
+        }
+      }
+
       page.drawLine({
-        start: { x: leftX, y: toPdfY(rowY + 6) },
-        end: { x: leftX + tableWidth, y: toPdfY(rowY + 6) },
+        start: { x: leftX, y: toPdfY(noteBottomY + 6) },
+        end: { x: leftX + tableWidth, y: toPdfY(noteBottomY + 6) },
         thickness: 0.5,
-        color: rgb(0.9, 0.9, 0.9),
+        color: rgb(0.88, 0.88, 0.88),
       });
 
-      currentY += 18;
+      currentY = noteBottomY + 18;
     }
 
-    // 6. Totals Section
+    // 4. Totals Section (transparent text — respects uploaded template layout)
     const maxTotalsStart = Math.max(height - (layout?.table_bottom_margin || 220), 420);
     const totalsY = Math.min(Math.max(currentY + 15, maxTotalsStart), height - 135);
 
-    // Amount in words box
-    page.drawText('Total Amount in Words:', {
-      x: leftX,
-      y: toPdfY(totalsY),
-      size: 8,
-      font: fontBold,
-      color: rgb(0.3, 0.3, 0.3),
-    });
-
-    page.drawText(invoice.amount_in_words, {
-      x: leftX,
-      y: toPdfY(totalsY + 14),
-      size: 8.5,
-      font: fontBold,
-      maxWidth: 300,
-    });
-
-    // Bank Details
-    if (options.company.bank_name) {
-      page.drawText(`Bank: ${options.company.bank_name} | A/c: ${options.company.bank_account_no} | IFSC: ${options.company.bank_ifsc}`, {
+    if (invoice.amount_in_words) {
+      page.drawText(invoice.amount_in_words, {
         x: leftX,
-        y: toPdfY(totalsY + 45),
-        size: 8,
-        font: fontRegular,
-        color: rgb(0.25, 0.25, 0.25),
+        y: toPdfY(totalsY + 8),
+        size: 8.5,
+        font: fontBold,
+        maxWidth: 300,
       });
     }
 
-    // Totals Column
     const totLabelX = width - 215;
     const totValX = width - 95;
 
@@ -318,55 +263,27 @@ export class PdfEngine {
       page.drawText(`Rs. ${invoice.round_off}`, { x: totValX, y: toPdfY(totalsY + 45), size: 8.5, font: fontRegular });
     }
 
-    // Grand Total Highlight Box
-    page.drawRectangle({
-      x: width - 220,
-      y: toPdfY(totalsY + 82),
-      width: 175,
-      height: 24,
-      color: rgb(0.9, 0.94, 0.98),
+    page.drawLine({
+      start: { x: width - 220, y: toPdfY(totalsY + 56) },
+      end: { x: width - 45, y: toPdfY(totalsY + 56) },
+      thickness: 0.75,
+      color: rgb(0.65, 0.65, 0.65),
     });
 
     page.drawText('Grand Total:', {
-      x: width - 213,
-      y: toPdfY(totalsY + 74),
+      x: width - 215,
+      y: toPdfY(totalsY + 72),
       size: 11,
       font: fontBold,
-      color: rgb(0.08, 0.2, 0.45),
+      color: rgb(0.08, 0.15, 0.25),
     });
 
     page.drawText(`Rs. ${invoice.grand_total}`, {
       x: width - 130,
-      y: toPdfY(totalsY + 74),
+      y: toPdfY(totalsY + 72),
       size: 11,
       font: fontBold,
-      color: rgb(0.08, 0.2, 0.45),
-    });
-
-    // Signatures
-    const sigY = Math.min(layout?.signature?.y || 740, height - 65);
-    page.drawText(`For ${options.company.name}`, {
-      x: width - 175,
-      y: toPdfY(sigY),
-      size: 9,
-      font: fontBold,
-    });
-
-    page.drawText('Authorised Signatory', {
-      x: width - 165,
-      y: toPdfY(sigY + 45),
-      size: 8,
-      font: fontRegular,
-      color: rgb(0.4, 0.4, 0.4),
-    });
-
-    // Page Number
-    page.drawText('Page 1 of 1', {
-      x: width / 2 - 22,
-      y: toPdfY(Math.min(layout?.footer?.y || height - 30, height - 18)),
-      size: 8,
-      font: fontRegular,
-      color: rgb(0.5, 0.5, 0.5),
+      color: rgb(0.08, 0.15, 0.25),
     });
 
     return await pdfDoc.save();

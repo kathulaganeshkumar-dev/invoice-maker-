@@ -1,7 +1,7 @@
 // src/renderer/App.tsx - Main Application Shell & View Routing
 import React, { useState, useEffect } from 'react';
 import { Company, Branch } from '../shared/types';
-import { api } from './services/api';
+import { api, initDeviceIdentity } from './services/api';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { CompanyBranchModal } from './components/CompanyBranchModal';
@@ -27,29 +27,126 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState<boolean>(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
+  const [isQuickInvoiceOpen, setIsQuickInvoiceOpen] = useState<boolean>(false);
+  const [isQuickQuotationOpen, setIsQuickQuotationOpen] = useState<boolean>(false);
+  const [allowedMenus, setAllowedMenus] = useState<string[] | null>(null);
+  const [canOpenSettings, setCanOpenSettings] = useState<boolean>(true);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
+  const [softwareIcon, setSoftwareIcon] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('eim_software_icon') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const applyBrowserFavicon = (iconDataUrl: string | null) => {
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    if (iconDataUrl) {
+      link.type = 'image/png';
+      link.href = iconDataUrl;
+    } else {
+      link.type = 'image/svg+xml';
+      link.href =
+        'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%232563eb%22/><text x=%2250%25%22 y=%2254%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22white%22 font-size=%2238%22 font-family=%22Arial%22 font-weight=%22bold%22>Σ</text></svg>';
+    }
+  };
 
   useEffect(() => {
+    applyBrowserFavicon(softwareIcon);
+    try {
+      if (softwareIcon) localStorage.setItem('eim_software_icon', softwareIcon);
+      else localStorage.removeItem('eim_software_icon');
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [softwareIcon]);
+
+  const loadMyPermissions = async () => {
+    try {
+      const res = await api.getMyWorkstationPermission();
+      const ws = res?.workstation;
+      if (ws) {
+        const menus = ws.is_admin ? null : ws.allowed_menus;
+        setAllowedMenus(menus);
+        setCanOpenSettings(ws.is_admin ? true : Boolean(ws.can_open_settings));
+        if (menus && menus.length > 0) {
+          setActiveTab((prev) => (menus.includes(prev) ? prev : menus[0]));
+        }
+      }
+    } catch {
+      // keep existing permissions on transient error
+    }
+  };
+
+  useEffect(() => {
+    const onIconChanged = (evt: Event) => {
+      const custom = evt as CustomEvent<string | null>;
+      setSoftwareIcon(custom.detail || null);
+    };
+    const onPermissionsChanged = () => {
+      loadMyPermissions();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Hidden MD / Admin shortcut (Ctrl+Shift+A) to open Configuration even on locked staff PCs
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setIsConfigModalOpen(true);
+      }
+    };
+    window.addEventListener('eim-software-icon-changed', onIconChanged);
+    window.addEventListener('eim-permissions-changed', onPermissionsChanged);
+    window.addEventListener('focus', onPermissionsChanged);
+    window.addEventListener('keydown', onKeyDown);
     bootstrap();
+    return () => {
+      window.removeEventListener('eim-software-icon-changed', onIconChanged);
+      window.removeEventListener('eim-permissions-changed', onPermissionsChanged);
+      window.removeEventListener('focus', onPermissionsChanged);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, []);
 
   const bootstrap = async () => {
     try {
+      await initDeviceIdentity();
       const [companies, appSettings] = await Promise.all([
         api.getCompanies(),
         api.getAppSettings().catch(() => null),
+        loadMyPermissions(),
       ]);
 
+      if (appSettings && Object.prototype.hasOwnProperty.call(appSettings, 'software_icon')) {
+        const iconVal = appSettings.software_icon || null;
+        setSoftwareIcon(iconVal);
+        const electronAPI = (window as any)?.electronAPI;
+        if (iconVal && electronAPI?.setSoftwareIcon) {
+          electronAPI.setSoftwareIcon(iconVal).catch(() => {});
+        }
+      }
+
       if (companies.length > 0) {
-        const defaultComp = companies.find((c) => c.is_default) || companies[0];
+        const restoredCompId = sessionStorage.getItem('eim_restore_active_company_id');
+        if (restoredCompId) {
+          sessionStorage.removeItem('eim_restore_active_company_id');
+        }
+        const defaultComp =
+          (restoredCompId && companies.find((c) => c.id === restoredCompId)) ||
+          companies.find((c) => c.is_default) ||
+          companies[0];
         setActiveCompany(defaultComp);
 
         const branches = await api.getBranches(defaultComp.id);
         const defaultBranch = branches.find((b) => b.is_default) || branches[0];
         setActiveBranch(defaultBranch || null);
 
-        if (appSettings?.show_company_selector_on_startup) {
+        if (!restoredCompId && appSettings?.show_company_selector_on_startup) {
           setIsCompanyModalOpen(true);
         }
       } else {
@@ -84,9 +181,17 @@ export const App: React.FC = () => {
   if (initializing) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white select-none">
-        <div className="w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-2xl shadow-lg mb-4">
-          Σ
-        </div>
+        {softwareIcon ? (
+          <img
+            src={softwareIcon}
+            alt="Software Icon"
+            className="w-12 h-12 rounded-xl object-cover shadow-lg mb-4"
+          />
+        ) : (
+          <div className="w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center font-bold text-2xl shadow-lg mb-4">
+            Σ
+          </div>
+        )}
         <div className="text-lg font-bold">Enterprise Invoice & Business Manager</div>
         <div className="flex items-center text-xs text-slate-400 mt-2 space-x-2">
           <RefreshCw className="w-4 h-4 animate-spin text-brand-400" />
@@ -102,19 +207,30 @@ export const App: React.FC = () => {
       <Navbar
         company={activeCompany}
         branch={activeBranch}
+        softwareIcon={softwareIcon}
         onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
         onOpenConfigModal={() => (activeCompany ? setIsConfigModalOpen(true) : setIsCompanyModalOpen(true))}
-        onNavigate={(tab) => setActiveTab(tab)}
+        onQuickNewInvoice={() => (activeCompany ? setIsQuickInvoiceOpen(true) : setIsCompanyModalOpen(true))}
+        onQuickNewQuotation={() => (activeCompany ? setIsQuickQuotationOpen(true) : setIsCompanyModalOpen(true))}
+        onNavigate={(tab) => {
+          if (!allowedMenus || allowedMenus.includes(tab)) setActiveTab(tab);
+        }}
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
+        allowedMenus={allowedMenus}
+        canOpenSettings={canOpenSettings}
       />
 
       {/* Main Container: Sidebar + View Content */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={(tab) => setActiveTab(tab)}
+          onSelectTab={(tab) => {
+            if (!allowedMenus || allowedMenus.includes(tab)) setActiveTab(tab);
+          }}
           onOpenSettings={() => setIsConfigModalOpen(true)}
+          allowedMenus={allowedMenus}
+          canOpenSettings={canOpenSettings}
         />
 
         <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
@@ -128,7 +244,7 @@ export const App: React.FC = () => {
                 </div>
                 <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">No Business Profile Selected</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mt-2">
-                  Create your company profile to start managing GST invoices, quotations, purchases, warehouses, payments, and letterhead templates.
+                  Create your company profile to start managing GST invoices, quotations, purchases, warehouses, payments, and print templates.
                 </p>
                 <button
                   type="button"
@@ -146,7 +262,10 @@ export const App: React.FC = () => {
                 <DashboardView companyId={activeCompany.id} onNavigate={(tab) => setActiveTab(tab)} />
               )}
               {activeTab === 'invoices' && (
-                <InvoicesView companyId={activeCompany.id} />
+                <InvoicesView key="invoices-sales" companyId={activeCompany.id} mode="sales" />
+              )}
+              {activeTab === 'invoices_other' && (
+                <InvoicesView key="invoices-other" companyId={activeCompany.id} mode="other" />
               )}
               {activeTab === 'quotations' && (
                 <QuotationsView
@@ -182,7 +301,7 @@ export const App: React.FC = () => {
                 <ImportExportView companyId={activeCompany.id} />
               )}
               {activeTab === 'backup_restore' && (
-                <BackupRestoreView />
+                <BackupRestoreView companyId={activeCompany.id} companyName={activeCompany.name} />
               )}
             </>
           )}
@@ -207,6 +326,25 @@ export const App: React.FC = () => {
           setIsCompanyModalOpen(true);
         }}
       />
+
+      {/* Quick Create Sales Invoice Modal (opens directly from Navbar without leaving current menu) */}
+      {activeCompany && isQuickInvoiceOpen && (
+        <InvoicesView
+          companyId={activeCompany.id}
+          mode="sales"
+          modalOnly
+          onCloseModal={() => setIsQuickInvoiceOpen(false)}
+        />
+      )}
+
+      {/* Quick Create Quotation Modal (opens directly from Navbar without leaving current menu) */}
+      {activeCompany && isQuickQuotationOpen && (
+        <QuotationsView
+          companyId={activeCompany.id}
+          modalOnly
+          onCloseModal={() => setIsQuickQuotationOpen(false)}
+        />
+      )}
     </div>
   );
 };

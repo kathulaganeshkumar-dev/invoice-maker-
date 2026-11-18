@@ -6,6 +6,7 @@ import path from 'path';
 import { Company, Branch, CompanySettings } from '../../shared/types';
 import { STANDARD_UNITS } from '../../shared/constants';
 import { getDefaultDataDir } from '../database/connection';
+import { validateSafeLocalSaveDir } from './pathSecurity';
 
 export class CompanyService {
   constructor(private db: Knex) {}
@@ -38,6 +39,11 @@ export class CompanyService {
         registered_address: data.registered_address || '',
         gstin: data.gstin?.toUpperCase() || undefined,
         pan: data.pan?.toUpperCase() || undefined,
+        tan: data.tan?.toUpperCase() || undefined,
+        cin: data.cin?.toUpperCase() || undefined,
+        iso: data.iso || undefined,
+        msme: data.msme?.toUpperCase() || undefined,
+        financial_year: data.financial_year || undefined,
         state: data.state || 'Madhya Pradesh',
         state_code: data.state_code || '23',
         pin_code: data.pin_code || '452001',
@@ -73,6 +79,11 @@ export class CompanyService {
         phone: newCompany.phone,
         email: newCompany.email,
         gstin: newCompany.gstin,
+        tan: newCompany.tan,
+        cin: newCompany.cin,
+        iso: newCompany.iso,
+        msme: newCompany.msme,
+        financial_year: newCompany.financial_year,
         state: newCompany.state,
         state_code: newCompany.state_code,
         is_default: true,
@@ -175,11 +186,40 @@ export class CompanyService {
 
   async updateCompany(companyId: string, data: Partial<Company>): Promise<Company> {
     const now = new Date().toISOString();
-    const updateData = {
-      ...data,
-      updated_at: now,
-    };
-    delete (updateData as any).id;
+    const allowed = new Set([
+      'name',
+      'legal_name',
+      'business_type',
+      'logo_url',
+      'registered_address',
+      'gstin',
+      'pan',
+      'tan',
+      'cin',
+      'iso',
+      'msme',
+      'financial_year',
+      'state',
+      'state_code',
+      'pin_code',
+      'phone',
+      'email',
+      'website',
+      'bank_name',
+      'bank_account_no',
+      'bank_ifsc',
+      'bank_branch',
+      'upi_id',
+      'default_invoice_terms',
+      'default_quotation_terms',
+      'is_default',
+    ]);
+    const updateData: Record<string, any> = { updated_at: now };
+    for (const [k, v] of Object.entries(data || {})) {
+      if (allowed.has(k)) {
+        updateData[k] = v;
+      }
+    }
 
     if (updateData.is_default) {
       await this.db('companies').whereNot({ id: companyId }).update({ is_default: false });
@@ -270,24 +310,15 @@ export class CompanyService {
 
       // 6. Company root record
       await trx('companies').where({ id: companyId }).del();
-
-      // 7. Promote another remaining active company to default if needed
-      const remaining = await trx('companies').where({ is_archived: false }).orderBy('created_at', 'asc');
-      if (remaining.length > 0 && !remaining.some((c: any) => Boolean(c.is_default))) {
-        await trx('companies').where({ id: remaining[0].id }).update({
-          is_default: true,
-          updated_at: new Date().toISOString(),
-        });
-      }
     });
 
-    // Clean up local uploaded letterhead directory for deleted company (best-effort)
+    // Clean up local uploaded letterhead directory for deleted company (strictly contained inside letterheads/)
     try {
-      const safeFolder = companyId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const baseLetterheadDir = path.join(getDefaultDataDir(), 'letterheads');
-      for (const folder of new Set([safeFolder, companyId])) {
-        const dirPath = path.join(baseLetterheadDir, folder);
-        if (fs.existsSync(dirPath)) {
+      const safeFolder = String(companyId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const baseLetterheadDir = path.resolve(getDefaultDataDir(), 'letterheads');
+      if (safeFolder && safeFolder !== '.' && safeFolder !== '..') {
+        const dirPath = path.resolve(baseLetterheadDir, safeFolder);
+        if (dirPath.startsWith(baseLetterheadDir + path.sep) && fs.existsSync(dirPath)) {
           fs.rmSync(dirPath, { recursive: true, force: true });
         }
       }
@@ -303,10 +334,16 @@ export class CompanyService {
 
   async deleteBranch(companyId: string, branchId: string): Promise<void> {
     const branches = await this.db('branches').where({ company_id: companyId, is_archived: false });
+    const target = branches.find((b: any) => b.id === branchId);
+    if (!target) {
+      throw new Error('Branch not found for this company.');
+    }
     if (branches.length <= 1) {
       throw new Error('Cannot delete the only existing branch for this company.');
     }
-    await this.db('branches').where({ id: branchId }).update({ is_archived: true, updated_at: new Date().toISOString() });
+    await this.db('branches')
+      .where({ id: branchId, company_id: companyId })
+      .update({ is_archived: true, updated_at: new Date().toISOString() });
   }
 
   async createBranch(companyId: string, data: Partial<Branch>): Promise<Branch> {
@@ -322,6 +359,11 @@ export class CompanyService {
       phone: data.phone || '',
       email: data.email || '',
       gstin: data.gstin || undefined,
+      tan: data.tan?.toUpperCase() || undefined,
+      cin: data.cin?.toUpperCase() || undefined,
+      iso: data.iso || undefined,
+      msme: data.msme?.toUpperCase() || undefined,
+      financial_year: data.financial_year || undefined,
       state: data.state || '',
       state_code: data.state_code || '',
       bank_name: data.bank_name || undefined,
@@ -343,21 +385,47 @@ export class CompanyService {
     return branch;
   }
 
-  async updateBranch(branchId: string, data: Partial<Branch>): Promise<Branch> {
-    const now = new Date().toISOString();
-    const updateData = { ...data, updated_at: now };
-    delete (updateData as any).id;
-    delete (updateData as any).company_id;
+  async updateBranch(companyId: string, branchId: string, data: Partial<Branch>): Promise<Branch> {
+    const existing = await this.db('branches').where({ id: branchId, company_id: companyId }).first();
+    if (!existing) {
+      throw new Error('Branch not found for this company.');
+    }
 
-    if (updateData.is_default) {
-      const b = await this.db('branches').where({ id: branchId }).first();
-      if (b) {
-        await this.db('branches').where({ company_id: b.company_id }).update({ is_default: false });
+    const now = new Date().toISOString();
+    const allowed = new Set([
+      'name',
+      'code',
+      'address',
+      'phone',
+      'email',
+      'gstin',
+      'tan',
+      'cin',
+      'iso',
+      'msme',
+      'financial_year',
+      'state',
+      'state_code',
+      'bank_name',
+      'bank_account_no',
+      'bank_ifsc',
+      'bank_branch',
+      'use_company_bank',
+      'is_default',
+    ]);
+    const updateData: Record<string, any> = { updated_at: now };
+    for (const [k, v] of Object.entries(data || {})) {
+      if (allowed.has(k)) {
+        updateData[k] = v;
       }
     }
 
-    await this.db('branches').where({ id: branchId }).update(updateData);
-    return this.db('branches').where({ id: branchId }).first();
+    if (updateData.is_default) {
+      await this.db('branches').where({ company_id: companyId }).update({ is_default: false });
+    }
+
+    await this.db('branches').where({ id: branchId, company_id: companyId }).update(updateData);
+    return this.db('branches').where({ id: branchId, company_id: companyId }).first();
   }
 
   // Company Settings
@@ -420,10 +488,17 @@ export class CompanyService {
       'quotation_validity_days',
       'default_tax_inclusive',
     ]);
+    const savePathKeys = new Set([
+      'invoice_save_path',
+      'quotation_save_path',
+      'purchase_save_path',
+      'report_save_path',
+      'backup_save_path',
+    ]);
     const updateData: Record<string, any> = { updated_at: now };
-    for (const [k, v] of Object.entries(data)) {
+    for (const [k, v] of Object.entries(data || {})) {
       if (allowed.has(k)) {
-        updateData[k] = v;
+        updateData[k] = savePathKeys.has(k) ? validateSafeLocalSaveDir(v as any) : v;
       }
     }
 

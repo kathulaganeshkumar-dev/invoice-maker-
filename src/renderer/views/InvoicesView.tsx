@@ -1,10 +1,13 @@
 // src/renderer/views/InvoicesView.tsx - Invoicing Engine, Template Selection, Document Viewer & Cancellation
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Decimal from 'decimal.js';
 import { Invoice, Customer, Product, DocumentType, LetterheadTemplate } from '../../shared/types';
 import { api } from '../services/api';
 import { formatIndianCurrency, calculateLineItem, calculateDocumentTotals } from '../../server/finance/decimalCalc';
 import { GST_RATES } from '../../shared/constants';
+import { SearchableSelect } from '../components/SearchableSelect';
+import { ModalPortal } from '../components/ModalPortal';
+import { DateInput, isoToDisplayDate } from '../components/DateInput';
 import {
   Receipt,
   Plus,
@@ -27,27 +30,88 @@ import {
   BookmarkPlus,
   CheckCheck,
   Lock,
+  StickyNote,
 } from 'lucide-react';
+
+const SALES_DOC_TYPES: { value: DocumentType; label: string }[] = [
+  { value: 'TAX_INVOICE', label: 'GST Tax Invoice' },
+  { value: 'SERVICE_INVOICE', label: 'Service Invoice' },
+];
+
+function addDaysIso(dateStr: string, days: number): string {
+  const part = (dateStr || '').split('T')[0];
+  const [y, m, d] = part.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+function getInvoiceDaysRemaining(inv: Invoice, fallbackTermsDays = 0): { daysLeft: number; dueDateStr: string } | null {
+  const invPart = (inv.invoice_date || '').split('T')[0];
+  const duePart = (inv.due_date || '').split('T')[0];
+  let effectiveDue = duePart;
+  if ((!duePart || duePart <= invPart) && invPart && fallbackTermsDays > 0) {
+    effectiveDue = addDaysIso(invPart, fallbackTermsDays);
+  }
+  if (!effectiveDue) return null;
+  const [y, m, d] = effectiveDue.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const dueDt = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysLeft = Math.round((dueDt.getTime() - today.getTime()) / 86400000);
+  return { daysLeft, dueDateStr: effectiveDue };
+}
+
+const OTHER_DOC_TYPES: { value: DocumentType; label: string }[] = [
+  { value: 'STANDARD_INVOICE', label: 'Standard Invoice' },
+  { value: 'BILL_OF_SUPPLY', label: 'Bill of Supply' },
+  { value: 'PROFORMA_INVOICE', label: 'Proforma Invoice' },
+  { value: 'COMMERCIAL_INVOICE', label: 'Commercial Invoice' },
+  { value: 'DELIVERY_CHALLAN', label: 'Delivery Challan' },
+  { value: 'CREDIT_NOTE', label: 'Credit Note' },
+  { value: 'DEBIT_NOTE', label: 'Debit Note' },
+];
+
+const SALES_DOC_TYPE_SET = new Set<string>(SALES_DOC_TYPES.map((t) => t.value));
 
 interface Props {
   companyId: string;
+  mode?: 'sales' | 'other';
+  modalOnly?: boolean;
+  onCloseModal?: () => void;
 }
 
-export const InvoicesView: React.FC<Props> = ({ companyId }) => {
+export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modalOnly = false, onCloseModal }) => {
+  const isOtherMode = mode === 'other';
+  const allowedDocTypes = isOtherMode ? OTHER_DOC_TYPES : SALES_DOC_TYPES;
+  const defaultDocType: DocumentType = isOtherMode ? 'STANDARD_INVOICE' : 'TAX_INVOICE';
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [templates, setTemplates] = useState<LetterheadTemplate[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(!modalOnly);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(Boolean(modalOnly));
+
+  const closeCreateModal = () => {
+    setIsCreateModalOpen(false);
+    if (modalOnly && onCloseModal) {
+      onCloseModal();
+    }
+  };
   const [cancelModalInvoice, setCancelModalInvoice] = useState<Invoice | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
 
   // Form State for New Invoice
-  const [docType, setDocType] = useState<DocumentType>('TAX_INVOICE');
+  const [docType, setDocType] = useState<DocumentType>(defaultDocType);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -65,8 +129,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
       description: '',
       hsn_or_sac: '',
       unit: 'NOS',
-      quantity: '1',
-      rate: '0.00',
+      quantity: '',
+      rate: '',
       gst_rate: '18.00',
       is_tax_inclusive: false,
       is_custom: false,
@@ -89,12 +153,84 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
 
+  const customerOptions = useMemo(() => {
+    return [
+      { value: '', label: '-- Select Customer --' },
+      ...customers.map((c) => ({
+        value: c.id,
+        label: c.name,
+        sublabel: c.company_name ? c.company_name : undefined,
+        code: c.gstin || undefined,
+      })),
+    ];
+  }, [customers]);
+
+  const templateOptions = useMemo(() => {
+    return templates.map((tpl) => ({
+      value: tpl.id,
+      label: tpl.name,
+      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
+    }));
+  }, [templates]);
+
+  const printTemplateOptions = useMemo(() => {
+    return templates.map((tpl) => ({
+      value: tpl.id,
+      label: tpl.name,
+      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
+    }));
+  }, [templates]);
+
+  const catalogItemOptions = useMemo(() => {
+    return products.map((p) => {
+      const rangeParts: string[] = [];
+      if (p.min_selling_price) rangeParts.push(`Min ${formatIndianCurrency(p.min_selling_price)}`);
+      if (p.max_selling_price) rangeParts.push(`Max ${formatIndianCurrency(p.max_selling_price)}`);
+      const priceLabel =
+        rangeParts.length > 0
+          ? `${formatIndianCurrency(p.selling_price)} (${rangeParts.join(' – ')})`
+          : formatIndianCurrency(p.selling_price);
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: priceLabel,
+        badge: Number(p.current_stock) <= 0 ? 'Out of Stock' : `Stock: ${p.current_stock}`,
+        code: p.sku || p.hsn_or_sac || undefined,
+      };
+    });
+  }, [products]);
+
+  useEffect(() => {
+    setDocType(defaultDocType);
+  }, [defaultDocType]);
+
   useEffect(() => {
     if (companyId) {
-      loadInvoices();
+      if (!modalOnly) {
+        loadInvoices();
+      }
       loadMasterData();
     }
-  }, [companyId, filterStatus]);
+  }, [companyId, filterStatus, modalOnly]);
+
+  useEffect(() => {
+    if (modalOnly || !companyId) return;
+    const onDataChanged = () => {
+      loadInvoices();
+      loadMasterData();
+    };
+    window.addEventListener('eim-data-changed', onDataChanged);
+    return () => window.removeEventListener('eim-data-changed', onDataChanged);
+  }, [companyId, filterStatus, modalOnly]);
+
+  // Automatically calculate Due Date from Invoice Date + Customer's Payment Reminder Days
+  useEffect(() => {
+    const cust = customers.find((c) => c.id === selectedCustomerId);
+    const terms = cust?.payment_terms_days || 0;
+    if (invoiceDate && selectedCustomerId) {
+      setDueDate(terms > 0 ? addDaysIso(invoiceDate, terms) : invoiceDate);
+    }
+  }, [selectedCustomerId, invoiceDate, customers]);
 
   const loadInvoices = async () => {
     setLoading(true);
@@ -150,8 +286,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         description: '',
         hsn_or_sac: '',
         unit: 'NOS',
-        quantity: '1',
-        rate: '0.00',
+        quantity: '',
+        rate: '',
         gst_rate: '18.00',
         is_tax_inclusive: false,
         is_custom: isCustom,
@@ -165,12 +301,50 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const formatItemNotesToDescription = (notes?: string[]): string => {
+    const cleaned = (notes || []).map((n) => n.trim()).filter((n) => n.length > 0);
+    if (cleaned.length === 0) return '';
+    if (cleaned.length === 1) return cleaned[0];
+    return cleaned.map((n, i) => `#${i + 1}: ${n}`).join('\n');
+  };
+
+  const handleUpdateItemNotes = (index: number, nextNotes: string[]) => {
+    const copy = [...items];
+    copy[index] = {
+      ...copy[index],
+      custom_notes: nextNotes,
+      description: formatItemNotesToDescription(nextNotes),
+    };
+    setItems(copy);
+  };
+
+  const handleMatchItemNotesToQty = (index: number) => {
+    const row = items[index];
+    const qtyCount = Math.max(1, Math.min(200, Math.round(Number(row.quantity) || 1)));
+    const current = [...(row.custom_notes || [])];
+    if (qtyCount > current.length) {
+      while (current.length < qtyCount) current.push('');
+    } else {
+      current.length = qtyCount;
+    }
+    const copy = [...items];
+    copy[index] = {
+      ...copy[index],
+      custom_notes: current,
+      show_notes: true,
+      description: formatItemNotesToDescription(current),
+    };
+    setItems(copy);
+  };
+
   const handleProductSelect = (index: number, productId: string) => {
     const newItems = [...items];
     if (!productId) {
       newItems[index] = {
         ...newItems[index],
         item_id: undefined,
+        min_selling_price: null,
+        max_selling_price: null,
         is_custom: true,
       };
       setItems(newItems);
@@ -180,13 +354,19 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
 
+    const prodNotes = Array.isArray(prod.custom_notes) ? [...prod.custom_notes] : [];
     newItems[index] = {
       ...newItems[index],
       item_id: prod.id,
       item_type: prod.item_type,
       item_name: prod.name,
+      custom_notes: prodNotes,
+      show_notes: prodNotes.length > 0,
+      description: prodNotes.length > 0 ? formatItemNotesToDescription(prodNotes) : (prod.description || ''),
       hsn_or_sac: prod.hsn_or_sac,
-      rate: prod.selling_price,
+      rate: Number(prod.selling_price) > 0 ? prod.selling_price : '',
+      min_selling_price: prod.min_selling_price || null,
+      max_selling_price: prod.max_selling_price || null,
       gst_rate: prod.gst_rate,
       is_tax_inclusive: prod.is_tax_inclusive,
       unit: prod.unit,
@@ -203,6 +383,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     }
     setSavingToCatalogIdx(index);
     try {
+      const cleanedNotes = (row.custom_notes || []).map((n: string) => n.trim()).filter((n: string) => n.length > 0);
       const created = await api.createProduct(companyId, {
         item_type: row.item_type || 'PRODUCT',
         name: row.item_name.trim(),
@@ -212,6 +393,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         purchase_price: '0.00',
         gst_rate: String(row.gst_rate || '18.00'),
         is_tax_inclusive: Boolean(row.is_tax_inclusive),
+        custom_notes: cleanedNotes,
         current_stock: '0.00',
         is_active: true,
       });
@@ -241,6 +423,38 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     if (validItems.length === 0) {
       alert('Please enter at least one catalog or custom item with a description.');
       return;
+    }
+    const invalidQty = validItems.find((it) => !it.quantity || Number(it.quantity) <= 0);
+    if (invalidQty) {
+      alert(`Please enter a valid quantity for "${invalidQty.item_name}".`);
+      return;
+    }
+
+    const priceWarnings: string[] = [];
+    for (const it of validItems) {
+      const rateStr = String(it.rate ?? '').trim();
+      if (!rateStr) continue;
+      try {
+        const rateDec = new Decimal(rateStr);
+        if (it.min_selling_price && rateDec.lt(new Decimal(it.min_selling_price))) {
+          priceWarnings.push(
+            `• ${it.item_name}: Rate ${formatIndianCurrency(rateDec.toFixed(2))} is below Min Selling Price (${formatIndianCurrency(it.min_selling_price)})`
+          );
+        }
+        if (it.max_selling_price && rateDec.gt(new Decimal(it.max_selling_price))) {
+          priceWarnings.push(
+            `• ${it.item_name}: Rate ${formatIndianCurrency(rateDec.toFixed(2))} is above Max Selling Price (${formatIndianCurrency(it.max_selling_price)})`
+          );
+        }
+      } catch {
+        // ignore invalid decimal during warning check
+      }
+    }
+    if (priceWarnings.length > 0) {
+      const proceed = window.confirm(
+        `Selling Price Range Warning:\n\n${priceWarnings.join('\n')}\n\nDo you still want to create this invoice with the entered rate?`
+      );
+      if (!proceed) return;
     }
 
     try {
@@ -282,9 +496,12 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         notes,
       });
 
-      setIsCreateModalOpen(false);
       resetForm();
-      await loadInvoices();
+      window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'invoice' } }));
+      closeCreateModal();
+      if (!modalOnly) {
+        await loadInvoices();
+      }
     } catch (err: any) {
       alert(err.message || 'Error creating invoice');
     }
@@ -294,7 +511,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
     setMarkPaidInvoice(inv);
     setMarkPaidType(defaultType);
     setCloseRemainingOnPartial(false);
-    setMarkPaidAmount(inv.balance_amount || '0.00');
+    setMarkPaidAmount(Number(inv.balance_amount) > 0 ? inv.balance_amount : '');
     setMarkPaidMethod('BANK_TRANSFER');
     setMarkPaidDate(new Date().toISOString().split('T')[0]);
     setMarkPaidRef(inv.invoice_number || '');
@@ -416,12 +633,17 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
   };
 
   const handlePrintPdf = (invoiceId: string, mode: 'DIGITAL_LETTERHEAD' | 'PREPRINTED_STATIONERY' = 'DIGITAL_LETTERHEAD') => {
-    const templateId = activePrintTemplateId || selectedTemplateId;
+    const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id;
+    if (!templateId) {
+      alert('No print template uploaded yet. Please upload your invoice template in Print Templates first.');
+      return;
+    }
     const url = api.getInvoicePdfUrl(companyId, invoiceId, mode, templateId);
     window.open(url, '_blank');
   };
 
   const resetForm = () => {
+    setDocType(defaultDocType);
     setSelectedCustomerId('');
     setInvoicePaymentStatus('UNPAID');
     setPaymentMethod('BANK_TRANSFER');
@@ -435,8 +657,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
         description: '',
         hsn_or_sac: '',
         unit: 'NOS',
-        quantity: '1',
-        rate: '0.00',
+        quantity: '',
+        rate: '',
         gst_rate: '18.00',
         is_tax_inclusive: false,
         is_custom: false,
@@ -458,6 +680,11 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
   const previewDocTotals = calculateDocumentTotals({ items: previewCalculatedLines });
 
   const filteredInvoices = invoices.filter((inv) => {
+    // Partition invoices cleanly between Invoices (Sales) and Invoices (Other)
+    const isSalesInvoice = SALES_DOC_TYPE_SET.has(inv.document_type);
+    if (isOtherMode && isSalesInvoice) return false;
+    if (!isOtherMode && !isSalesInvoice) return false;
+
     if (filterStatus === 'PAID') {
       const isPaid = inv.status === 'FINALIZED' && new Decimal(inv.balance_amount || 0).lte(0);
       if (!isPaid) return false;
@@ -488,26 +715,37 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
   });
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <>
+      {!modalOnly && (
+        <div className="p-6 space-y-5 overflow-y-auto">
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <Receipt className="w-5 h-5 text-brand-600" />
-            <span>Sales & Tax Invoices</span>
+            {isOtherMode ? (
+              <FileText className="w-5 h-5 text-brand-600" />
+            ) : (
+              <Receipt className="w-5 h-5 text-brand-600" />
+            )}
+            <span>{isOtherMode ? 'Invoices (Other)' : 'Sales & Tax Invoices'}</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Generate GST-compliant tax invoices, select letterhead templates, review draft states, finalize numbers, and manage cancellations.
+            {isOtherMode
+              ? 'Manage Standard Invoices, Bills of Supply, Proforma Invoices, Commercial Invoices, Delivery Challans, Credit Notes, and Debit Notes.'
+              : 'Generate GST Tax Invoices and Service Invoices, select print templates, review draft states, finalize numbers, and manage cancellations.'}
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setDocType(defaultDocType);
+            setIsCreateModalOpen(true);
+          }}
           className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
-          <span>New Invoice</span>
+          <span>{isOtherMode ? 'New Other Document' : 'New Invoice'}</span>
         </button>
       </div>
 
@@ -586,7 +824,9 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     <td className="py-3 px-4 text-slate-500 font-medium text-[10px]">
                       {inv.document_type.replace(/_/g, ' ')}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{inv.invoice_date}</td>
+                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                      {isoToDisplayDate(inv.invoice_date) || inv.invoice_date}
+                    </td>
                     <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">
                       {inv.customer_name}
                     </td>
@@ -597,7 +837,35 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                       {formatIndianCurrency(inv.paid_amount)}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-rose-600">
-                      {formatIndianCurrency(inv.balance_amount)}
+                      <div>{formatIndianCurrency(inv.balance_amount)}</div>
+                      {inv.status === 'FINALIZED' && Number(inv.balance_amount) > 0 && (() => {
+                        const cust = customers.find((c) => c.id === inv.customer_id);
+                        const cd = getInvoiceDaysRemaining(inv, cust?.payment_terms_days || 0);
+                        if (!cd) return null;
+                        return (
+                          <div className="mt-0.5 flex justify-end">
+                            <span
+                              className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                cd.daysLeft <= 0
+                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                  : cd.daysLeft <= 7
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                    : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                              }`}
+                              title={`Payment Due Date: ${cd.dueDateStr}`}
+                            >
+                              <Clock className="w-2.5 h-2.5" />
+                              <span>
+                                {cd.daysLeft < 0
+                                  ? `Overdue ${Math.abs(cd.daysLeft)}d`
+                                  : cd.daysLeft === 0
+                                    ? 'Due Today'
+                                    : `${cd.daysLeft}d left`}
+                              </span>
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {(() => {
@@ -703,10 +971,13 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
           </tbody>
         </table>
       </div>
+        </div>
+      )}
 
       {/* VIEW INVOICE MODAL */}
-      {viewingInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      {!modalOnly && viewingInvoice && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
@@ -738,7 +1009,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     </span>
                   </h2>
                   <div className="text-xs text-slate-500">
-                    Date: {viewingInvoice.invoice_date} | Due Date: {viewingInvoice.due_date}
+                    Date: {isoToDisplayDate(viewingInvoice.invoice_date) || viewingInvoice.invoice_date} | Due Date: {isoToDisplayDate(viewingInvoice.due_date) || viewingInvoice.due_date}
                   </div>
                 </div>
               </div>
@@ -792,7 +1063,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                       <tr key={idx}>
                         <td className="py-2.5 px-3">
                           <div className="font-semibold text-slate-800 dark:text-slate-200">{it.item_name}</div>
-                          {it.description && <div className="text-[10px] text-slate-400">{it.description}</div>}
+                          {it.description && <div className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-pre-line mt-0.5">{it.description}</div>}
                         </td>
                         <td className="py-2.5 px-2 font-mono text-slate-500">{it.hsn_or_sac || '-'}</td>
                         <td className="py-2.5 px-2 text-right font-medium">{it.quantity} {it.unit}</td>
@@ -843,22 +1114,19 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               {/* Template Selection for Printing */}
               <div className="p-4 bg-brand-50/50 dark:bg-slate-900 rounded-xl border border-brand-100 dark:border-slate-700 space-y-2">
                 <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                  <Stamp className="w-4 h-4 text-brand-600" />
-                  <span>Letterhead & Print Template Selection</span>
+                  <FileText className="w-4 h-4 text-brand-600" />
+                  <span>Print Template</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <select
-                    value={activePrintTemplateId}
-                    onChange={(e) => setActivePrintTemplateId(e.target.value)}
-                    className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700"
-                  >
-                    <option value="">Standard Default Template (No Letterhead)</option>
-                    {templates.map((tpl) => (
-                      <option key={tpl.id} value={tpl.id}>
-                        {tpl.name} ({tpl.file_type} - {tpl.orientation})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex-1">
+                    <SearchableSelect
+                      options={printTemplateOptions}
+                      value={activePrintTemplateId}
+                      onChange={(val) => setActivePrintTemplateId(val)}
+                      placeholder="Select print template..."
+                      size="sm"
+                    />
+                  </div>
 
                   <button
                     type="button"
@@ -866,16 +1134,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Digital PDF Print</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handlePrintPdf(viewingInvoice.id, 'PREPRINTED_STATIONERY')}
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 dark:text-slate-200 rounded text-xs font-semibold"
-                    title="Print dynamic content on pre-printed physical paper"
-                  >
-                    <span>Preprinted Paper Mode</span>
+                    <span>Print / Download PDF</span>
                   </button>
                 </div>
               </div>
@@ -952,18 +1211,24 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* New Invoice Creation Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-[96vw] max-w-[90rem] max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <Receipt className="w-4 h-4 text-brand-600" />
-                <span>Create Sales Document</span>
+                {isOtherMode ? (
+                  <FileText className="w-4 h-4 text-brand-600" />
+                ) : (
+                  <Receipt className="w-4 h-4 text-brand-600" />
+                )}
+                <span>{isOtherMode ? 'Create Other Invoice / Document' : 'Create Sales Document'}</span>
               </h2>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -974,77 +1239,71 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Document Type *</label>
                   <select
                     value={docType}
-                    onChange={(e) => setDocType(e.target.value as any)}
+                    onChange={(e) => setDocType(e.target.value as DocumentType)}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-medium"
                   >
-                    <option value="TAX_INVOICE">GST Tax Invoice</option>
-                    <option value="STANDARD_INVOICE">Standard Invoice</option>
-                    <option value="BILL_OF_SUPPLY">Bill of Supply</option>
-                    <option value="PROFORMA_INVOICE">Proforma Invoice</option>
-                    <option value="SERVICE_INVOICE">Service Invoice</option>
-                    <option value="COMMERCIAL_INVOICE">Commercial Invoice</option>
-                    <option value="DELIVERY_CHALLAN">Delivery Challan</option>
-                    <option value="CREDIT_NOTE">Credit Note</option>
-                    <option value="DEBIT_NOTE">Debit Note</option>
+                    {allowedDocTypes.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Customer *</label>
-                  <select
+                  <SearchableSelect
+                    options={customerOptions}
                     value={selectedCustomerId}
-                    onChange={(e) => setSelectedCustomerId(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    <option value="">-- Select Customer --</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.company_name ? `(${c.company_name})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedCustomerId(val)}
+                    placeholder="Search customer by name or GSTIN..."
+                  />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Invoice Date</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={invoiceDate}
-                    onChange={(e) => setInvoiceDate(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    onChange={(val) => setInvoiceDate(val)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Due Date</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    onChange={(val) => setDueDate(val)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   />
+                  {(() => {
+                    const cust = customers.find((c) => c.id === selectedCustomerId);
+                    if (!cust || !cust.payment_terms_days || cust.payment_terms_days <= 0) return null;
+                    return (
+                      <div className="mt-1 text-[10px] font-semibold text-brand-700 dark:text-brand-300 flex items-center space-x-1">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>
+                          Customer reminder: {cust.payment_terms_days} days (Due: {isoToDisplayDate(dueDate)})
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Letterhead Template Selector */}
+                {/* Print Template Selector */}
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                    <Stamp className="w-3.5 h-3.5 text-brand-600" />
-                    <span>Default Letterhead / Print Template</span>
+                    <FileText className="w-3.5 h-3.5 text-brand-600" />
+                    <span>Print Template</span>
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={templateOptions}
                     value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    <option value="">Default Standard Template</option>
-                    {templates.map((tpl) => (
-                      <option key={tpl.id} value={tpl.id}>
-                        {tpl.name} ({tpl.file_type})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedTemplateId(val)}
+                    placeholder="Select print template..."
+                  />
                 </div>
 
                 {/* Payment Status Selection on Create */}
@@ -1086,11 +1345,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     </div>
                     <div>
                       <label className="block font-semibold text-emerald-900 dark:text-emerald-200 mb-1">Payment Date</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                        onChange={(val) => setPaymentDate(val)}
+                        className="w-full border border-emerald-300 dark:border-emerald-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                       />
                     </div>
                     <div>
@@ -1136,16 +1394,19 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
               )}
 
               {/* Line Items Table */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
                 <table className="w-full text-left">
                   <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
-                      <th className="p-2 w-44">Catalog / Custom Mode</th>
-                      <th className="p-2">Item Name, HSN & Unit</th>
+                      <th className="p-2 min-w-[260px]">Product / Item *</th>
+                      <th className="p-2 w-24">HSN / SAC</th>
+                      <th className="p-2 w-20">Unit</th>
                       <th className="p-2 w-20">Qty</th>
-                      <th className="p-2 w-24">Rate (₹)</th>
+                      <th className="p-2 w-32">Rate (₹)</th>
                       <th className="p-2 w-24">GST %</th>
-                      <th className="p-2 w-24 text-right">Total (₹)</th>
+                      <th className="p-2 w-16 text-center">Incl. GST</th>
+                      <th className="p-2 w-20 text-center">Note</th>
+                      <th className="p-2 w-28 text-right">Total (₹)</th>
                       <th className="p-2 w-16 text-center">Actions</th>
                     </tr>
                   </thead>
@@ -1153,54 +1414,35 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     {items.map((item, idx) => {
                       const lineCalc = previewCalculatedLines[idx];
                       const isCustomRow = !item.item_id;
+                      const activeNotesCount = item.custom_notes?.filter((n: string) => n.trim()).length || 0;
                       return (
-                        <tr key={idx} className={isCustomRow ? 'bg-amber-50/20 dark:bg-amber-950/10' : ''}>
-                          <td className="p-2 align-top">
-                            <select
-                              value={item.item_id || ''}
-                              onChange={(e) => handleProductSelect(idx, e.target.value)}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700"
-                            >
-                              <option value="">-- Custom / Non-Catalog Item --</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} ({formatIndianCurrency(p.selling_price)})
-                                </option>
-                              ))}
-                            </select>
-                            {isCustomRow && (
-                              <div className="mt-1 flex items-center space-x-1.5">
-                                <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 rounded font-bold">
-                                  Custom Item
-                                </span>
-                                <select
-                                  value={item.item_type || 'PRODUCT'}
-                                  onChange={(e) => {
-                                    const copy = [...items];
-                                    copy[idx].item_type = e.target.value;
-                                    setItems(copy);
-                                  }}
-                                  className="text-[10px] border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5 bg-white dark:bg-slate-700"
-                                >
-                                  <option value="PRODUCT">Product</option>
-                                  <option value="SERVICE">Service</option>
-                                </select>
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-2 align-top space-y-1">
-                            <input
-                              type="text"
-                              placeholder="Enter product/service name or specification *"
-                              value={item.item_name}
-                              onChange={(e) => {
-                                const copy = [...items];
-                                copy[idx].item_name = e.target.value;
-                                setItems(copy);
-                              }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 font-medium"
-                            />
-                            <div className="flex items-center space-x-2">
+                        <React.Fragment key={idx}>
+                          <tr className="bg-white dark:bg-slate-800">
+                            <td className="p-2 align-middle">
+                              <SearchableSelect
+                                options={catalogItemOptions}
+                                value={item.item_id || ''}
+                                freeTextValue={item.item_name || ''}
+                                hideSelectedMeta
+                                onChange={(val) => handleProductSelect(idx, val)}
+                                onFreeTextChange={(text) => {
+                                  const copy = [...items];
+                                  copy[idx] = {
+                                    ...copy[idx],
+                                    item_id: undefined,
+                                    item_name: text,
+                                    item_type: copy[idx].item_type || (docType === 'SERVICE_INVOICE' ? 'SERVICE' : 'PRODUCT'),
+                                    min_selling_price: null,
+                                    max_selling_price: null,
+                                    is_custom: true,
+                                  };
+                                  setItems(copy);
+                                }}
+                                placeholder="Search product or enter custom item..."
+                                size="sm"
+                              />
+                            </td>
+                            <td className="p-2 align-middle">
                               <input
                                 type="text"
                                 placeholder="HSN/SAC"
@@ -1210,103 +1452,296 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                                   copy[idx].hsn_or_sac = e.target.value;
                                   setItems(copy);
                                 }}
-                                className="w-24 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 text-[11px] font-mono"
+                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono"
                               />
+                            </td>
+                            <td className="p-2 align-middle">
                               <input
                                 type="text"
-                                placeholder="Unit (NOS)"
+                                placeholder="NOS"
                                 value={item.unit || 'NOS'}
                                 onChange={(e) => {
                                   const copy = [...items];
                                   copy[idx].unit = e.target.value;
                                   setItems(copy);
                                 }}
-                                className="w-20 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 text-[11px] uppercase"
+                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs uppercase"
                               />
-                              <label className="inline-flex items-center space-x-1 text-[10px] text-slate-500 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(item.is_tax_inclusive)}
-                                  onChange={(e) => {
-                                    const copy = [...items];
-                                    copy[idx].is_tax_inclusive = e.target.checked;
-                                    setItems(copy);
-                                  }}
-                                />
-                                <span>Incl. GST</span>
-                              </label>
-                            </div>
-                          </td>
-                          <td className="p-2 align-top">
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={item.quantity}
-                              onChange={(e) => {
-                                const copy = [...items];
-                                copy[idx].quantity = e.target.value;
-                                setItems(copy);
-                              }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-right"
-                            />
-                          </td>
-                          <td className="p-2 align-top">
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={item.rate}
-                              onChange={(e) => {
-                                const copy = [...items];
-                                copy[idx].rate = e.target.value;
-                                setItems(copy);
-                              }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-right"
-                            />
-                          </td>
-                          <td className="p-2 align-top">
-                            <select
-                              value={item.gst_rate}
-                              onChange={(e) => {
-                                const copy = [...items];
-                                copy[idx].gst_rate = e.target.value;
-                                setItems(copy);
-                              }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700"
-                            >
-                              {GST_RATES.map((rate) => (
-                                <option key={rate} value={rate}>{rate}%</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-2 align-top text-right font-mono font-bold text-slate-800 dark:text-slate-100">
-                            {formatIndianCurrency(lineCalc.lineTotal)}
-                          </td>
-                          <td className="p-2 align-top text-center">
-                            <div className="flex items-center justify-center space-x-1">
-                              {isCustomRow && item.item_name?.trim() && (
-                                <button
-                                  type="button"
-                                  disabled={savingToCatalogIdx === idx}
-                                  onClick={() => handleSaveCustomItemToCatalog(idx)}
-                                  className="text-brand-600 hover:text-brand-800 p-0.5"
-                                  title="Save this custom item into Products Catalog for future reuse"
-                                >
-                                  <BookmarkPlus className="w-4 h-4" />
-                                </button>
-                              )}
+                            </td>
+                            <td className="p-2 align-middle">
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                placeholder="Qty"
+                                value={item.quantity ?? ''}
+                                onChange={(e) => {
+                                  const copy = [...items];
+                                  copy[idx].quantity = e.target.value;
+                                  setItems(copy);
+                                }}
+                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-right"
+                              />
+                            </td>
+                            <td className="p-2 align-middle">
+                              {(() => {
+                                let isBelowMin = false;
+                                let isAboveMax = false;
+                                const rateStr = String(item.rate ?? '').trim();
+                                if (rateStr) {
+                                  try {
+                                    const rateDec = new Decimal(rateStr);
+                                    if (item.min_selling_price && rateDec.lt(new Decimal(item.min_selling_price))) {
+                                      isBelowMin = true;
+                                    }
+                                    if (item.max_selling_price && rateDec.gt(new Decimal(item.max_selling_price))) {
+                                      isAboveMax = true;
+                                    }
+                                  } catch {
+                                    // ignore invalid input while typing
+                                  }
+                                }
+                                return (
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      placeholder="0.00"
+                                      value={item.rate ?? ''}
+                                      onChange={(e) => {
+                                        const copy = [...items];
+                                        copy[idx].rate = e.target.value;
+                                        setItems(copy);
+                                      }}
+                                      className={`w-full border rounded px-2 py-1 text-right ${
+                                        isBelowMin
+                                          ? 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300'
+                                          : isAboveMax
+                                            ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300'
+                                            : 'border-slate-200 dark:border-slate-600'
+                                      }`}
+                                    />
+                                    {(item.min_selling_price || item.max_selling_price) && (
+                                      <div className="flex flex-wrap items-center justify-end gap-1 text-[9px] font-mono">
+                                        {item.min_selling_price && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const copy = [...items];
+                                              copy[idx].rate = item.min_selling_price;
+                                              setItems(copy);
+                                            }}
+                                            className={`px-1 py-0.5 rounded border transition-colors ${
+                                              isBelowMin
+                                                ? 'bg-rose-100 text-rose-700 border-rose-300 font-bold'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-brand-50 hover:text-brand-700'
+                                            }`}
+                                            title="Click to apply Minimum Selling Price"
+                                          >
+                                            Min ₹{item.min_selling_price}
+                                          </button>
+                                        )}
+                                        {item.max_selling_price && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const copy = [...items];
+                                              copy[idx].rate = item.max_selling_price;
+                                              setItems(copy);
+                                            }}
+                                            className={`px-1 py-0.5 rounded border transition-colors ${
+                                              isAboveMax
+                                                ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-brand-50 hover:text-brand-700'
+                                            }`}
+                                            title="Click to apply Maximum Selling Price"
+                                          >
+                                            Max ₹{item.max_selling_price}
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                    {isBelowMin && (
+                                      <div className="text-[9px] font-semibold text-rose-600 text-right">
+                                        Below min price
+                                      </div>
+                                    )}
+                                    {isAboveMax && (
+                                      <div className="text-[9px] font-semibold text-amber-600 text-right">
+                                        Above max price
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="p-2 align-middle">
+                              <select
+                                value={item.gst_rate}
+                                onChange={(e) => {
+                                  const copy = [...items];
+                                  copy[idx].gst_rate = e.target.value;
+                                  setItems(copy);
+                                }}
+                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700"
+                              >
+                                {GST_RATES.map((rate) => (
+                                  <option key={rate} value={rate}>{rate}%</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="p-2 align-middle text-center">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(item.is_tax_inclusive)}
+                                onChange={(e) => {
+                                  const copy = [...items];
+                                  copy[idx].is_tax_inclusive = e.target.checked;
+                                  setItems(copy);
+                                }}
+                                title="Rate is Inclusive of GST"
+                                className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2 align-middle text-center">
                               <button
                                 type="button"
-                                onClick={() => handleRemoveItem(idx)}
-                                className="text-slate-400 hover:text-rose-600 p-0.5"
-                                title="Remove Row"
+                                onClick={() => {
+                                  const copy = [...items];
+                                  const nextShow = !copy[idx].show_notes;
+                                  let currentNotes = Array.isArray(copy[idx].custom_notes) ? [...copy[idx].custom_notes] : [];
+                                  if (nextShow && currentNotes.length === 0) {
+                                    const qtyCount = Math.max(1, Math.min(200, Math.round(Number(copy[idx].quantity) || 1)));
+                                    for (let i = 0; i < qtyCount; i++) currentNotes.push('');
+                                  } else if (!nextShow) {
+                                    currentNotes = currentNotes.map((n: string) => n.trim()).filter((n: string) => n.length > 0);
+                                  }
+                                  copy[idx] = {
+                                    ...copy[idx],
+                                    show_notes: nextShow,
+                                    custom_notes: currentNotes,
+                                    description: formatItemNotesToDescription(currentNotes),
+                                  };
+                                  setItems(copy);
+                                }}
+                                className="inline-flex items-center space-x-1 text-[10px] font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 px-2 py-1 rounded border border-brand-200 dark:border-brand-700 transition-colors whitespace-nowrap"
+                                title="Add custom notes per item (e.g. warranty, serial/hard disk numbers)"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <StickyNote className="w-3 h-3" />
+                                <span>{activeNotesCount > 0 ? `Notes (${activeNotesCount})` : '+ Note'}</span>
                               </button>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="p-2 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                              {formatIndianCurrency(lineCalc.lineTotal)}
+                            </td>
+                            <td className="p-2 align-middle text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                {isCustomRow && item.item_name?.trim() && (
+                                  <button
+                                    type="button"
+                                    disabled={savingToCatalogIdx === idx}
+                                    onClick={() => handleSaveCustomItemToCatalog(idx)}
+                                    className="text-brand-600 hover:text-brand-800 p-0.5"
+                                    title="Save this item into Products Catalog for future reuse"
+                                  >
+                                    <BookmarkPlus className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItem(idx)}
+                                  className="text-slate-400 hover:text-rose-600 p-0.5"
+                                  title="Remove Row"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {item.show_notes && (
+                            <tr className="bg-slate-50/70 dark:bg-slate-900/40">
+                              <td colSpan={10} className="px-3 py-2">
+                                <div className="p-2 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded space-y-1.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                                      Item Notes — {item.item_name || `Row #${idx + 1}`} ({(item.custom_notes || []).length})
+                                    </span>
+                                    <div className="flex items-center space-x-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMatchItemNotesToQty(idx)}
+                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                                        title="Create one note row per quantity"
+                                      >
+                                        Match Qty ({Math.max(1, Math.round(Number(item.quantity) || 1))})
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateItemNotes(idx, [...(item.custom_notes || []), ''])}
+                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-brand-600 hover:bg-brand-700 text-white"
+                                      >
+                                        + Add
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const copy = [...items];
+                                          const cleaned = (copy[idx].custom_notes || [])
+                                            .map((n: string) => n.trim())
+                                            .filter((n: string) => n.length > 0);
+                                          copy[idx] = {
+                                            ...copy[idx],
+                                            show_notes: false,
+                                            custom_notes: cleaned,
+                                            description: formatItemNotesToDescription(cleaned),
+                                          };
+                                          setItems(copy);
+                                        }}
+                                        className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded"
+                                        title="Save & close notes"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto pr-0.5">
+                                    {(item.custom_notes || []).map((noteVal: string, nIdx: number) => (
+                                      <div key={nIdx} className="flex items-center space-x-1">
+                                        <span className="text-[10px] font-mono font-bold text-slate-500 w-6 shrink-0">
+                                          #{nIdx + 1}
+                                        </span>
+                                        <input
+                                          type="text"
+                                          placeholder={`Warranty / Serial No. for item #${nIdx + 1}`}
+                                          value={noteVal}
+                                          onChange={(e) => {
+                                            const next = [...(item.custom_notes || [])];
+                                            next[nIdx] = e.target.value;
+                                            handleUpdateItemNotes(idx, next);
+                                          }}
+                                          className="flex-1 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 text-[11px] bg-white dark:bg-slate-800"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const next = (item.custom_notes || []).filter((_: string, i: number) => i !== nIdx);
+                                            handleUpdateItemNotes(idx, next);
+                                          }}
+                                          className="text-slate-400 hover:text-rose-600 p-0.5"
+                                          title="Remove note"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
@@ -1321,15 +1756,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                     className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>+ Add Catalog Item Row</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddItem(true)}
-                    className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md font-bold transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ Add Custom / Non-Catalog Item</span>
+                    <span>Add Item Row</span>
                   </button>
                 </div>
 
@@ -1357,7 +1784,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
             <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={closeCreateModal}
                 className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
               >
                 Cancel
@@ -1382,11 +1809,13 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Mark Invoice as Paid / Partial Pay Modal */}
       {markPaidInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-5 w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
               <h3 className="font-bold text-sm text-emerald-700 dark:text-emerald-400 flex items-center space-x-2">
@@ -1591,11 +2020,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Date</label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={markPaidDate}
-                      onChange={(e) => setMarkPaidDate(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                      onChange={(val) => setMarkPaidDate(val)}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                     />
                   </div>
                 </div>
@@ -1651,11 +2079,13 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Cancellation Reason Modal */}
       {cancelModalInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-5 w-full max-w-md shadow-2xl space-y-4">
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2 text-rose-600">
               <AlertCircle className="w-5 h-5" />
@@ -1692,7 +2122,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
-    </div>
+    </>
   );
 };

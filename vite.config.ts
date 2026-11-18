@@ -13,6 +13,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true,
+    allowedHosts: true,
+    open: true,
+    watch: {
+      ignored: ['**/version 2.0/**', '**/dist/**', '**/dist-server/**', '**/data/**'],
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:4200',

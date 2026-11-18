@@ -194,14 +194,30 @@ export class InventoryService {
   ): Promise<void> {
     return this.db.transaction(async (trx) => {
       const now = new Date().toISOString();
-      const qtyDec = new Decimal(input.quantity);
+      const qtyDec = new Decimal(input.quantity || 0);
+      if (!qtyDec.isFinite() || qtyDec.lte(0)) {
+        throw new Error('Stock adjustment quantity must be greater than zero.');
+      }
       const isAdd = input.movementType === 'ADJUSTMENT_ADD';
       const actualQty = isAdd ? qtyDec : qtyDec.negated();
 
       const product = await trx('products').where({ id: input.productId, company_id: companyId }).first();
       if (!product) throw new Error('Product not found');
 
+      const compSettings = await trx('company_settings').where({ company_id: companyId }).first();
+      const allowNegativeStock = Boolean(compSettings?.allow_negative_stock);
+      const currentProdStock = new Decimal(product.current_stock || 0);
+      const nextProdStock = isAdd ? currentProdStock.add(qtyDec) : currentProdStock.sub(qtyDec);
+      if (!isAdd && !allowNegativeStock && nextProdStock.lt(0)) {
+        throw new Error(
+          `Insufficient stock for "${product.name}" (available: ${currentProdStock.toFixed(2)}, reduction: ${qtyDec.toFixed(2)}). Enable "Allow Negative Stock" in Settings to override.`
+        );
+      }
+
       const unitCost = input.unitCost !== undefined ? new Decimal(input.unitCost) : new Decimal(product.purchase_price || 0);
+      if (!unitCost.isFinite() || unitCost.lt(0)) {
+        throw new Error('Unit cost cannot be negative.');
+      }
 
       // Record transaction
       await trx('inventory_transactions').insert({
@@ -223,8 +239,6 @@ export class InventoryService {
       });
 
       // Update product current stock using Decimal precision
-      const currentProdStock = new Decimal(product.current_stock || 0);
-      const nextProdStock = isAdd ? currentProdStock.add(qtyDec) : currentProdStock.sub(qtyDec);
       await trx('products')
         .where({ id: input.productId, company_id: companyId })
         .update({

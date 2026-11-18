@@ -1,9 +1,13 @@
 // src/renderer/views/QuotationsView.tsx - Quotations Management, Template Selection & 1-Click Conversion
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Decimal from 'decimal.js';
 import { Quotation, Customer, Product, LetterheadTemplate } from '../../shared/types';
 import { api } from '../services/api';
-import { formatIndianCurrency } from '../../server/finance/decimalCalc';
+import { formatIndianCurrency, calculateLineItem, calculateDocumentTotals } from '../../server/finance/decimalCalc';
 import { GST_RATES } from '../../shared/constants';
+import { SearchableSelect } from '../components/SearchableSelect';
+import { ModalPortal } from '../components/ModalPortal';
+import { DateInput, isoToDisplayDate } from '../components/DateInput';
 import {
   FileSpreadsheet,
   Plus,
@@ -18,23 +22,40 @@ import {
   Printer,
   ExternalLink,
   Eye,
-  Stamp,
+  FileText,
+  BookmarkPlus,
+  Sparkles,
+  Package,
 } from 'lucide-react';
 
 interface Props {
   companyId: string;
   onNavigateToInvoice?: () => void;
+  modalOnly?: boolean;
+  onCloseModal?: () => void;
 }
 
-export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice }) => {
+export const QuotationsView: React.FC<Props> = ({
+  companyId,
+  onNavigateToInvoice,
+  modalOnly = false,
+  onCloseModal,
+}) => {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [templates, setTemplates] = useState<LetterheadTemplate[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(!modalOnly);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(Boolean(modalOnly));
   const [viewingQuotation, setViewingQuotation] = useState<Quotation | null>(null);
+
+  const closeCreateModal = () => {
+    setIsCreateModalOpen(false);
+    if (modalOnly && onCloseModal) {
+      onCloseModal();
+    }
+  };
 
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
@@ -44,19 +65,96 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
     new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
   );
   const [items, setItems] = useState<any[]>([
-    { item_name: '', hsn_or_sac: '', quantity: '1', rate: '0.00', gst_rate: '18.00' },
+    { item_name: '', hsn_or_sac: '', quantity: '', rate: '', gst_rate: '18.00', unit: 'NOS' },
   ]);
   const [notes, setNotes] = useState<string>('');
+  const [autoSaveNewItems, setAutoSaveNewItems] = useState<boolean>(true);
+  const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState<boolean>(false);
+  const [targetItemRowIdx, setTargetItemRowIdx] = useState<number | null>(null);
+  const [savingToCatalogIdx, setSavingToCatalogIdx] = useState<number | null>(null);
+
+  const [quickProduct, setQuickProduct] = useState({
+    name: '',
+    item_type: 'PRODUCT' as 'PRODUCT' | 'SERVICE',
+    unit: 'NOS',
+    hsn_or_sac: '',
+    selling_price: '',
+    gst_rate: '18.00',
+    description: '',
+  });
 
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
 
+  const customerOptions = useMemo(() => {
+    return [
+      { value: '', label: '-- Select Customer --' },
+      ...customers.map((c) => ({
+        value: c.id,
+        label: c.name,
+        sublabel: c.company_name ? c.company_name : undefined,
+        code: c.gstin || undefined,
+      })),
+    ];
+  }, [customers]);
+
+  const templateOptions = useMemo(() => {
+    return templates.map((tpl) => ({
+      value: tpl.id,
+      label: tpl.name,
+      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
+    }));
+  }, [templates]);
+
+  const printTemplateOptions = useMemo(() => {
+    return templates.map((tpl) => ({
+      value: tpl.id,
+      label: tpl.name,
+      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
+    }));
+  }, [templates]);
+
+  const catalogItemOptions = useMemo(() => {
+    return [
+      { value: '', label: '-- Manual / Custom Item --' },
+      { value: '__NEW__', label: '✨ + Add New Item (Not In Stock)...', isAction: true },
+      ...products.map((p) => {
+        const rangeParts: string[] = [];
+        if (p.min_selling_price) rangeParts.push(`Min ${formatIndianCurrency(p.min_selling_price)}`);
+        if (p.max_selling_price) rangeParts.push(`Max ${formatIndianCurrency(p.max_selling_price)}`);
+        const priceLabel =
+          rangeParts.length > 0
+            ? `${formatIndianCurrency(p.selling_price)} (${rangeParts.join(' – ')})`
+            : formatIndianCurrency(p.selling_price);
+        return {
+          value: p.id,
+          label: p.name,
+          sublabel: priceLabel,
+          badge: Number(p.current_stock) <= 0 ? 'Out of Stock' : `Stock: ${p.current_stock}`,
+          code: p.sku || p.hsn_or_sac || undefined,
+        };
+      }),
+    ];
+  }, [products]);
+
   useEffect(() => {
     if (companyId) {
-      loadQuotations();
+      if (!modalOnly) {
+        loadQuotations();
+      }
       loadMaster();
     }
-  }, [companyId]);
+  }, [companyId, modalOnly]);
+
+  useEffect(() => {
+    if (modalOnly || !companyId) return;
+    const onDataChanged = () => {
+      loadQuotations();
+      loadMaster();
+    };
+    window.addEventListener('eim-data-changed', onDataChanged);
+    return () => window.removeEventListener('eim-data-changed', onDataChanged);
+  }, [companyId, modalOnly]);
 
   const loadQuotations = async () => {
     setLoading(true);
@@ -90,8 +188,19 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
     }
   };
 
-  const handleAddItem = () => {
-    setItems([...items, { item_name: '', hsn_or_sac: '', quantity: '1', rate: '0.00', gst_rate: '18.00' }]);
+  const handleAddItem = (isNonStock = false) => {
+    setItems([
+      ...items,
+      {
+        item_name: '',
+        hsn_or_sac: '',
+        quantity: '',
+        rate: '',
+        gst_rate: '18.00',
+        unit: 'NOS',
+        is_custom: isNonStock,
+      },
+    ]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -104,18 +213,141 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
 
+    const prodNotes = Array.isArray(prod.custom_notes)
+      ? prod.custom_notes.map((n) => n.trim()).filter((n) => n.length > 0)
+      : [];
+    const formattedDesc =
+      prodNotes.length === 1
+        ? prodNotes[0]
+        : prodNotes.length > 1
+          ? prodNotes.map((n, i) => `#${i + 1}: ${n}`).join('\n')
+          : prod.description || '';
+
     const copy = [...items];
     copy[index] = {
       ...copy[index],
       item_id: prod.id,
       item_type: prod.item_type,
       item_name: prod.name,
+      description: formattedDesc,
       hsn_or_sac: prod.hsn_or_sac,
-      rate: prod.selling_price,
+      rate: Number(prod.selling_price) > 0 ? prod.selling_price : '',
+      min_selling_price: prod.min_selling_price || null,
+      max_selling_price: prod.max_selling_price || null,
       gst_rate: prod.gst_rate,
       unit: prod.unit,
+      is_custom: false,
     };
     setItems(copy);
+  };
+
+  const handleSaveCustomItemToCatalog = async (index: number) => {
+    const row = items[index];
+    if (!row || !row.item_name?.trim()) {
+      alert('Please enter an item name first');
+      return;
+    }
+    setSavingToCatalogIdx(index);
+    try {
+      const created = await api.createProduct(companyId, {
+        name: row.item_name.trim(),
+        item_type: row.item_type || 'PRODUCT',
+        hsn_or_sac: row.hsn_or_sac || '9999',
+        unit: row.unit || 'NOS',
+        selling_price: String(row.rate || '0.00'),
+        purchase_price: '0.00',
+        gst_rate: String(row.gst_rate || '18.00'),
+        is_tax_inclusive: false,
+        current_stock: '0.00',
+        is_active: true,
+      });
+      setProducts((prev) => [...prev, created]);
+      const copy = [...items];
+      copy[index] = {
+        ...copy[index],
+        item_id: created.id,
+        item_name: created.name,
+        hsn_or_sac: created.hsn_or_sac,
+        rate: created.selling_price,
+        gst_rate: created.gst_rate,
+        unit: created.unit,
+        is_custom: false,
+      };
+      setItems(copy);
+      alert(`Saved "${created.name}" to Products & Services list (Stock: 0)!`);
+    } catch (err: any) {
+      alert(err.message || 'Could not save item to products list');
+    } finally {
+      setSavingToCatalogIdx(null);
+    }
+  };
+
+  const handleQuickProductSave = async () => {
+    if (!quickProduct.name.trim()) {
+      alert('Product name is required');
+      return;
+    }
+    try {
+      const created = await api.createProduct(companyId, {
+        name: quickProduct.name.trim(),
+        item_type: quickProduct.item_type,
+        unit: quickProduct.unit || 'NOS',
+        hsn_or_sac: quickProduct.hsn_or_sac || '9999',
+        selling_price: String(quickProduct.selling_price || '0.00'),
+        purchase_price: '0.00',
+        gst_rate: String(quickProduct.gst_rate || '18.00'),
+        description: quickProduct.description || undefined,
+        current_stock: '0.00',
+        is_active: true,
+      });
+
+      setProducts((prev) => [...prev, created]);
+
+      if (targetItemRowIdx !== null && items[targetItemRowIdx]) {
+        const copy = [...items];
+        copy[targetItemRowIdx] = {
+          ...copy[targetItemRowIdx],
+          item_id: created.id,
+          item_type: created.item_type,
+          item_name: created.name,
+          hsn_or_sac: created.hsn_or_sac,
+          rate: created.selling_price,
+          gst_rate: created.gst_rate,
+          unit: created.unit,
+          is_custom: false,
+        };
+        setItems(copy);
+      } else {
+        setItems([
+          ...items,
+          {
+            item_id: created.id,
+            item_type: created.item_type,
+            item_name: created.name,
+            hsn_or_sac: created.hsn_or_sac,
+            quantity: '',
+            rate: Number(created.selling_price) > 0 ? created.selling_price : '',
+            gst_rate: created.gst_rate,
+            unit: created.unit,
+            is_custom: false,
+          },
+        ]);
+      }
+
+      setIsQuickProductModalOpen(false);
+      setQuickProduct({
+        name: '',
+        item_type: 'PRODUCT',
+        unit: 'NOS',
+        hsn_or_sac: '',
+        selling_price: '',
+        gst_rate: '18.00',
+        description: '',
+      });
+      setTargetItemRowIdx(null);
+    } catch (err: any) {
+      alert(err.message || 'Error creating product');
+    }
   };
 
   const handleCreateQuotation = async () => {
@@ -125,7 +357,53 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
       return;
     }
 
+    const validItems = items.filter((it) => it.item_name && it.item_name.trim() !== '');
+    if (validItems.length === 0) {
+      alert('Please add at least one item.');
+      return;
+    }
+    const invalidQty = validItems.find((it) => !it.quantity || Number(it.quantity) <= 0);
+    if (invalidQty) {
+      alert(`Please enter a valid quantity for "${invalidQty.item_name}".`);
+      return;
+    }
+
     try {
+      // Automatically save new non-catalog items to products list if enabled
+      let finalItems = validItems.map((it) => ({
+        ...it,
+        quantity: it.quantity || '1',
+        rate: it.rate || '0.00',
+      }));
+      if (autoSaveNewItems) {
+        for (let i = 0; i < finalItems.length; i++) {
+          const it = finalItems[i];
+          if (!it.item_id && it.item_name?.trim()) {
+            try {
+              const created = await api.createProduct(companyId, {
+                name: it.item_name.trim(),
+                item_type: it.item_type || 'PRODUCT',
+                hsn_or_sac: it.hsn_or_sac || '9999',
+                unit: it.unit || 'NOS',
+                selling_price: String(it.rate || '0.00'),
+                purchase_price: '0.00',
+                gst_rate: String(it.gst_rate || '18.00'),
+                is_tax_inclusive: false,
+                current_stock: '0.00',
+                is_active: true,
+              });
+              setProducts((prev) => [...prev, created]);
+              finalItems[i] = {
+                ...finalItems[i],
+                item_id: created.id,
+              };
+            } catch (e) {
+              console.warn('Could not auto-save product:', e);
+            }
+          }
+        }
+      }
+
       await api.createQuotation(companyId, {
         customer_id: cust.id,
         customer_name: cust.name,
@@ -136,13 +414,16 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
         quotation_date: quoteDate,
         valid_until_date: validUntil,
         letterhead_template_id: selectedTemplateId || undefined,
-        items,
+        items: finalItems,
         notes,
       });
 
-      setIsCreateModalOpen(false);
       resetForm();
-      await loadQuotations();
+      window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'quotation' } }));
+      closeCreateModal();
+      if (!modalOnly) {
+        await loadQuotations();
+      }
     } catch (err: any) {
       alert(err.message || 'Error creating quotation');
     }
@@ -188,16 +469,41 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
   };
 
   const handlePrintPdf = (quoteId: string, mode: 'DIGITAL_LETTERHEAD' | 'PREPRINTED_STATIONERY' = 'DIGITAL_LETTERHEAD') => {
-    const templateId = activePrintTemplateId || selectedTemplateId;
+    const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id;
+    if (!templateId) {
+      alert('No print template uploaded yet. Please upload your quotation template in Print Templates first.');
+      return;
+    }
     const url = api.getQuotationPdfUrl(companyId, quoteId, mode, templateId);
     window.open(url, '_blank');
   };
 
   const resetForm = () => {
     setSelectedCustomerId('');
-    setItems([{ item_name: '', hsn_or_sac: '', quantity: '1', rate: '0.00', gst_rate: '18.00' }]);
+    setItems([{ item_name: '', hsn_or_sac: '', quantity: '', rate: '', gst_rate: '18.00', unit: 'NOS' }]);
     setNotes('');
+    setAutoSaveNewItems(true);
   };
+
+  const previewDocTotals = calculateDocumentTotals({
+    items: items.map((it) => {
+      const line = calculateLineItem({
+        quantity: it.quantity || 0,
+        rate: it.rate || 0,
+        gstRate: it.gst_rate || 0,
+        isTaxInclusive: false,
+        isInterState: false,
+      });
+      return {
+        ...it,
+        quantity: line.quantity,
+        rate: line.rate,
+        taxable_value: line.taxableValue,
+        total_tax: line.totalTax,
+        line_total: line.lineTotal,
+      };
+    }) as any,
+  });
 
   const filtered = quotations.filter((q) => {
     if (searchQuery) {
@@ -211,7 +517,9 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
   });
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <>
+      {!modalOnly && (
+        <div className="p-6 space-y-5 overflow-y-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -220,7 +528,7 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
             <span>Commercial Quotations & Estimates</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Create professional price estimates, revisions, print with custom letterhead templates, and 1-click convert to Sales Invoices.
+            Create professional price estimates, revisions, print with uploaded templates, and 1-click convert to Sales Invoices.
           </p>
         </div>
 
@@ -286,8 +594,12 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
                       <Eye className="w-3.5 h-3.5 text-slate-400 opacity-60 hover:opacity-100" />
                     </button>
                   </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{q.quotation_date}</td>
-                  <td className="py-3 px-4 text-slate-500">{q.valid_until_date}</td>
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                    {isoToDisplayDate(q.quotation_date) || q.quotation_date}
+                  </td>
+                  <td className="py-3 px-4 text-slate-500">
+                    {isoToDisplayDate(q.valid_until_date) || q.valid_until_date}
+                  </td>
                   <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">
                     {q.customer_name}
                   </td>
@@ -351,10 +663,13 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
           </tbody>
         </table>
       </div>
+        </div>
+      )}
 
       {/* VIEW QUOTATION MODAL */}
-      {viewingQuotation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      {!modalOnly && viewingQuotation && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
@@ -368,7 +683,7 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
                     </span>
                   </h2>
                   <div className="text-xs text-slate-500">
-                    Issued: {viewingQuotation.quotation_date} | Valid Until: {viewingQuotation.valid_until_date}
+                    Issued: {isoToDisplayDate(viewingQuotation.quotation_date) || viewingQuotation.quotation_date} | Valid Until: {isoToDisplayDate(viewingQuotation.valid_until_date) || viewingQuotation.valid_until_date}
                   </div>
                 </div>
               </div>
@@ -407,7 +722,7 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
               </div>
 
               {/* Items Table */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
@@ -424,7 +739,7 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
                       <tr key={idx}>
                         <td className="py-2.5 px-3">
                           <div className="font-semibold text-slate-800 dark:text-slate-200">{it.item_name}</div>
-                          {it.description && <div className="text-[10px] text-slate-400">{it.description}</div>}
+                          {it.description && <div className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-pre-line mt-0.5">{it.description}</div>}
                         </td>
                         <td className="py-2.5 px-2 font-mono text-slate-500">{it.hsn_or_sac || '-'}</td>
                         <td className="py-2.5 px-2 text-right font-medium">{it.quantity} {it.unit}</td>
@@ -475,22 +790,19 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
               {/* Template Selection for Printing */}
               <div className="p-4 bg-brand-50/50 dark:bg-slate-900 rounded-xl border border-brand-100 dark:border-slate-700 space-y-2">
                 <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                  <Stamp className="w-4 h-4 text-brand-600" />
-                  <span>Letterhead & Print Template Selection</span>
+                  <FileText className="w-4 h-4 text-brand-600" />
+                  <span>Print Template</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <select
-                    value={activePrintTemplateId}
-                    onChange={(e) => setActivePrintTemplateId(e.target.value)}
-                    className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700"
-                  >
-                    <option value="">Standard Default Template (No Letterhead)</option>
-                    {templates.map((tpl) => (
-                      <option key={tpl.id} value={tpl.id}>
-                        {tpl.name} ({tpl.file_type} - {tpl.orientation})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex-1">
+                    <SearchableSelect
+                      options={printTemplateOptions}
+                      value={activePrintTemplateId}
+                      onChange={(val) => setActivePrintTemplateId(val)}
+                      placeholder="Select print template..."
+                      size="sm"
+                    />
+                  </div>
 
                   <button
                     type="button"
@@ -498,16 +810,7 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
                     className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Digital PDF Print</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handlePrintPdf(viewingQuotation.id, 'PREPRINTED_STATIONERY')}
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 dark:text-slate-200 rounded text-xs font-semibold"
-                    title="Print overlay on physical pre-printed letterhead paper"
-                  >
-                    <span>Preprinted Paper Mode</span>
+                    <span>Print / Download PDF</span>
                   </button>
                 </div>
               </div>
@@ -547,18 +850,20 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* CREATE QUOTATION MODAL */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <FileSpreadsheet className="w-4 h-4 text-brand-600" />
                 <span>Create Commercial Quotation</span>
               </h2>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -567,63 +872,49 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Customer *</label>
-                  <select
+                  <SearchableSelect
+                    options={customerOptions}
                     value={selectedCustomerId}
-                    onChange={(e) => setSelectedCustomerId(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    <option value="">-- Select Customer --</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.company_name ? `(${c.company_name})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedCustomerId(val)}
+                    placeholder="Search customer by name or GSTIN..."
+                  />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Quote Date</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={quoteDate}
-                    onChange={(e) => setQuoteDate(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    onChange={(val) => setQuoteDate(val)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Valid Until Date</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={validUntil}
-                    onChange={(e) => setValidUntil(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    onChange={(val) => setValidUntil(val)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
 
-              {/* Letterhead Template Selection for new quotation */}
+              {/* Print Template Selection for new quotation */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                  <Stamp className="w-3.5 h-3.5 text-brand-600" />
-                  <span>Letterhead / Print Template</span>
+                  <FileText className="w-3.5 h-3.5 text-brand-600" />
+                  <span>Print Template</span>
                 </label>
-                <select
+                <SearchableSelect
+                  options={templateOptions}
                   value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                >
-                  <option value="">Default Standard Template</option>
-                  {templates.map((tpl) => (
-                    <option key={tpl.id} value={tpl.id}>
-                      {tpl.name} ({tpl.file_type})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedTemplateId(val)}
+                  placeholder="Select print template..."
+                />
               </div>
 
               {/* Items Table */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
                 <table className="w-full text-left">
                   <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
@@ -632,102 +923,261 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
                       <th className="p-2 w-20">Qty</th>
                       <th className="p-2 w-28">Rate (₹)</th>
                       <th className="p-2 w-24">GST Rate</th>
-                      <th className="p-2 w-10 text-center"></th>
+                      <th className="p-2 w-28 text-right">Amount (₹)</th>
+                      <th className="p-2 w-16 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="p-2">
-                          <select
-                            onChange={(e) => handleProductSelect(idx, e.target.value)}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
-                          >
-                            <option value="">-- Manual / Catalog --</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({formatIndianCurrency(p.selling_price)})
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            placeholder="Item name"
-                            value={item.item_name}
-                            onChange={(e) => {
-                              const copy = [...items];
-                              copy[idx].item_name = e.target.value;
-                              setItems(copy);
-                            }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const copy = [...items];
-                              copy[idx].quantity = e.target.value;
-                              setItems(copy);
-                            }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            value={item.rate}
-                            onChange={(e) => {
-                              const copy = [...items];
-                              copy[idx].rate = e.target.value;
-                              setItems(copy);
-                            }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <select
-                            value={item.gst_rate}
-                            onChange={(e) => {
-                              const copy = [...items];
-                              copy[idx].gst_rate = e.target.value;
-                              setItems(copy);
-                            }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
-                          >
-                            {GST_RATES.map((rate) => (
-                              <option key={rate} value={rate}>
-                                {rate}%
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="text-slate-400 hover:text-rose-600"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {items.map((item, idx) => {
+                      const qty = Number(item.quantity) || 0;
+                      const rate = Number(item.rate) || 0;
+                      const gst = Number(item.gst_rate) || 0;
+                      const taxable = qty * rate;
+                      const totalTax = taxable * (gst / 100);
+                      const lineTotal = taxable + totalTax;
+                      const isUnsavedNonStock = !item.item_id && Boolean(item.item_name?.trim());
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                          <td className="p-2">
+                            <SearchableSelect
+                              options={catalogItemOptions}
+                              value={item.item_id || ''}
+                              onChange={(val) => {
+                                if (val === '__NEW__') {
+                                  setTargetItemRowIdx(idx);
+                                  setQuickProduct({
+                                    name: item.item_name || '',
+                                    item_type: 'PRODUCT',
+                                    unit: item.unit || 'NOS',
+                                    hsn_or_sac: item.hsn_or_sac || '',
+                                    selling_price: item.rate || '0.00',
+                                    gst_rate: item.gst_rate || '18.00',
+                                    description: '',
+                                  });
+                                  setIsQuickProductModalOpen(true);
+                                } else {
+                                  handleProductSelect(idx, val);
+                                }
+                              }}
+                              placeholder="-- Manual / Catalog --"
+                              size="sm"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              placeholder="Item name / non-stock description"
+                              value={item.item_name}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].item_name = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-xs"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="Qty"
+                              value={item.quantity ?? ''}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].quantity = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-xs text-right font-mono"
+                            />
+                          </td>
+                          <td className="p-2 align-top">
+                            {(() => {
+                              let isBelowMin = false;
+                              let isAboveMax = false;
+                              const rateStr = String(item.rate ?? '').trim();
+                              if (rateStr) {
+                                try {
+                                  const rateDec = new Decimal(rateStr);
+                                  if (item.min_selling_price && rateDec.lt(new Decimal(item.min_selling_price))) {
+                                    isBelowMin = true;
+                                  }
+                                  if (item.max_selling_price && rateDec.gt(new Decimal(item.max_selling_price))) {
+                                    isAboveMax = true;
+                                  }
+                                } catch {
+                                  // ignore invalid input while typing
+                                }
+                              }
+                              return (
+                                <div className="space-y-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    placeholder="0.00"
+                                    value={item.rate ?? ''}
+                                    onChange={(e) => {
+                                      const copy = [...items];
+                                      copy[idx].rate = e.target.value;
+                                      setItems(copy);
+                                    }}
+                                    className={`w-full border rounded px-2 py-1 text-xs text-right font-mono ${
+                                      isBelowMin
+                                        ? 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300'
+                                        : isAboveMax
+                                          ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300'
+                                          : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700'
+                                    }`}
+                                  />
+                                  {(item.min_selling_price || item.max_selling_price) && (
+                                    <div className="flex flex-wrap items-center justify-end gap-1 text-[9px] font-mono">
+                                      {item.min_selling_price && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const copy = [...items];
+                                            copy[idx].rate = item.min_selling_price;
+                                            setItems(copy);
+                                          }}
+                                          className={`px-1 py-0.5 rounded border transition-colors ${
+                                            isBelowMin
+                                              ? 'bg-rose-100 text-rose-700 border-rose-300 font-bold'
+                                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-brand-50 hover:text-brand-700'
+                                          }`}
+                                          title="Click to apply Minimum Selling Price"
+                                        >
+                                          Min ₹{item.min_selling_price}
+                                        </button>
+                                      )}
+                                      {item.max_selling_price && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const copy = [...items];
+                                            copy[idx].rate = item.max_selling_price;
+                                            setItems(copy);
+                                          }}
+                                          className={`px-1 py-0.5 rounded border transition-colors ${
+                                            isAboveMax
+                                              ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold'
+                                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-brand-50 hover:text-brand-700'
+                                          }`}
+                                          title="Click to apply Maximum Selling Price"
+                                        >
+                                          Max ₹{item.max_selling_price}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td className="p-2">
+                            <select
+                              value={item.gst_rate}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].gst_rate = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-xs"
+                            >
+                              {GST_RATES.map((rate) => (
+                                <option key={rate} value={rate}>
+                                  {rate}%
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-2 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {formatIndianCurrency(lineTotal)}
+                          </td>
+                          <td className="p-2 text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              {isUnsavedNonStock && (
+                                <button
+                                  type="button"
+                                  disabled={savingToCatalogIdx === idx}
+                                  onClick={() => handleSaveCustomItemToCatalog(idx)}
+                                  className="text-brand-600 hover:text-brand-800 dark:text-brand-400 p-1 rounded hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
+                                  title="Save this new / non-stock item into Products Catalog"
+                                >
+                                  <BookmarkPlus className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                                title="Remove Row"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              <button
-                type="button"
-                onClick={handleAddItem}
-                className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Add Item Row</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAddItem(false)}
+                    className="inline-flex items-center space-x-1 text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-bold transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Item Row</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetItemRowIdx(null);
+                      setQuickProduct({
+                        name: '',
+                        item_type: 'PRODUCT',
+                        unit: 'NOS',
+                        hsn_or_sac: '',
+                        selling_price: '',
+                        gst_rate: '18.00',
+                        description: '',
+                      });
+                      setIsQuickProductModalOpen(true);
+                    }}
+                    className="inline-flex items-center space-x-1.5 text-xs px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-lg font-bold transition-all shadow-sm"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>+ Add New Item (Not In Stock)</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center space-x-4 text-xs bg-slate-50 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-500">Taxable: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTaxableValue)}</strong></span>
+                  <span className="text-slate-500">Tax: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTax)}</strong></span>
+                  <span className="text-slate-500">Grand Total: <strong className="text-brand-600 text-sm font-bold">{formatIndianCurrency(previewDocTotals.grandTotal)}</strong></span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200/80 dark:border-amber-800/40 rounded-lg">
+                <label className="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoSaveNewItems}
+                    onChange={(e) => setAutoSaveNewItems(e.target.checked)}
+                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 w-4 h-4"
+                  />
+                  <span>
+                    <strong>Add new items to Products List automatically</strong> (Creates newly entered items in your catalog with initial stock of 0)
+                  </span>
+                </label>
+              </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -746,7 +1196,7 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
             <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={closeCreateModal}
                 className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
               >
                 Cancel
@@ -761,7 +1211,154 @@ export const QuotationsView: React.FC<Props> = ({ companyId, onNavigateToInvoice
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
-    </div>
+
+      {/* QUICK ADD PRODUCT (NOT IN STOCK) MODAL */}
+      {isQuickProductModalOpen && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+              <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>Add New Item (Not In Stock) to Products List</span>
+              </h2>
+              <button
+                onClick={() => setIsQuickProductModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-amber-800 dark:text-amber-200 flex items-start space-x-2">
+                <Package className="w-4 h-4 mt-0.5 shrink-0" />
+                <p>
+                  This product will be saved to your <strong>Products & Services List</strong> with initial stock of <strong>0.00 (Not In Stock)</strong> and inserted into your current quotation.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Product / Item Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Industrial Control Valve 2-inch"
+                  value={quickProduct.name}
+                  onChange={(e) => setQuickProduct({ ...quickProduct, name: e.target.value })}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-medium"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Item Type
+                  </label>
+                  <select
+                    value={quickProduct.item_type}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, item_type: e.target.value as any })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                  >
+                    <option value="PRODUCT">Physical Product</option>
+                    <option value="SERVICE">Service / Labor</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Unit
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="NOS, PCS, MTR..."
+                    value={quickProduct.unit}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, unit: e.target.value.toUpperCase() })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Selling Rate (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={quickProduct.selling_price}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, selling_price: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    GST Rate
+                  </label>
+                  <select
+                    value={quickProduct.gst_rate}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, gst_rate: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                  >
+                    {GST_RATES.map((r) => (
+                      <option key={r} value={r}>{r}%</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    HSN / SAC
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 8481"
+                    value={quickProduct.hsn_or_sac}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, hsn_or_sac: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Description / Specification
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional technical specifications or item notes..."
+                  value={quickProduct.description}
+                  onChange={(e) => setQuickProduct({ ...quickProduct, description: e.target.value })}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 bg-white dark:bg-slate-700"
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setIsQuickProductModalOpen(false)}
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickProductSave}
+                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm flex items-center space-x-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Save to Products & Insert</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        </ModalPortal>
+      )}
+    </>
   );
 };

@@ -51,17 +51,23 @@ export class LetterheadService {
   constructor(private db: Knex) {}
 
   async getTemplates(companyId: string): Promise<LetterheadTemplate[]> {
-    const records = await this.db('letterhead_templates').where({ company_id: companyId }).orderBy('name', 'asc');
-    return records.map((r) => ({
-      ...r,
-      is_default: Boolean(r.is_default),
-      layout_config: JSON.parse(r.layout_config_json),
-    }));
+    const records = await this.db('letterhead_templates')
+      .where({ company_id: companyId })
+      .whereNotNull('file_path')
+      .whereRaw("TRIM(file_path) != ''")
+      .orderBy('name', 'asc');
+    return records
+      .filter((r) => r.file_path && fs.existsSync(r.file_path))
+      .map((r) => ({
+        ...r,
+        is_default: Boolean(r.is_default),
+        layout_config: JSON.parse(r.layout_config_json),
+      }));
   }
 
   async getTemplateById(companyId: string, templateId: string): Promise<LetterheadTemplate | null> {
     const r = await this.db('letterhead_templates').where({ company_id: companyId, id: templateId }).first();
-    if (!r) return null;
+    if (!r || !r.file_path || !fs.existsSync(r.file_path)) return null;
     return {
       ...r,
       is_default: Boolean(r.is_default),
@@ -70,21 +76,9 @@ export class LetterheadService {
   }
 
   async getDefaultTemplate(companyId: string): Promise<LetterheadTemplate | null> {
-    const r = await this.db('letterhead_templates').where({ company_id: companyId, is_default: true }).first();
-    if (!r) {
-      const first = await this.db('letterhead_templates').where({ company_id: companyId }).first();
-      if (!first) return null;
-      return {
-        ...first,
-        is_default: Boolean(first.is_default),
-        layout_config: JSON.parse(first.layout_config_json),
-      };
-    }
-    return {
-      ...r,
-      is_default: Boolean(r.is_default),
-      layout_config: JSON.parse(r.layout_config_json),
-    };
+    const uploaded = await this.getTemplates(companyId);
+    if (uploaded.length === 0) return null;
+    return uploaded.find((t) => t.is_default) || uploaded[0];
   }
 
   validateFilePathInsideUploadDir(companyId: string, targetPath?: string): string {
@@ -196,7 +190,7 @@ export class LetterheadService {
     return dir;
   }
 
-  detectFileTypeFromBuffer(buffer: Buffer, fileNameOrPath?: string): 'PDF' | 'PNG' | 'JPG' | null {
+  detectFileTypeFromBuffer(buffer: Buffer, fileNameOrPath?: string, strictMagicOnly = false): 'PDF' | 'PNG' | 'JPG' | null {
     if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === '%PDF') {
       return 'PDF';
     }
@@ -211,6 +205,10 @@ export class LetterheadService {
     }
     if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
       return 'JPG';
+    }
+
+    if (strictMagicOnly) {
+      return null;
     }
 
     const ext = path.extname(fileNameOrPath || '').toLowerCase();
@@ -229,9 +227,10 @@ export class LetterheadService {
       throw new Error('Uploaded template file is empty.');
     }
 
-    const fileType = this.detectFileTypeFromBuffer(buffer, originalName);
+    // Strictly verify binary file magic signature (prevent spoofed extensions serving arbitrary files)
+    const fileType = this.detectFileTypeFromBuffer(buffer, originalName, true);
     if (!fileType) {
-      throw new Error('Unsupported template format. Only PDF, PNG, and JPG/JPEG files are supported.');
+      throw new Error('Unsupported or invalid template binary. Only valid PDF, PNG, and JPG/JPEG files are supported.');
     }
 
     const ext = fileType === 'PDF' ? '.pdf' : fileType === 'PNG' ? '.png' : '.jpg';
@@ -495,6 +494,7 @@ export class LetterheadService {
 
     const allTokens: Array<{ text: string; x: number; topY: number }> = [];
 
+    const MAX_INFLATE_BYTES = 10 * 1024 * 1024; // Cap stream inflation at 10 MB to prevent deflate bombs
     const readStreamBytes = (rawStream: PDFRawStream): string => {
       const contents = rawStream.getContents();
       const filterObj = rawStream.dict.get(PDFName.of('Filter'));
@@ -502,18 +502,18 @@ export class LetterheadService {
       let decodedBytes: Buffer = Buffer.from(contents);
       if (filterStr.includes('FlateDecode')) {
         try {
-          decodedBytes = zlib.inflateSync(contents);
+          decodedBytes = zlib.inflateSync(contents, { maxOutputLength: MAX_INFLATE_BYTES });
         } catch {
-          // Leave raw if inflation fails
+          // Leave raw if inflation fails or exceeds safety cap
         }
       } else {
         // Sometimes compressed streams don't expose standard filter name in wrapper; probe zlib header
         try {
           if (contents.length > 2 && contents[0] === 0x78) {
-            decodedBytes = zlib.inflateSync(contents);
+            decodedBytes = zlib.inflateSync(contents, { maxOutputLength: MAX_INFLATE_BYTES });
           }
         } catch {
-          // Non-deflated stream
+          // Non-deflated stream or exceeds safety cap
         }
       }
       return decodedBytes.toString('latin1');
@@ -829,20 +829,20 @@ export class LetterheadService {
    * Offline OCR Analysis and Zone Detection from file path on disk
    */
   async analyzeLetterhead(filePath: string, companyId?: string): Promise<LetterheadOCRResult> {
-    let buffer = Buffer.alloc(0);
-    try {
-      if (filePath) {
-        let safePath = filePath;
-        if (companyId) {
-          safePath = this.validateFilePathInsideUploadDir(companyId, filePath);
-        }
-        if (fs.existsSync(safePath)) {
-          buffer = fs.readFileSync(safePath);
-        }
-      }
-    } catch {
-      buffer = Buffer.alloc(0);
+    if (!filePath || typeof filePath !== 'string') {
+      throw new Error('Letterhead file path is required.');
     }
-    return this.analyzeLetterheadBuffer(buffer, filePath, filePath && fs.existsSync(filePath) ? filePath : undefined);
+    if (!companyId) {
+      throw new Error('Company identifier is required for letterhead analysis.');
+    }
+
+    // Enforce strict directory containment BEFORE checking file existence (prevents host file-existence oracle)
+    const safePath = this.validateFilePathInsideUploadDir(companyId, filePath);
+    if (!fs.existsSync(safePath)) {
+      throw new Error('Letterhead file not found in company upload directory.');
+    }
+
+    const buffer = fs.readFileSync(safePath);
+    return this.analyzeLetterheadBuffer(buffer, safePath, safePath);
   }
 }

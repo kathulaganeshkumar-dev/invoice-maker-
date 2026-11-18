@@ -1,288 +1,314 @@
-// src/renderer/views/ImportExportView.tsx - Excel, CSV & PDF/Image Letterhead Template Import
-import React, { useState, useEffect } from 'react';
+// src/renderer/views/ImportExportView.tsx - Full Excel & CSV Backup / Import Portability Engine
+import React, { useState, useRef } from 'react';
 import { api } from '../services/api';
-import { Company } from '../../shared/types';
-import { FileDown, FileUp, FileSpreadsheet, Stamp, CheckCircle, Sparkles } from 'lucide-react';
+import {
+  FileDown,
+  FileUp,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Upload,
+  Loader2,
+} from 'lucide-react';
 
 interface Props {
   companyId: string;
 }
 
+interface DataCategory {
+  id:
+    | 'customers'
+    | 'products'
+    | 'suppliers'
+    | 'purchases'
+    | 'inventory'
+    | 'payments-receivable'
+    | 'payments-suppliers';
+  title: string;
+  exportDesc: string;
+  importDesc: string;
+  exportUrl: (companyId: string) => string;
+}
+
+const DATA_CATEGORIES: DataCategory[] = [
+  {
+    id: 'customers',
+    title: 'Customers Directory',
+    exportDesc: 'All customer contacts, GSTIN, addresses, bank details, reminders, notes & balances',
+    importDesc: 'Import previous customer records (extra Excel columns auto-saved into Notes)',
+    exportUrl: (cid) => api.getCustomersExportUrl(cid),
+  },
+  {
+    id: 'products',
+    title: 'Products & Services Catalog',
+    exportDesc: 'Items, HSN/SAC, GST rates, purchase & min/max selling prices, stock & notes',
+    importDesc: 'Import products/services with categories, HSN, GST & min/max selling prices',
+    exportUrl: (cid) => api.getProductsExportUrl(cid),
+  },
+  {
+    id: 'suppliers',
+    title: 'Suppliers Directory',
+    exportDesc: 'All vendors, contacts, GSTIN, bank accounts, payment reminder days, notes & payables',
+    importDesc: 'Import previous vendor/supplier records (extra Excel columns auto-saved into Notes)',
+    exportUrl: (cid) => api.getSuppliersExportUrl(cid),
+  },
+  {
+    id: 'purchases',
+    title: 'Purchases & Vendor Bills',
+    exportDesc: 'All purchase bills, GST, overall discounts, balances, notes & line items',
+    importDesc: 'Import single-sheet or exported 2-sheet purchase bills (auto-links suppliers & stock)',
+    exportUrl: (cid) => api.getPurchasesExportUrl(cid),
+  },
+  {
+    id: 'inventory',
+    title: 'Inventory & Stock',
+    exportDesc: 'Warehouse stock balances, average cost, valuation, low-stock status & stock ledger',
+    importDesc: 'Import opening/current warehouse stock quantities, costs & minimum stock alerts',
+    exportUrl: (cid) => api.getInventoryExportUrl(cid),
+  },
+  {
+    id: 'payments-receivable',
+    title: 'Payments Receivable (Customers)',
+    exportDesc: 'Customer receipts, company bank accounts, invoice allocations & pending receivables',
+    importDesc: 'Import customer payment receipts with invoice numbers, payment mode, bank & notes',
+    exportUrl: (cid) => api.getPaymentsReceivableExportUrl(cid),
+  },
+  {
+    id: 'payments-suppliers',
+    title: 'Payments to Suppliers (Vendors)',
+    exportDesc: 'Vendor payouts, company & vendor banks, bill allocations & pending payables',
+    importDesc: 'Import supplier payments with purchase bill #, company bank, vendor bank & notes',
+    exportUrl: (cid) => api.getPaymentsToSuppliersExportUrl(cid),
+  },
+];
+
+interface ImportFeedback {
+  title: string;
+  imported: number;
+  updated: number;
+  skipped: number;
+  extraColumnsCaptured: string[];
+  errors: string[];
+}
+
 export const ImportExportView: React.FC<Props> = ({ companyId }) => {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [targetCompanyId, setTargetCompanyId] = useState<string>(companyId);
-  const [templateName, setTemplateName] = useState<string>('');
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
-  const [isDefault, setIsDefault] = useState<boolean>(false);
-  const [autoDetect, setAutoDetect] = useState<boolean>(true);
-  const [importing, setImporting] = useState<boolean>(false);
-  const [resultMsg, setResultMsg] = useState<string>('');
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<ImportFeedback | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  useEffect(() => {
-    if (companyId) setTargetCompanyId(companyId);
-    loadCompanies();
-  }, [companyId]);
-
-  const loadCompanies = async () => {
-    try {
-      const comps = await api.getCompanies();
-      setCompanies(comps);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleImportTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!templateFile) {
-      setErrorMsg('Please select a PDF, PNG, or JPG template file to import.');
-      return;
-    }
-    const cid = targetCompanyId || companyId;
-    if (!cid) {
-      setErrorMsg('Please select a target company.');
-      return;
-    }
-
-    setImporting(true);
-    setResultMsg('');
+  const handleFileChange = async (cat: DataCategory, file: File | null) => {
+    if (!file) return;
+    setImportingId(cat.id);
+    setFeedback(null);
     setErrorMsg('');
 
     try {
       const formData = new FormData();
-      formData.append('file', templateFile);
-      formData.append('target_company_id', cid);
-      if (templateName.trim()) formData.append('name', templateName.trim());
-      formData.append('is_default', String(isDefault));
-      formData.append('auto_detect', String(autoDetect));
-
-      const res = await api.importLetterhead(cid, formData);
-      const compName = companies.find((c) => c.id === cid)?.name || 'selected company';
-      const detected = [
-        res.analysis?.detected_entities?.company_name && `Company: ${res.analysis.detected_entities.company_name}`,
-        res.analysis?.detected_entities?.gstin && `GSTIN: ${res.analysis.detected_entities.gstin}`,
-      ]
-        .filter(Boolean)
-        .join(' • ');
-
-      setResultMsg(
-        `Imported "${res.template.name}" (${res.template.file_type}) into ${compName} → Letterheads & Templates.${
-          detected ? ` AI Detected: ${detected}` : ''
-        }`
-      );
-      setTemplateFile(null);
-      setTemplateName('');
+      formData.append('file', file);
+      const res = await api.importExcelData(companyId, cat.id, formData);
+      setFeedback({
+        title: cat.title,
+        imported: res.imported,
+        updated: res.updated,
+        skipped: res.skipped,
+        extraColumnsCaptured: res.extraColumnsCaptured || [],
+        errors: res.errors || [],
+      });
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to import template file');
+      setErrorMsg(`${cat.title}: ${err.message || 'Failed to import file'}`);
     } finally {
-      setImporting(false);
+      setImportingId(null);
+      const inputEl = fileInputRefs.current[cat.id];
+      if (inputEl) inputEl.value = '';
     }
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto">
+    <div className="p-6 space-y-5 overflow-y-auto">
       <div>
         <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
           <FileDown className="w-5 h-5 text-brand-600" />
-          <span>Excel, CSV & Template Import / Export Engine</span>
+          <span>Excel &amp; CSV Import / Export Engine</span>
         </h1>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-          Export full company data, download standardized Excel templates, or import PDF/Image letterhead templates
+          Export full company Excel backups or import previous data across all categories with automatic Notes capture
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Active Import Rules Callout */}
+      <div className="p-3.5 rounded-xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/70 text-xs text-slate-700 dark:text-slate-200 flex items-start space-x-2.5">
+        <Info className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div className="font-bold text-sky-900 dark:text-sky-200">
+            Import Rules Applied to Every Category (.xlsx / .csv)
+          </div>
+          <div className="text-[11px] text-slate-600 dark:text-slate-300 flex flex-wrap gap-x-4 gap-y-0.5">
+            <span><strong>1.</strong> All manual-entry fields match the Excel import template (and exported backups).</span>
+            <span><strong>2.</strong> Missing or empty cells are left blank automatically.</span>
+            <span><strong>3.</strong> Any extra columns in your sheet are automatically saved into <strong>Notes</strong>.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Import Success / Error Summary Banner */}
+      {feedback && (
+        <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center space-x-2 font-bold text-emerald-900 dark:text-emerald-200">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                Import Complete — {feedback.title}:{' '}
+                <strong>{feedback.imported}</strong> added
+                {feedback.updated > 0 ? `, ${feedback.updated} updated` : ''}
+                {feedback.skipped > 0 ? `, ${feedback.skipped} skipped` : ''}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFeedback(null)}
+              className="text-[11px] font-semibold text-emerald-700 hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          {feedback.extraColumnsCaptured.length > 0 && (
+            <div className="text-[11px] text-emerald-800 dark:text-emerald-300">
+              <strong>Extra columns automatically saved into Notes:</strong>{' '}
+              {feedback.extraColumnsCaptured.join(', ')}
+            </div>
+          )}
+
+          {feedback.errors.length > 0 && (
+            <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-1 max-h-32 overflow-y-auto">
+              <div className="font-bold flex items-center space-x-1 text-[11px]">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                <span>Row Notes / Warnings ({feedback.errors.length})</span>
+              </div>
+              {feedback.errors.slice(0, 15).map((err, i) => (
+                <div key={i} className="text-[11px] font-mono">
+                  • {err}
+                </div>
+              ))}
+              {feedback.errors.length > 15 && (
+                <div className="text-[10px] italic">
+                  ...and {feedback.errors.length - 15} more warnings.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold flex items-center justify-between">
+          <span>{errorMsg}</span>
+          <button type="button" onClick={() => setErrorMsg('')} className="text-[11px] underline ml-3">
+            Close
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Export Data Box */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
           <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
             <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-            <span>Export Company Master Data</span>
+            <span>Export Company Data (Excel Backups)</span>
           </div>
           <p className="text-xs text-slate-500">
-            Generate clean, formatted Excel workbooks containing complete master records for audits or offline analysis:
+            Generate clean, formatted Excel workbooks containing complete records for backups, audits, or offline analysis:
           </p>
 
-          <div className="space-y-2.5 pt-2">
-            <a
-              href={api.getCustomersExportUrl(companyId)}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-            >
-              <div>
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-100">Customers Directory</div>
-                <div className="text-[11px] text-slate-400">All customer contacts, GSTIN, addresses, and live balances</div>
-              </div>
-              <span className="text-xs font-bold text-brand-600">Download .xlsx</span>
-            </a>
-
-            <a
-              href={api.getProductsExportUrl(companyId)}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-            >
-              <div>
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-100">Products & Services Catalog</div>
-                <div className="text-[11px] text-slate-400">Items, HSN/SAC codes, GST tax rates, prices, and stock counts</div>
-              </div>
-              <span className="text-xs font-bold text-brand-600">Download .xlsx</span>
-            </a>
+          <div className="space-y-2.5 pt-1">
+            {DATA_CATEGORIES.map((cat) => (
+              <a
+                key={`export-${cat.id}`}
+                href={cat.exportUrl(companyId)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+              >
+                <div className="min-w-0">
+                  <div className="font-bold text-xs text-slate-800 dark:text-slate-100">{cat.title}</div>
+                  <div className="text-[11px] text-slate-400 truncate">{cat.exportDesc}</div>
+                </div>
+                <span className="text-xs font-bold text-brand-600 shrink-0">Download .xlsx</span>
+              </a>
+            ))}
           </div>
         </div>
 
-        {/* Import Templates Box */}
+        {/* Import Data & Templates Box */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
           <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
             <FileUp className="w-5 h-5 text-brand-600" />
-            <span>Download Standard Import Templates</span>
+            <span>Import Data &amp; Standard Excel Templates</span>
           </div>
           <p className="text-xs text-slate-500">
-            Use pre-formatted Excel template files with exact headers and column schemas for fast bulk population:
+            Download a blank template or upload your existing <strong>.xlsx / .csv</strong> file directly for each category:
           </p>
 
-          <div className="space-y-2.5 pt-2">
-            <a
-              href={api.getCustomerImportTemplateUrl()}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-            >
-              <div>
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-100">Customer Import Template</div>
-                <div className="text-[11px] text-slate-400">Pre-configured Excel file with sample data and validation rules</div>
-              </div>
-              <span className="text-xs font-bold text-emerald-600">Download Template</span>
-            </a>
+          <div className="space-y-2.5 pt-1">
+            {DATA_CATEGORIES.map((cat) => {
+              const isBusy = importingId === cat.id;
+              return (
+                <div
+                  key={`import-${cat.id}`}
+                  className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-xs text-slate-800 dark:text-slate-100">{cat.title}</div>
+                    <div className="text-[11px] text-slate-400 truncate">{cat.importDesc}</div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <a
+                      href={api.getImportTemplateUrl(cat.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                      title={`Download standard Excel template for ${cat.title}`}
+                    >
+                      Template
+                    </a>
+
+                    <input
+                      ref={(el) => {
+                        fileInputRefs.current[cat.id] = el;
+                      }}
+                      type="file"
+                      accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                      className="hidden"
+                      onChange={(e) => handleFileChange(cat, e.target.files?.[0] || null)}
+                    />
+                    <button
+                      type="button"
+                      disabled={importingId !== null}
+                      onClick={() => fileInputRefs.current[cat.id]?.click()}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold shadow-xs disabled:opacity-50 transition-colors cursor-pointer"
+                      title={`Upload .xlsx or .csv file to import ${cat.title}`}
+                    >
+                      {isBusy ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Importing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Import</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-
-        {/* Import New Template (PDF / Image) to Letterheads & Templates */}
-        <form
-          onSubmit={handleImportTemplate}
-          className="md:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
-              <Stamp className="w-5 h-5 text-brand-600" />
-              <span>Import New Template to Letterheads & Templates (PDF / PNG / JPG)</span>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300 flex items-center space-x-1">
-              <Sparkles className="w-3 h-3" />
-              <span>Offline AI Layout Detection</span>
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-500">
-            Upload a local PDF letterhead or PNG/JPG stationery template file. It is stored offline and added directly to your company&apos;s{' '}
-            <strong>Letterheads & Templates</strong> category for invoices and quotations.
-          </p>
-
-          {resultMsg && (
-            <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center space-x-2">
-              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{resultMsg}</span>
-            </div>
-          )}
-
-          {errorMsg && (
-            <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 text-xs font-semibold">
-              {errorMsg}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Assign to Company *
-              </label>
-              <select
-                value={targetCompanyId}
-                onChange={(e) => setTargetCompanyId(e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-900 font-semibold"
-              >
-                {companies.length === 0 ? (
-                  <option value={companyId}>Active Company</option>
-                ) : (
-                  companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.gstin ? `(${c.gstin})` : ''}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Template Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Company Head Office Letterhead"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Select PDF / Image Template *
-              </label>
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] || null;
-                  setTemplateFile(f);
-                  if (f && !templateName.trim()) {
-                    setTemplateName(f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim());
-                  }
-                }}
-                className="w-full border border-dashed border-brand-400 rounded-lg px-2.5 py-1.5 bg-brand-50/40 dark:bg-slate-900 cursor-pointer"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-1 text-xs">
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoDetect}
-                  onChange={(e) => setAutoDetect(e.target.checked)}
-                  className="rounded text-brand-600"
-                />
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  Auto-Detect Margins via Offline AI
-                </span>
-              </label>
-
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isDefault}
-                  onChange={(e) => setIsDefault(e.target.checked)}
-                  className="rounded text-brand-600"
-                />
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  Set as Company Default
-                </span>
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={importing || !templateFile}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer"
-            >
-              <FileUp className="w-4 h-4" />
-              <span>{importing ? 'Importing Template...' : 'Import to Letterheads & Templates'}</span>
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

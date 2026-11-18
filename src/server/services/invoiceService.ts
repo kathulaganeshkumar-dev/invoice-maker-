@@ -119,12 +119,25 @@ export class InvoiceService {
 
       for (let i = 0; i < lineInputs.length; i++) {
         const item = lineInputs[i];
+        const rawQty = new Decimal(item.quantity ?? 0);
+        const rawRate = new Decimal(item.rate ?? item.unit_price ?? 0);
+        const rawGst = new Decimal(item.gst_rate !== undefined ? item.gst_rate : 18);
+        if (!rawQty.isFinite() || rawQty.lte(0)) {
+          throw new Error(`Invalid quantity for item "${item.item_name || i + 1}": must be greater than zero.`);
+        }
+        if (!rawRate.isFinite() || rawRate.lt(0)) {
+          throw new Error(`Invalid rate for item "${item.item_name || i + 1}": cannot be negative.`);
+        }
+        if (!rawGst.isFinite() || rawGst.lt(0) || rawGst.gt(100)) {
+          throw new Error(`Invalid GST rate for item "${item.item_name || i + 1}": must be between 0% and 100%.`);
+        }
+
         const lineCalc = calculateLineItem({
-          quantity: item.quantity,
-          rate: item.rate ?? item.unit_price ?? 0,
+          quantity: rawQty.toString(),
+          rate: rawRate.toString(),
           discountPercentage: item.discount_percentage,
           discountAmount: item.discount_amount,
-          gstRate: item.gst_rate !== undefined ? item.gst_rate : 18,
+          gstRate: rawGst.toString(),
           isTaxInclusive: Boolean(item.is_tax_inclusive),
           isInterState,
         });
@@ -216,7 +229,11 @@ export class InvoiceService {
       };
 
       const { items, ...invoiceRow } = newInvoice;
-      await trx('invoices').insert(invoiceRow);
+      await trx('invoices').insert({
+        ...invoiceRow,
+        created_by_device_id: input.created_by_device_id || null,
+        created_by_device_name: input.created_by_device_name || null,
+      });
 
       for (const item of calculatedItems) {
         await trx('invoice_items').insert(item);
@@ -331,9 +348,29 @@ export class InvoiceService {
         }
 
         const warehouseId = warehouse.id;
+        const compSettings = await trx('company_settings').where({ company_id: companyId }).first();
+        const allowNegativeStock = Boolean(compSettings?.allow_negative_stock);
 
         for (const item of trackedProductItems) {
           const qtyOut = new Decimal(item.quantity);
+
+          // Decrement product current_stock (enforcing allow_negative_stock policy)
+          const prod = await trx('products').where({ id: item.item_id, company_id: companyId }).first();
+          if (prod) {
+            const currentProdStock = new Decimal(prod.current_stock || 0);
+            const newProdStock = currentProdStock.sub(qtyOut);
+            if (!allowNegativeStock && newProdStock.lt(0)) {
+              throw new Error(
+                `Insufficient stock for "${prod.name}" (available: ${currentProdStock.toFixed(2)}, requested: ${qtyOut.toFixed(2)}). Enable "Allow Negative Stock" in Settings to override.`
+              );
+            }
+            await trx('products')
+              .where({ id: item.item_id, company_id: companyId })
+              .update({
+                current_stock: newProdStock.toFixed(2),
+                updated_at: now,
+              });
+          }
 
           // Record outward stock movement
           await trx('inventory_transactions').insert({
@@ -353,18 +390,6 @@ export class InvoiceService {
             transaction_date: inv.invoice_date,
             created_at: now,
           });
-
-          // Decrement product current_stock
-          const prod = await trx('products').where({ id: item.item_id, company_id: companyId }).first();
-          if (prod) {
-            const newProdStock = new Decimal(prod.current_stock || 0).sub(qtyOut);
-            await trx('products')
-              .where({ id: item.item_id, company_id: companyId })
-              .update({
-                current_stock: newProdStock.toFixed(2),
-                updated_at: now,
-              });
-          }
 
           // Update stock_balances
           const existingBalance = await trx('stock_balances')
@@ -401,13 +426,29 @@ export class InvoiceService {
   }
 
   /**
+   * Finalizes an existing draft invoice atomically
+   */
+  async finalizeInvoice(companyId: string, invoiceId: string): Promise<Invoice> {
+    return this.db.transaction(async (trx) => {
+      return this.finalizeInvoiceInTrx(trx, companyId, invoiceId);
+    });
+  }
+
+  /**
    * Internal transactional mark-as-paid helper
    */
   private async markPaidInTrx(
     trx: Knex.Transaction,
     companyId: string,
     invoiceId: string,
-    options?: { amount?: string | number; paymentMethod?: string; paymentDate?: string; referenceNumber?: string; notes?: string }
+    options?: {
+      amount?: string | number;
+      paymentMethod?: string;
+      paymentDate?: string;
+      referenceNumber?: string;
+      notes?: string;
+      closeRemainingBalance?: boolean;
+    }
   ): Promise<Invoice> {
     let inv = await trx('invoices').where({ company_id: companyId, id: invoiceId }).first();
     if (!inv) {
@@ -680,6 +721,22 @@ export class InvoiceService {
               .update({
                 current_stock: restoredStock.toFixed(2),
                 updated_at: now,
+              });
+          }
+
+          // Restore warehouse stock_balances so warehouse ledger stays synchronized with products.current_stock
+          const existingBal = await trx('stock_balances')
+            .where({ company_id: companyId, warehouse_id: mov.warehouse_id, product_id: mov.product_id })
+            .first();
+          if (existingBal) {
+            const newWhQty = new Decimal(existingBal.quantity_on_hand || 0).add(qty);
+            const avgCost = new Decimal(existingBal.average_unit_cost || mov.unit_cost || 0);
+            await trx('stock_balances')
+              .where({ id: existingBal.id })
+              .update({
+                quantity_on_hand: newWhQty.toFixed(2),
+                total_stock_value: newWhQty.mul(avgCost).toFixed(2),
+                last_updated_at: now,
               });
           }
         }

@@ -68,12 +68,13 @@ export async function initDatabase(config?: DbConfig): Promise<Knex> {
 
   if (dbType === 'postgres') {
     const connString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false';
     db = knex({
       client: 'pg',
       connection: connString
         ? {
             connectionString: connString,
-            ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+            ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized },
           }
         : {
             host: config?.pgHost || process.env.PGHOST || '127.0.0.1',
@@ -81,7 +82,7 @@ export async function initDatabase(config?: DbConfig): Promise<Knex> {
             database: config?.pgDatabase || process.env.PGDATABASE || 'invoice_manager',
             user: config?.pgUser || process.env.PGUSER || 'postgres',
             password: config?.pgPassword || process.env.PGPASSWORD || 'postgres',
-            ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
+            ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized } : false,
           },
       pool: { min: 0, max: 10 },
     });
@@ -102,7 +103,10 @@ export async function initDatabase(config?: DbConfig): Promise<Knex> {
         min: 1,
         max: 1,
         afterCreate: (conn: any, cb: any) => {
-          conn.run('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;', cb);
+          conn.run(
+            'PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;',
+            cb
+          );
         },
       },
     });

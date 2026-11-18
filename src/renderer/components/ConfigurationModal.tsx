@@ -1,7 +1,8 @@
 // src/renderer/components/ConfigurationModal.tsx - Comprehensive Business & Global Configuration
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CompanySettings, AppSettings, Company, NumberingSequence } from '../../shared/types';
-import { api } from '../services/api';
+import { api, setLocalDeviceIdentity, setSessionAdminPin, getSessionAdminPin } from '../services/api';
+import { ModalPortal } from './ModalPortal';
 import {
   Settings,
   DollarSign,
@@ -18,9 +19,18 @@ import {
   Check,
   AlertCircle,
   RefreshCw,
+  RotateCcw,
   Upload,
   Loader2,
   Building2,
+  Monitor,
+  Trash2,
+  Shield,
+  Lock,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Plus,
 } from 'lucide-react';
 
 interface Props {
@@ -43,15 +53,93 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
-  // Database Connection Test State
-  const [testDbLoading, setTestDbLoading] = useState<boolean>(false);
-  const [testDbResult, setTestDbResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [resetting, setResetting] = useState<boolean>(false);
+  const [iconSaving, setIconSaving] = useState<boolean>(false);
+  const [iconStatus, setIconStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Interactive Software Icon Calibrator State
+  const [iconSourceImg, setIconSourceImg] = useState<HTMLImageElement | null>(null);
+  const [iconNaturalDims, setIconNaturalDims] = useState<{ width: number; height: number } | null>(null);
+  const [iconFitMode, setIconFitMode] = useState<'COVER' | 'CONTAIN'>('COVER');
+  const [iconZoom, setIconZoom] = useState<number>(1);
+  const [iconOffsetX, setIconOffsetX] = useState<number>(0);
+  const [iconOffsetY, setIconOffsetY] = useState<number>(0);
+  const [iconRounded, setIconRounded] = useState<boolean>(true);
+  const [iconBgColor, setIconBgColor] = useState<string>('transparent');
+  const [calibratedIconPreview, setCalibratedIconPreview] = useState<string | null>(null);
+  const iconDragRef = useRef<{ startX: number; startY: number; origOffX: number; origOffY: number } | null>(null);
+
+  // Direct Desktop-to-Desktop LAN Connect state (per-PC Electron config)
+  const [lanRole, setLanRole] = useState<'STANDALONE' | 'LAN_HOST' | 'LAN_CLIENT'>('STANDALONE');
+  const [lanHostIp, setLanHostIp] = useState<string>('');
+  const [lanPort, setLanPort] = useState<number>(4200);
+  const [lanDeviceId, setLanDeviceId] = useState<string>('');
+  const [lanDeviceName, setLanDeviceName] = useState<string>('');
+  const [lanStaffName, setLanStaffName] = useState<string>('');
+  const [lanMinimizeToTray, setLanMinimizeToTray] = useState<boolean>(true);
+  const [lanAutoStartOnBoot, setLanAutoStartOnBoot] = useState<boolean>(false);
+  const [lanLocalIps, setLanLocalIps] = useState<string[]>([]);
+  const [lanConnectedUrl, setLanConnectedUrl] = useState<string>('');
+  const [isElectronDesktop, setIsElectronDesktop] = useState<boolean>(false);
+  const [lanTesting, setLanTesting] = useState<boolean>(false);
+  const [lanSaving, setLanSaving] = useState<boolean>(false);
+  const [lanStatus, setLanStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [copiedIp, setCopiedIp] = useState<string>('');
+
+  // Host Staff Creation & Permissions state
+  const [hostNewStaffName, setHostNewStaffName] = useState<string>('');
+  const [hostNewStaffMenus, setHostNewStaffMenus] = useState<string[]>([
+    'invoices',
+    'invoices_other',
+    'quotations',
+    'customers',
+    'suppliers',
+    'products',
+    'purchases',
+    'inventory',
+    'payments',
+  ]);
+  const [hostNewStaffCanSettings, setHostNewStaffCanSettings] = useState<boolean>(false);
+  const [hostCreatingStaff, setHostCreatingStaff] = useState<boolean>(false);
+  const [expandedStaffId, setExpandedStaffId] = useState<string | null>(null);
+
+  // MD / Admin Menu Permissions state
+  const [permLoading, setPermLoading] = useState<boolean>(false);
+  const [permHasAdminPin, setPermHasAdminPin] = useState<boolean>(true);
+  const [permHasCustomPin, setPermHasCustomPin] = useState<boolean>(false);
+  const [permUnlocked, setPermUnlocked] = useState<boolean>(false);
+  const [permPinInput, setPermPinInput] = useState<string>('');
+  const [permCurrentPin, setPermCurrentPin] = useState<string>('');
+  const [permNewPin, setPermNewPin] = useState<string>('');
+  const [permWorkstations, setPermWorkstations] = useState<any[]>([]);
+  const [permDefaultStaffMenus, setPermDefaultStaffMenus] = useState<string[]>([]);
+  const [permMenuCatalog, setPermMenuCatalog] = useState<{ id: string; label: string; group: string }[]>([]);
+  const [permPresets, setPermPresets] = useState<Record<string, any>>({});
+  const [permStatus, setPermStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [permSavingId, setPermSavingId] = useState<string | null>(null);
+
+  // 4-Digit PIN Authorization Modal state
+  const [pinPromptState, setPinPromptState] = useState<{
+    type: 'CREATE_STAFF' | 'SAVE_STAFF' | 'DELETE_STAFF';
+    title: string;
+    description: string;
+    data?: any;
+  } | null>(null);
+  const [pinPromptInput, setPinPromptInput] = useState<string>('');
+  const [pinPromptError, setPinPromptError] = useState<string>('');
+  const [pinPromptLoading, setPinPromptLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
-      if (!companyId && activeCategory !== 'Deployment_Mode') {
+      if (
+        !companyId &&
+        activeCategory !== 'Deployment_Mode' &&
+        activeCategory !== 'Factory_Reset' &&
+        activeCategory !== 'Software_Icon'
+      ) {
         setActiveCategory('Deployment_Mode');
       }
+      setIconStatus(null);
       loadAllSettings();
     }
   }, [isOpen, companyId]);
@@ -65,6 +153,44 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         setAppSettings(as);
       } catch (e: any) {
         console.warn('Could not load app settings:', e);
+      }
+
+      // Load Direct Desktop-to-Desktop LAN configuration (Electron IPC or local network-info fallback)
+      try {
+        const electronAPI = (window as any)?.electronAPI;
+        if (electronAPI?.getLanConfig) {
+          const info = await electronAPI.getLanConfig();
+          setIsElectronDesktop(true);
+          setLanRole(info?.config?.role || 'STANDALONE');
+          setLanHostIp(info?.config?.hostIp || '');
+          setLanPort(Number(info?.config?.port) || 4200);
+          setLanDeviceId(info?.config?.deviceId || '');
+          setLanDeviceName(info?.config?.deviceName || '');
+          setLanStaffName(info?.config?.staffName || '');
+          setLanMinimizeToTray(info?.config?.minimizeToTray !== false);
+          setLanAutoStartOnBoot(Boolean(info?.config?.autoStartOnBoot));
+          setLanLocalIps(Array.isArray(info?.localIps) ? info.localIps : []);
+          setLanConnectedUrl(info?.connectedUrl || '');
+        } else {
+          setIsElectronDesktop(false);
+          try {
+            setLanDeviceId(localStorage.getItem('eim_device_id') || '');
+            setLanDeviceName(localStorage.getItem('eim_device_name') || 'Office PC');
+            setLanStaffName(localStorage.getItem('eim_staff_name') || '');
+          } catch {
+            // ignore
+          }
+          const netInfo = await api.getNetworkInfo().catch(() => null);
+          if (netInfo) {
+            setLanLocalIps(Array.isArray(netInfo.localIps) ? netInfo.localIps : []);
+            setLanPort(Number(netInfo.serverPort) || 4200);
+            if (netInfo.serverHost === '0.0.0.0') {
+              setLanRole('LAN_HOST');
+            }
+          }
+        }
+      } catch (lanErr) {
+        console.warn('Could not load LAN config:', lanErr);
       }
 
       if (companyId) {
@@ -90,22 +216,38 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   };
 
   const handleSave = async () => {
-    if (!companySettings && !appSettings) return;
+    setLoading(true);
     try {
       if (companyId && companySettings) {
-        await api.updateCompanySettings(companyId, companySettings);
+        await api.updateCompanySettings(companyId, {
+          ...companySettings,
+          invoice_overdue_days: Number(companySettings.invoice_overdue_days) || 0,
+          quotation_validity_days: Number(companySettings.quotation_validity_days) || 30,
+        });
       }
       if (appSettings) {
-        await api.updateAppSettings(appSettings);
+        await api.updateAppSettings({
+          ...appSettings,
+        });
       }
       if (company) {
         await api.updateCompany(company.id, company);
       }
+      if (activeCategory === 'Deployment_Mode') {
+        try {
+          await handleSaveLanDesktopConfig(false);
+        } catch {
+          // ignore
+        }
+      }
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2500);
+      window.dispatchEvent(new Event('eim-permissions-changed'));
+      onClose();
     } catch (err: any) {
       console.error('Error saving settings:', err);
       alert('Error saving settings: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -137,10 +279,214 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     updateCompanyField('logo_url', '');
   };
 
+  const renderCalibratedIconDataUrl = (
+    img: HTMLImageElement,
+    fitMode: 'COVER' | 'CONTAIN',
+    zoom: number,
+    offX: number,
+    offY: number,
+    rounded: boolean,
+    bgColor: string
+  ): string => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+
+    if (rounded) {
+      const r = 48; // Matches rounded-lg proportions (6px on 32px icon -> 48px on 256px)
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(size - r, 0);
+      ctx.quadraticCurveTo(size, 0, size, r);
+      ctx.lineTo(size, size - r);
+      ctx.quadraticCurveTo(size, size, size - r, size);
+      ctx.lineTo(r, size);
+      ctx.quadraticCurveTo(0, size, 0, size - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    if (bgColor && bgColor !== 'transparent') {
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, size, size);
+    }
+
+    const baseScale =
+      fitMode === 'COVER'
+        ? Math.max(size / img.width, size / img.height)
+        : Math.min(size / img.width, size / img.height);
+    const scale = baseScale * zoom;
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
+    const x = (size - drawW) / 2 + offX;
+    const y = (size - drawH) / 2 + offY;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, x, y, drawW, drawH);
+    ctx.restore();
+
+    return canvas.toDataURL('image/png');
+  };
+
+  useEffect(() => {
+    if (!iconSourceImg) {
+      setCalibratedIconPreview(null);
+      return;
+    }
+    const url = renderCalibratedIconDataUrl(
+      iconSourceImg,
+      iconFitMode,
+      iconZoom,
+      iconOffsetX,
+      iconOffsetY,
+      iconRounded,
+      iconBgColor
+    );
+    setCalibratedIconPreview(url);
+  }, [iconSourceImg, iconFitMode, iconZoom, iconOffsetX, iconOffsetY, iconRounded, iconBgColor]);
+
+  const handleSoftwareIconFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIconStatus(null);
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setIconStatus({ type: 'error', message: 'Could not read the selected image file.' });
+    };
+    reader.onload = () => {
+      const src = String(reader.result || '');
+      const img = new Image();
+      img.onerror = () => {
+        setIconStatus({
+          type: 'error',
+          message: 'Unsupported or corrupted image file. Please choose a PNG, JPG, WebP, SVG, or ICO image.',
+        });
+      };
+      img.onload = () => {
+        setIconNaturalDims({ width: img.width, height: img.height });
+        setIconSourceImg(img);
+        setIconFitMode('COVER');
+        setIconZoom(1);
+        setIconOffsetX(0);
+        setIconOffsetY(0);
+        setIconRounded(true);
+        setIconBgColor('transparent');
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleIconCanvasPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!iconSourceImg) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    iconDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origOffX: iconOffsetX,
+      origOffY: iconOffsetY,
+    };
+  };
+
+  const handleIconCanvasPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!iconDragRef.current) return;
+    // Preview box is 160px representing 256px canvas -> scale pointer delta by 256/160
+    const factor = 256 / 160;
+    const nextX = Math.max(-128, Math.min(128, Math.round(iconDragRef.current.origOffX + (e.clientX - iconDragRef.current.startX) * factor)));
+    const nextY = Math.max(-128, Math.min(128, Math.round(iconDragRef.current.origOffY + (e.clientY - iconDragRef.current.startY) * factor)));
+    setIconOffsetX(nextX);
+    setIconOffsetY(nextY);
+  };
+
+  const handleIconCanvasPointerUp = () => {
+    iconDragRef.current = null;
+  };
+
+  const handleApplyCalibratedSoftwareIcon = async () => {
+    const finalDataUrl = calibratedIconPreview || appSettings?.software_icon || null;
+    if (!finalDataUrl) return;
+
+    setIconSaving(true);
+    setIconStatus(null);
+    try {
+      const res = await api.applySoftwareIcon(finalDataUrl);
+
+      setAppSettings((prev) => (prev ? { ...prev, software_icon: finalDataUrl } : prev));
+      window.dispatchEvent(new CustomEvent('eim-software-icon-changed', { detail: finalDataUrl }));
+
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.setSoftwareIcon) {
+        await electronAPI.setSoftwareIcon(finalDataUrl).catch(() => {});
+      }
+
+      setIconStatus({
+        type: 'success',
+        message: res.message || 'Software icon calibrated and applied to Desktop & App!',
+      });
+    } catch (err: any) {
+      setIconStatus({
+        type: 'error',
+        message: err?.message || 'Failed to apply software icon.',
+      });
+    } finally {
+      setIconSaving(false);
+    }
+  };
+
+  const handleResetSoftwareIcon = async () => {
+    setIconSaving(true);
+    setIconStatus(null);
+    try {
+      const res = await api.applySoftwareIcon(null);
+      setIconSourceImg(null);
+      setIconNaturalDims(null);
+      setCalibratedIconPreview(null);
+      setAppSettings((prev) => (prev ? { ...prev, software_icon: null } : prev));
+      window.dispatchEvent(new CustomEvent('eim-software-icon-changed', { detail: null }));
+
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.setSoftwareIcon) {
+        await electronAPI.setSoftwareIcon(null).catch(() => {});
+      }
+
+      setIconStatus({
+        type: 'success',
+        message: res.message || 'Software icon reset to default.',
+      });
+    } catch (err: any) {
+      setIconStatus({
+        type: 'error',
+        message: err?.message || 'Failed to reset software icon.',
+      });
+    } finally {
+      setIconSaving(false);
+    }
+  };
+
   const handleUpdateSequence = async (seqId: string) => {
     if (!companyId) return;
     try {
-      await api.updateSequence(companyId, seqId, seqFormData);
+      const normalizedSeq: Partial<NumberingSequence> = {
+        ...seqFormData,
+        ...(seqFormData.current_number !== undefined
+          ? { current_number: Number(seqFormData.current_number) || 0 }
+          : {}),
+        ...(seqFormData.padding_length !== undefined
+          ? { padding_length: Number(seqFormData.padding_length) || 4 }
+          : {}),
+      };
+      await api.updateSequence(companyId, seqId, normalizedSeq);
       const updated = await api.getSequences(companyId);
       setSequences(updated);
       setEditingSeqId(null);
@@ -151,30 +497,403 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     }
   };
 
-  const handleTestDatabaseConnection = async () => {
-    if (!appSettings) return;
-    setTestDbLoading(true);
-    setTestDbResult(null);
+  const handleTestLanHost = async () => {
+    setLanTesting(true);
+    setLanStatus(null);
     try {
-      const res = await api.testDatabaseConnection({
-        pg_host: appSettings.pg_host,
-        pg_port: appSettings.pg_port || 5432,
-        pg_database: appSettings.pg_database,
-        pg_user: appSettings.pg_user,
-        pg_password: appSettings.pg_password,
-      });
-      setTestDbResult({ success: true, message: res.message || 'Connection successful!' });
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.testLanHost) {
+        const res = await electronAPI.testLanHost(lanHostIp.trim(), Number(lanPort) || 4200);
+        setLanStatus({ success: Boolean(res?.success), message: res?.message || 'Test completed.' });
+      } else {
+        setLanStatus({
+          success: false,
+          message: 'Direct Desktop LAN test is available inside the installed Enterprise Invoice Manager desktop app.',
+        });
+      }
     } catch (err: any) {
-      setTestDbResult({ success: false, message: err.message || 'Connection failed' });
+      setLanStatus({ success: false, message: err?.message || 'Failed to test Main PC connection.' });
     } finally {
-      setTestDbLoading(false);
+      setLanTesting(false);
+    }
+  };
+
+  const handleSaveLanDesktopConfig = async (
+    relaunchAfterSave: boolean,
+    targetRole?: 'STANDALONE' | 'LAN_HOST' | 'LAN_CLIENT'
+  ) => {
+    const roleToSave = targetRole || lanRole;
+    setLanSaving(true);
+    setLanStatus(null);
+    try {
+      const electronAPI = (window as any)?.electronAPI;
+      if (!electronAPI?.setLanConfig) {
+        if (roleToSave === 'LAN_CLIENT' && !lanHostIp.trim()) {
+          setLanStatus({
+            success: false,
+            message: 'Please enter the Main Office PC IP address (for example: 192.168.1.100).',
+          });
+          return;
+        }
+        if (roleToSave === 'LAN_CLIENT' && !lanStaffName.trim()) {
+          setLanStatus({
+            success: false,
+            message: 'Please enter your assigned Staff Name given by the Host PC.',
+          });
+          return;
+        }
+        setLocalDeviceIdentity(
+          lanDeviceId || 'web-pc',
+          roleToSave === 'LAN_CLIENT' ? lanStaffName.trim() : lanDeviceName.trim() || 'Office PC',
+          roleToSave === 'LAN_CLIENT' ? lanStaffName.trim() : ''
+        );
+        window.dispatchEvent(new Event('eim-permissions-changed'));
+        setLanStatus({
+          success: true,
+          message:
+            roleToSave === 'STANDALONE'
+              ? 'Standalone Mode is active! You can continue using the software.'
+              : roleToSave === 'LAN_HOST'
+              ? 'Host Mode active! Office database is ready for staff connections.'
+              : `Connected as Staff: "${lanStaffName.trim()}"! Permissions recognized.`,
+        });
+        return;
+      }
+
+      if (roleToSave === 'LAN_CLIENT') {
+        if (!lanHostIp.trim()) {
+          setLanStatus({
+            success: false,
+            message: 'Please enter the Main Office PC IP address (for example: 192.168.1.100).',
+          });
+          return;
+        }
+        if (!lanStaffName.trim()) {
+          setLanStatus({
+            success: false,
+            message: 'Please enter your assigned Staff Name given by the Host PC.',
+          });
+          return;
+        }
+      }
+
+      const effectiveDeviceName = roleToSave === 'LAN_CLIENT' ? lanStaffName.trim() : lanDeviceName.trim();
+      const savedRes = await electronAPI.setLanConfig({
+        role: roleToSave,
+        hostIp: lanHostIp.trim(),
+        port: Number(lanPort) || 4200,
+        deviceName: effectiveDeviceName || undefined,
+        staffName: roleToSave === 'LAN_CLIENT' ? lanStaffName.trim() : undefined,
+        minimizeToTray: lanMinimizeToTray,
+        autoStartOnBoot: lanAutoStartOnBoot,
+      });
+
+      if (savedRes?.config?.deviceId) {
+        setLocalDeviceIdentity(
+          savedRes.config.deviceId,
+          effectiveDeviceName || savedRes.config.deviceName,
+          roleToSave === 'LAN_CLIENT' ? lanStaffName.trim() : ''
+        );
+        api.getMyWorkstationPermission().catch(() => {});
+        window.dispatchEvent(new Event('eim-permissions-changed'));
+      }
+
+      if (relaunchAfterSave && electronAPI.relaunchApp) {
+        await electronAPI.relaunchApp();
+        return;
+      }
+
+      setLanStatus({
+        success: true,
+        message:
+          roleToSave === 'STANDALONE'
+            ? 'Standalone Mode saved! Ready to continue.'
+            : roleToSave === 'LAN_HOST'
+            ? 'Host Mode configured! Staff PCs can now connect to this PC.'
+            : `Connected to Host as Staff: "${lanStaffName.trim()}"! Permissions recognized.`,
+      });
+    } catch (err: any) {
+      setLanStatus({ success: false, message: err?.message || 'Could not save LAN configuration.' });
+    } finally {
+      setLanSaving(false);
+    }
+  };
+
+  const handleInitiateCreateStaff = () => {
+    const clean = hostNewStaffName.trim();
+    if (!clean) {
+      setPermStatus({ success: false, message: 'Please enter a name for the staff member.' });
+      return;
+    }
+    setPinPromptState({
+      type: 'CREATE_STAFF',
+      title: `Create Staff Member "${clean}"`,
+      description: `Enter the 4-digit MD / Admin PIN to authorize and create staff member "${clean}" with ${hostNewStaffMenus.length} allowed menus:`,
+      data: {
+        staffName: clean,
+        allowedMenus: [...hostNewStaffMenus],
+        canOpenSettings: hostNewStaffCanSettings,
+      },
+    });
+    setPinPromptInput('');
+    setPinPromptError('');
+  };
+
+  const handleInitiateSaveWorkstation = (ws: any) => {
+    setPinPromptState({
+      type: 'SAVE_STAFF',
+      title: `Save Permissions for "${ws.device_name}"`,
+      description: `Enter the 4-digit MD / Admin PIN to authorize and save updated menu permissions for "${ws.device_name}":`,
+      data: { ws },
+    });
+    setPinPromptInput('');
+    setPinPromptError('');
+  };
+
+  const handleInitiateDeleteWorkstation = (ws: any) => {
+    setPinPromptState({
+      type: 'DELETE_STAFF',
+      title: `Remove Staff Member "${ws.device_name}"`,
+      description: `Enter the 4-digit MD / Admin PIN to authorize deleting staff member "${ws.device_name}" from office records:`,
+      data: { ws },
+    });
+    setPinPromptInput('');
+    setPinPromptError('');
+  };
+
+  const handleConfirmPinAction = async () => {
+    if (!pinPromptState) return;
+    const cleanPin = pinPromptInput.trim();
+    if (!/^\d{4}$/.test(cleanPin)) {
+      setPinPromptError('PIN must be exactly 4 numeric digits (0-9).');
+      return;
+    }
+    setPinPromptLoading(true);
+    setPinPromptError('');
+    try {
+      if (pinPromptState.type === 'CREATE_STAFF') {
+        const { staffName, allowedMenus, canOpenSettings } = pinPromptState.data;
+        await api.createStaffMember(staffName, allowedMenus, canOpenSettings, cleanPin);
+        setPermStatus({
+          success: true,
+          message: `Staff member "${staffName}" created with ${allowedMenus.length} allowed menus!`,
+        });
+        setHostNewStaffName('');
+        setHostNewStaffMenus(
+          permDefaultStaffMenus.length > 0
+            ? [...permDefaultStaffMenus]
+            : ['invoices', 'invoices_other', 'quotations', 'customers', 'suppliers', 'products', 'purchases', 'inventory', 'payments']
+        );
+        await loadWorkstationPermissions();
+      } else if (pinPromptState.type === 'SAVE_STAFF') {
+        const { ws } = pinPromptState.data;
+        setPermSavingId(ws.device_id);
+        await api.updateWorkstationPermission(
+          ws.device_id,
+          {
+            device_name: ws.device_name,
+            is_admin: Boolean(ws.is_admin),
+            allowed_menus: ws.allowed_menus,
+            can_open_settings: Boolean(ws.can_open_settings),
+          },
+          cleanPin
+        );
+        setPermStatus({ success: true, message: `Saved menu permissions for "${ws.device_name}"!` });
+        window.dispatchEvent(new Event('eim-permissions-changed'));
+        await loadWorkstationPermissions();
+      } else if (pinPromptState.type === 'DELETE_STAFF') {
+        const { ws } = pinPromptState.data;
+        await api.deleteWorkstation(ws.device_id, cleanPin);
+        setPermStatus({ success: true, message: `Removed staff member "${ws.device_name}".` });
+        await loadWorkstationPermissions();
+      }
+      setSessionAdminPin(cleanPin);
+      setPinPromptState(null);
+      setPinPromptInput('');
+    } catch (err: any) {
+      setPinPromptError(err?.message || 'Incorrect 4-digit MD / Admin PIN.');
+    } finally {
+      setPinPromptLoading(false);
+      setPermSavingId(null);
+    }
+  };
+
+  const handleCopyLanIp = (ip: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(ip).catch(() => {});
+    }
+    setCopiedIp(ip);
+    setTimeout(() => setCopiedIp(''), 1800);
+  };
+
+  const loadWorkstationPermissions = async () => {
+    setPermLoading(true);
+    setPermStatus(null);
+    try {
+      const me = await api.getMyWorkstationPermission();
+      setPermHasAdminPin(true);
+      setPermHasCustomPin(Boolean(me.has_custom_pin));
+      setPermMenuCatalog(me.menu_catalog || []);
+      setPermPresets(me.presets || {});
+
+      try {
+        const listRes = await api.getWorkstations();
+        setPermWorkstations(listRes.workstations || []);
+        setPermDefaultStaffMenus(listRes.default_staff_menus || []);
+        setPermHasCustomPin(Boolean(listRes.has_custom_pin ?? me.has_custom_pin));
+        setPermUnlocked(true);
+      } catch {
+        setPermUnlocked(false);
+      }
+    } catch (err: any) {
+      setPermStatus({ success: false, message: err?.message || 'Could not load workstation permissions.' });
+    } finally {
+      setPermLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && activeCategory === 'Deployment_Mode') {
+      loadWorkstationPermissions();
+    }
+  }, [isOpen, activeCategory]);
+
+  const handleUnlockPermissions = async () => {
+    if (!permPinInput.trim()) return;
+    setPermStatus(null);
+    try {
+      await api.verifyAdminPin(permPinInput.trim());
+      setSessionAdminPin(permPinInput.trim());
+      setPermPinInput('');
+      await loadWorkstationPermissions();
+    } catch (err: any) {
+      setPermStatus({ success: false, message: err?.message || 'Incorrect MD / Admin PIN.' });
+    }
+  };
+
+  const handleUpdateAdminPin = async () => {
+    setPermStatus(null);
+    try {
+      const cur = permCurrentPin.trim() || null;
+      const next = permNewPin.trim();
+      if (!/^\d{4}$/.test(next)) {
+        setPermStatus({ success: false, message: 'New PIN must be exactly 4 numeric digits (0-9).' });
+        return;
+      }
+      if (permHasCustomPin && (!cur || !/^\d{4}$/.test(cur))) {
+        setPermStatus({ success: false, message: 'Please enter your current 4-digit PIN.' });
+        return;
+      }
+      const res = await api.setAdminPin(next, cur || (permHasCustomPin ? undefined : '1234'));
+      setPermHasAdminPin(Boolean(res.has_admin_pin));
+      setPermHasCustomPin(true);
+      setSessionAdminPin(next || '');
+      setPermCurrentPin('');
+      setPermNewPin('');
+      setPermStatus({
+        success: true,
+        message: '4-digit MD / Admin PIN saved securely!',
+      });
+      await loadWorkstationPermissions();
+    } catch (err: any) {
+      setPermStatus({ success: false, message: err?.message || 'Could not update MD / Admin PIN.' });
+    }
+  };
+
+  const toggleWorkstationMenu = (deviceId: string, menuId: string) => {
+    setPermWorkstations((prev) =>
+      prev.map((ws) => {
+        if (ws.device_id !== deviceId) return ws;
+        const curr: string[] = Array.isArray(ws.allowed_menus) ? ws.allowed_menus : [];
+        const next = curr.includes(menuId) ? curr.filter((m) => m !== menuId) : [...curr, menuId];
+        return { ...ws, is_admin: false, allowed_menus: next };
+      })
+    );
+  };
+
+  const applyPresetToWorkstation = (deviceId: string, presetKey: string) => {
+    const preset = permPresets[presetKey];
+    if (!preset) return;
+    setPermWorkstations((prev) =>
+      prev.map((ws) =>
+        ws.device_id === deviceId
+          ? {
+              ...ws,
+              is_admin: Boolean(preset.is_admin),
+              can_open_settings: Boolean(preset.can_open_settings),
+              allowed_menus: [...(preset.allowed_menus || [])],
+            }
+          : ws
+      )
+    );
+  };
+
+  const handleSaveWorkstationPermission = async (ws: any) => {
+    setPermSavingId(ws.device_id);
+    setPermStatus(null);
+    try {
+      await api.updateWorkstationPermission(ws.device_id, {
+        device_name: ws.device_name,
+        is_admin: Boolean(ws.is_admin),
+        allowed_menus: ws.allowed_menus,
+        can_open_settings: Boolean(ws.can_open_settings),
+      });
+      setPermStatus({ success: true, message: `Saved menu permissions for "${ws.device_name}"!` });
+      window.dispatchEvent(new Event('eim-permissions-changed'));
+      await loadWorkstationPermissions();
+    } catch (err: any) {
+      setPermStatus({ success: false, message: err?.message || 'Failed to save workstation permissions.' });
+    } finally {
+      setPermSavingId(null);
+    }
+  };
+
+  const handleDeleteWorkstation = async (ws: any) => {
+    if (!window.confirm(`Remove "${ws.device_name}" from the office permissions list?`)) return;
+    try {
+      await api.deleteWorkstation(ws.device_id);
+      await loadWorkstationPermissions();
+    } catch (err: any) {
+      setPermStatus({ success: false, message: err?.message || 'Could not remove workstation.' });
+    }
+  };
+
+  const handleSaveDefaultStaffMenus = async () => {
+    setPermStatus(null);
+    try {
+      await api.updateDefaultStaffMenus(permDefaultStaffMenus);
+      setPermStatus({ success: true, message: 'Default menus for new Staff PCs updated!' });
+    } catch (err: any) {
+      setPermStatus({ success: false, message: err?.message || 'Could not save default staff menus.' });
+    }
+  };
+
+  const handleResetAllData = async () => {
+    const confirmation = window.prompt(
+      'DANGER: This will permanently delete ALL companies, invoices, customers, products, payments, and business data from the database.\n\nType RESET to confirm:'
+    );
+    if (confirmation !== 'RESET') {
+      if (confirmation !== null) alert('Confirmation text did not match "RESET". Action cancelled.');
+      return;
+    }
+
+    setResetting(true);
+    try {
+      await api.resetAllData();
+      alert('All companies and data have been completely wiped. The application will now reload.');
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message || 'Error clearing data');
+    } finally {
+      setResetting(false);
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+    <ModalPortal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden">
         {/* Title Bar */}
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -211,6 +930,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   { id: 'Business_Settings', label: 'Document Settings' },
                   { id: 'Business_Currency', label: 'Currency & Numbering' },
                   { id: 'Business_Logo', label: 'Company Logo' },
+                  { id: 'Software_Icon', label: 'Software Icon' },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -290,7 +1010,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             <div>
               <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
                 <Server className="w-3.5 h-3.5 text-slate-400" />
-                <span>Deployment & Network</span>
+                <span>Deployment &amp; Network</span>
               </div>
               <div className="space-y-0.5">
                 <button
@@ -299,7 +1019,27 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     activeCategory === 'Deployment_Mode' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
                   }`}
                 >
-                  LAN Multi-User (IP Connect)
+                  Standalone / LAN Setup
+                </button>
+              </div>
+            </div>
+
+            {/* Danger Zone / Factory Reset Group */}
+            <div className="pt-2 border-t border-slate-200">
+              <div className="font-bold text-red-500 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                <span>Danger Zone</span>
+              </div>
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => setActiveCategory('Factory_Reset')}
+                  className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
+                    activeCategory === 'Factory_Reset'
+                      ? 'bg-red-100 text-red-900 font-bold'
+                      : 'text-red-700 hover:bg-red-50'
+                  }`}
+                >
+                  Factory Reset &amp; Wipe Data
                 </button>
               </div>
             </div>
@@ -325,7 +1065,10 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   Retry
                 </button>
               </div>
-            ) : activeCategory !== 'Deployment_Mode' && (!companySettings || !company) ? (
+            ) : activeCategory !== 'Deployment_Mode' &&
+              activeCategory !== 'Factory_Reset' &&
+              activeCategory !== 'Software_Icon' &&
+              (!companySettings || !company) ? (
               <div className="h-full flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
                 <Building2 className="w-12 h-12 text-slate-400 mb-3" />
                 <h3 className="text-sm font-bold text-slate-800">No Business Profile Selected</h3>
@@ -357,8 +1100,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <label className="block font-semibold text-slate-700 mb-1">Invoice overdue days (Grace Period):</label>
                       <input
                         type="number"
-                        value={companySettings.invoice_overdue_days}
-                        onChange={(e) => updateCompanySetting('invoice_overdue_days', Number(e.target.value))}
+                        placeholder="e.g. 30"
+                        value={companySettings.invoice_overdue_days ?? ''}
+                        onChange={(e) =>
+                          updateCompanySetting(
+                            'invoice_overdue_days',
+                            (e.target.value === '' ? '' : Number(e.target.value)) as any
+                          )
+                        }
                         className="w-32 border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                       />
                     </div>
@@ -547,6 +1296,334 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
               </div>
             )}
 
+            {/* 3B. Software Icon (Desktop Application & Logo Icon with Live Calibrator) */}
+            {activeCategory === 'Software_Icon' && (() => {
+              const activeIconPreview = calibratedIconPreview || appSettings?.software_icon || null;
+              return (
+                <div className="border border-slate-200 rounded-lg p-5 space-y-5 bg-white shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <h3 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                      <Monitor className="w-4 h-4 text-brand-600" />
+                      <span>Software Logo &amp; Desktop Application Icon</span>
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{iconSourceImg ? 'Choose Another Image' : 'Upload Image'}</span>
+                        <input
+                          type="file"
+                          accept="image/*,.ico"
+                          onChange={handleSoftwareIconFileSelect}
+                          disabled={iconSaving}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {(appSettings?.software_icon || iconSourceImg) && (
+                        <button
+                          type="button"
+                          disabled={iconSaving}
+                          onClick={handleResetSoftwareIcon}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Reset Default</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Interactive Calibrator + Exact Previews */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    {/* Left: Interactive Drag & Crop Calibrator */}
+                    <div className="lg:col-span-5 flex flex-col items-center space-y-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        {iconSourceImg ? 'Drag Image to Position (256×256)' : 'Current Software Icon'}
+                      </div>
+
+                      <div
+                        onPointerDown={handleIconCanvasPointerDown}
+                        onPointerMove={handleIconCanvasPointerMove}
+                        onPointerUp={handleIconCanvasPointerUp}
+                        onPointerCancel={handleIconCanvasPointerUp}
+                        className={`w-40 h-40 rounded-2xl border-2 border-dashed border-brand-400 flex items-center justify-center overflow-hidden shadow-inner select-none relative ${
+                          iconSourceImg ? 'cursor-grab active:cursor-grabbing' : ''
+                        }`}
+                        style={{
+                          backgroundImage:
+                            'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)',
+                          backgroundSize: '16px 16px',
+                          backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                          backgroundColor: '#f8fafc',
+                        }}
+                      >
+                        {activeIconPreview ? (
+                          <img
+                            src={activeIconPreview}
+                            alt="Calibrated Icon Preview"
+                            draggable={false}
+                            className="w-full h-full object-cover pointer-events-none"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-2xl bg-brand-600 flex items-center justify-center text-white font-bold text-6xl">
+                            Σ
+                          </div>
+                        )}
+                      </div>
+
+                      {iconNaturalDims && (
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Source: {iconNaturalDims.width} × {iconNaturalDims.height} px → Output: 256 × 256 px (.ico)
+                        </div>
+                      )}
+
+                      {/* Live Previews: Exact Desktop & Header Match */}
+                      <div className="w-full flex items-center justify-center gap-3 pt-1">
+                        {/* Desktop Shortcut Preview */}
+                        <div className="flex flex-col items-center justify-center px-3 py-2.5 rounded-xl bg-gradient-to-br from-sky-900 to-slate-900 text-white w-32 shadow border border-slate-700 select-none">
+                          {activeIconPreview ? (
+                            <img
+                              src={activeIconPreview}
+                              alt="Desktop Preview"
+                              className="w-12 h-12 object-cover shadow-md"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center text-white font-bold text-2xl shadow-md">
+                              Σ
+                            </div>
+                          )}
+                          <span className="mt-1.5 text-[9px] font-semibold text-center leading-tight text-white/95">
+                            Enterprise Invoice
+                          </span>
+                          <span className="text-[8px] text-sky-300 uppercase font-bold mt-0.5">Desktop</span>
+                        </div>
+
+                        {/* Top Navbar Logo Preview */}
+                        <div className="flex flex-col items-center justify-center px-3 py-2.5 rounded-xl bg-white border border-slate-200 w-36 shadow-sm select-none">
+                          <div className="flex items-center space-x-1.5 py-2">
+                            {activeIconPreview ? (
+                              <img
+                                src={activeIconPreview}
+                                alt="Header Preview"
+                                className="w-8 h-8 rounded-lg object-cover shadow-sm"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                                Σ
+                              </div>
+                            )}
+                            <span className="text-[11px] font-extrabold text-brand-900 leading-tight">
+                              Enterprise<br />Invoicer
+                            </span>
+                          </div>
+                          <span className="text-[8px] text-slate-400 uppercase font-bold">Top Bar Match</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Calibration Sliders & Apply Action */}
+                    <div className="lg:col-span-7 space-y-3.5 text-xs">
+                      <div className="font-bold text-slate-800">Icon Calibrator (Eliminate Top/Bottom Empty Space)</div>
+
+                      {/* Fill vs Fit Toggle */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={!iconSourceImg}
+                          onClick={() => {
+                            setIconFitMode('COVER');
+                            setIconZoom(1);
+                            setIconOffsetX(0);
+                            setIconOffsetY(0);
+                          }}
+                          className={`px-3 py-2 rounded-lg border text-left transition-all disabled:opacity-50 ${
+                            iconFitMode === 'COVER'
+                              ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div>Fill Square (No Gaps)</div>
+                          <div className="text-[10px] font-normal text-slate-500">Matches default Σ logo edge-to-edge</div>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!iconSourceImg}
+                          onClick={() => {
+                            setIconFitMode('CONTAIN');
+                            setIconZoom(1);
+                            setIconOffsetX(0);
+                            setIconOffsetY(0);
+                          }}
+                          className={`px-3 py-2 rounded-lg border text-left transition-all disabled:opacity-50 ${
+                            iconFitMode === 'CONTAIN'
+                              ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div>Fit Full Image</div>
+                          <div className="text-[10px] font-normal text-slate-500">Shows entire wide logo without cropping</div>
+                        </button>
+                      </div>
+
+                      {/* Zoom Slider */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label className="font-semibold text-slate-700">Zoom Scale:</label>
+                          <span className="font-mono text-[11px] font-bold text-brand-700">{Math.round(iconZoom * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={3}
+                          step={0.05}
+                          disabled={!iconSourceImg}
+                          value={iconZoom}
+                          onChange={(e) => setIconZoom(parseFloat(e.target.value))}
+                          className="w-full accent-brand-600 disabled:opacity-40"
+                        />
+                      </div>
+
+                      {/* X / Y Position Sliders */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="font-semibold text-slate-700">Move Left / Right:</label>
+                            <span className="font-mono text-[10px] text-slate-500">{iconOffsetX}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={-128}
+                            max={128}
+                            step={1}
+                            disabled={!iconSourceImg}
+                            value={iconOffsetX}
+                            onChange={(e) => setIconOffsetX(parseInt(e.target.value, 10))}
+                            className="w-full accent-brand-600 disabled:opacity-40"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="font-semibold text-slate-700">Move Up / Down:</label>
+                            <span className="font-mono text-[10px] text-slate-500">{iconOffsetY}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={-128}
+                            max={128}
+                            step={1}
+                            disabled={!iconSourceImg}
+                            value={iconOffsetY}
+                            onChange={(e) => setIconOffsetY(parseInt(e.target.value, 10))}
+                            className="w-full accent-brand-600 disabled:opacity-40"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Corner Style & Background Fill */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                        <label className="inline-flex items-center space-x-2 text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            disabled={!iconSourceImg}
+                            checked={iconRounded}
+                            onChange={(e) => setIconRounded(e.target.checked)}
+                            className="w-4 h-4 rounded text-brand-600 border-slate-300"
+                          />
+                          <span className="font-semibold">Rounded Square Corners (matches default logo)</span>
+                        </label>
+
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-[11px] font-semibold text-slate-600">BG:</span>
+                          {[
+                            { label: 'None', val: 'transparent' },
+                            { label: 'White', val: '#ffffff' },
+                            { label: 'Blue', val: '#2563eb' },
+                            { label: 'Dark', val: '#0f172a' },
+                          ].map((bg) => (
+                            <button
+                              key={bg.val}
+                              type="button"
+                              disabled={!iconSourceImg}
+                              onClick={() => setIconBgColor(bg.val)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors disabled:opacity-40 ${
+                                iconBgColor === bg.val
+                                  ? 'border-brand-600 bg-brand-50 text-brand-800'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              {bg.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Apply Button */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          disabled={iconSaving || !iconSourceImg}
+                          onClick={handleApplyCalibratedSoftwareIcon}
+                          className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          {iconSaving ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                          <span>{iconSaving ? 'Applying to Desktop & App...' : 'Apply Calibrated Software Icon'}</span>
+                        </button>
+
+                        {iconSourceImg && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIconFitMode('COVER');
+                              setIconZoom(1);
+                              setIconOffsetX(0);
+                              setIconOffsetY(0);
+                              setIconRounded(true);
+                              setIconBgColor('transparent');
+                            }}
+                            className="px-3 py-2 border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold"
+                          >
+                            Reset Calibration
+                          </button>
+                        )}
+                      </div>
+
+                      {iconStatus && (
+                        <div
+                          className={`p-2.5 rounded-lg text-xs font-semibold flex items-center space-x-2 border ${
+                            iconStatus.type === 'success'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              : 'bg-rose-50 border-rose-200 text-rose-800'
+                          }`}
+                        >
+                          {iconStatus.type === 'success' ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          )}
+                          <span>{iconStatus.message}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ideal Image Specifications Reference */}
+                  <div className="p-3.5 rounded-lg bg-sky-50/70 border border-sky-200 text-[11px] text-sky-900 space-y-1">
+                    <div className="font-bold text-sky-950">Recommended Image Configuration (Exact Match for Default Logo)</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5 text-sky-800">
+                      <div>• <strong>Dimensions:</strong> 256 × 256 px or 512 × 512 px (1:1 Square)</div>
+                      <div>• <strong>File Format:</strong> PNG (transparent or solid) / JPG / WebP / SVG</div>
+                      <div>• <strong>Framing:</strong> Crop tightly around your logo (no top/bottom blank margin)</div>
+                      <div>• <strong>Max File Size:</strong> Under 5 MB (auto-converted to Windows `.ico`)</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* 4. Invoice Rules & Terms */}
             {activeCategory === 'Sales_Invoice_Rules' && companySettings && company && (
               <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
@@ -606,8 +1683,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <label className="block font-semibold text-slate-700 mb-1">Default Quotation Validity (Days):</label>
                     <input
                       type="number"
-                      value={companySettings.quotation_validity_days || 30}
-                      onChange={(e) => updateCompanySetting('quotation_validity_days', Number(e.target.value))}
+                      placeholder="30"
+                      value={companySettings.quotation_validity_days ?? ''}
+                      onChange={(e) =>
+                        updateCompanySetting(
+                          'quotation_validity_days',
+                          (e.target.value === '' ? '' : Number(e.target.value)) as any
+                        )
+                      }
                       className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
@@ -688,8 +1771,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               {isEditing ? (
                                 <input
                                   type="number"
-                                  value={seqFormData.current_number ?? seq.current_number}
-                                  onChange={(e) => setSeqFormData({ ...seqFormData, current_number: Number(e.target.value) })}
+                                  value={seqFormData.current_number !== undefined ? seqFormData.current_number : seq.current_number}
+                                  onChange={(e) =>
+                                    setSeqFormData({
+                                      ...seqFormData,
+                                      current_number: (e.target.value === '' ? '' : Number(e.target.value)) as any,
+                                    })
+                                  }
                                   className="w-20 border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono"
                                 />
                               ) : (
@@ -700,8 +1788,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               {isEditing ? (
                                 <input
                                   type="number"
-                                  value={seqFormData.padding_length ?? seq.padding_length}
-                                  onChange={(e) => setSeqFormData({ ...seqFormData, padding_length: Number(e.target.value) })}
+                                  value={seqFormData.padding_length !== undefined ? seqFormData.padding_length : seq.padding_length}
+                                  onChange={(e) =>
+                                    setSeqFormData({
+                                      ...seqFormData,
+                                      padding_length: (e.target.value === '' ? '' : Number(e.target.value)) as any,
+                                    })
+                                  }
                                   className="w-16 border border-slate-300 rounded px-1.5 py-0.5 text-xs"
                                 />
                               ) : (
@@ -857,127 +1950,725 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
               </div>
             )}
 
-            {/* 9. Deployment Mode & Multi-User IP Connect */}
-            {activeCategory === 'Deployment_Mode' && appSettings && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
-                  <Server className="w-4 h-4 text-brand-600" />
-                  <span>Deployment Architecture & Local Network (LAN)</span>
-                </h3>
-
-                <div className="space-y-4 text-xs">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div
-                      onClick={() => updateAppSetting('operating_mode', 'SINGLE_COMPUTER')}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                        appSettings.operating_mode === 'SINGLE_COMPUTER'
-                          ? 'border-brand-600 bg-brand-50/50'
-                          : 'border-slate-200 hover:border-slate-300'
+            {/* Standalone vs LAN Multi-User Setup */}
+            {activeCategory === 'Deployment_Mode' && (
+              <div className="space-y-5">
+                {/* Mode Selector Card */}
+                <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
+                  <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-base text-slate-800 flex items-center space-x-2">
+                        <Server className="w-5 h-5 text-brand-600" />
+                        <span>Software Operating Mode</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Select how you want to use Enterprise Invoice Manager in your office.
+                      </p>
+                    </div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                        lanRole === 'STANDALONE'
+                          ? 'bg-blue-50 border-blue-200 text-blue-700'
+                          : lanRole === 'LAN_HOST'
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                          : 'bg-purple-50 border-purple-200 text-purple-700'
                       }`}
                     >
-                      <div className="font-bold text-sm text-slate-800">Mode A: Single-Computer</div>
-                      <div className="text-slate-500 mt-1">Zero-configuration embedded SQLite database. 100% offline on this machine.</div>
+                      {lanRole === 'STANDALONE'
+                        ? 'Standalone Mode (Single PC)'
+                        : lanRole === 'LAN_HOST'
+                        ? 'Host (Main Office PC)'
+                        : `Staff PC: ${lanStaffName || 'Staff'}`}
+                    </span>
+                  </div>
+
+                  {/* 1. Standalone Mode vs LAN Multi-User Mode */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div
+                      onClick={() => {
+                        setLanRole('STANDALONE');
+                        setLanStatus(null);
+                      }}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start space-x-3.5 ${
+                        lanRole === 'STANDALONE'
+                          ? 'border-brand-600 bg-brand-50/60 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div
+                        className={`p-2.5 rounded-lg shrink-0 ${
+                          lanRole === 'STANDALONE' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <Monitor className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-slate-800">1. Standalone Mode</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Single Computer mode. Zero network configuration, 100% offline data storage on this machine.
+                        </div>
+                      </div>
                     </div>
 
                     <div
-                      onClick={() => updateAppSetting('operating_mode', 'LOCAL_NETWORK_SERVER')}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                        appSettings.operating_mode === 'LOCAL_NETWORK_SERVER'
-                          ? 'border-brand-600 bg-brand-50/50'
-                          : 'border-slate-200 hover:border-slate-300'
+                      onClick={() => {
+                        if (lanRole === 'STANDALONE') setLanRole('LAN_HOST');
+                        setLanStatus(null);
+                      }}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start space-x-3.5 ${
+                        lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT'
+                          ? 'border-brand-600 bg-brand-50/60 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
                       }`}
                     >
-                      <div className="font-bold text-sm text-slate-800">Mode B: LAN Multi-User (PostgreSQL)</div>
-                      <div className="text-slate-500 mt-1">Connect 3–5 workstations over office Wi-Fi / Ethernet via IP address. No internet required.</div>
+                      <div
+                        className={`p-2.5 rounded-lg shrink-0 ${
+                          lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT'
+                            ? 'bg-brand-600 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-slate-800">2. LAN Multi-User Mode</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Office Network mode. Connect staff computers directly to the Main PC with per-staff menu permissions.
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {appSettings.operating_mode === 'LOCAL_NETWORK_SERVER' && (
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 mt-3">
-                      <div className="font-bold text-xs text-slate-800 flex items-center justify-between">
-                        <span>Central Server IP & Connection Parameters:</span>
-                        <span className="text-[11px] text-slate-500 font-normal">Enter server PC's local IP (e.g. 192.168.1.150)</span>
-                      </div>
+                  {lanStatus && (
+                    <div
+                      className={`flex items-center space-x-2 text-xs font-semibold px-3.5 py-2.5 rounded-lg border ${
+                        lanStatus.success
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border-rose-200'
+                      }`}
+                    >
+                      {lanStatus.success ? (
+                        <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      )}
+                      <span>{lanStatus.message}</span>
+                    </div>
+                  )}
 
-                      <div className="grid grid-cols-2 gap-3 text-xs">
+                  {/* ================= 2. IF STANDALONE MODE ================= */}
+                  {lanRole === 'STANDALONE' && (
+                    <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                      <div className="flex items-start justify-between">
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Server Host / IP Address *</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 192.168.1.100 or 127.0.0.1"
-                            value={appSettings.pg_host || ''}
-                            onChange={(e) => updateAppSetting('pg_host', e.target.value)}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Port</label>
-                          <input
-                            type="number"
-                            placeholder="5432"
-                            value={appSettings.pg_port || 5432}
-                            onChange={(e) => updateAppSetting('pg_port', Number(e.target.value))}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Database Name *</label>
-                          <input
-                            type="text"
-                            placeholder="invoice_manager"
-                            value={appSettings.pg_database || ''}
-                            onChange={(e) => updateAppSetting('pg_database', e.target.value)}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Database Username *</label>
-                          <input
-                            type="text"
-                            placeholder="postgres"
-                            value={appSettings.pg_user || ''}
-                            onChange={(e) => updateAppSetting('pg_user', e.target.value)}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block font-semibold text-slate-700 mb-1">Database Password</label>
-                          <input
-                            type="password"
-                            placeholder="••••••••"
-                            value={appSettings.pg_password || ''}
-                            onChange={(e) => updateAppSetting('pg_password', e.target.value)}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
-                          />
+                          <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                            <CheckCircle className="w-4 h-4 text-emerald-600" />
+                            <span>Standalone Mode is Active</span>
+                          </h4>
+                          <p className="text-xs text-slate-600 mt-1">
+                            The software runs completely offline on this computer. You can create invoices, manage quotations, inventory, and track payments without any network setup.
+                          </p>
                         </div>
                       </div>
 
-                      <div className="pt-2 flex items-center space-x-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-white p-3.5 rounded-lg border border-slate-200">
+                        <div>
+                          <span className="text-slate-400 font-medium block">Database Engine</span>
+                          <span className="font-bold text-slate-800">Local Embedded Database (Zero Setup)</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium block">Access Port</span>
+                          <span className="font-bold text-slate-800">Localhost 127.0.0.1 (Port 4200)</span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-1">
                         <button
                           type="button"
-                          onClick={handleTestDatabaseConnection}
-                          disabled={testDbLoading}
-                          className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-bold transition-colors disabled:opacity-50"
+                          disabled={lanSaving}
+                          onClick={() => handleSaveLanDesktopConfig(false, 'STANDALONE')}
+                          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
                         >
-                          {testDbLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
-                          <span>Test IP Connection</span>
+                          {lanSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                          <span>Continue with Standalone Mode</span>
                         </button>
-
-                        {testDbResult && (
-                          <div
-                            className={`flex items-center space-x-1.5 text-xs font-semibold px-2.5 py-1 rounded ${
-                              testDbResult.success
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}
-                          >
-                            {testDbResult.success ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                            <span>{testDbResult.message}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
+
+                  {/* ================= 3. IF LAN MULTI-USER MODE ================= */}
+                  {(lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT') && (
+                    <div className="space-y-5 pt-2">
+                      {/* Host vs Staff Sub-Option */}
+                      <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                        <span className="text-xs font-bold text-slate-700">Choose Computer Role:</span>
+                        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-bold">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLanRole('LAN_HOST');
+                              setLanStatus(null);
+                            }}
+                            className={`px-4 py-1.5 rounded-md transition-all flex items-center space-x-1.5 ${
+                              lanRole === 'LAN_HOST'
+                                ? 'bg-white text-brand-700 shadow-sm font-bold'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <Server className="w-3.5 h-3.5" />
+                            <span>Host (Main PC)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLanRole('LAN_CLIENT');
+                              setLanStatus(null);
+                            }}
+                            className={`px-4 py-1.5 rounded-md transition-all flex items-center space-x-1.5 ${
+                              lanRole === 'LAN_CLIENT'
+                                ? 'bg-white text-brand-700 shadow-sm font-bold'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            <span>Staff (Staff PC)</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* ================= 4. IF HOST (MAIN PC) ================= */}
+                      {lanRole === 'LAN_HOST' && (
+                        <div className="space-y-5">
+                          {/* Host Network Configuration Card */}
+                          <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-200 space-y-3 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/60 pb-2">
+                              <div>
+                                <h4 className="font-bold text-emerald-950 flex items-center space-x-1.5">
+                                  <Server className="w-4 h-4 text-emerald-700" />
+                                  <span>Main Office PC (Host) Network Info</span>
+                                </h4>
+                                <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                                  Office staff will enter this IP Address and Port on their Staff PCs to connect.
+                                </p>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-emerald-900">Host Port:</span>
+                                <input
+                                  type="number"
+                                  value={lanPort}
+                                  onChange={(e) => setLanPort(Number(e.target.value) || 4200)}
+                                  className="w-20 border border-emerald-300 rounded px-2 py-1 font-mono text-xs bg-white text-emerald-950 font-bold"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Detected IP Addresses */}
+                            <div>
+                              <span className="font-semibold text-emerald-900 block mb-1.5">
+                                Host IP Address (detected on office network):
+                              </span>
+                              {lanLocalIps.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {lanLocalIps.map((ip) => (
+                                    <div
+                                      key={ip}
+                                      className="inline-flex items-center space-x-2 px-3 py-1.5 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-emerald-900 shadow-sm"
+                                    >
+                                      <span>{ip}</span>
+                                      <span className="text-slate-400 text-[11px] font-sans font-normal">Port {lanPort}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyLanIp(ip)}
+                                        className="px-2 py-0.5 text-[10px] font-sans font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
+                                      >
+                                        {copiedIp === ip ? 'Copied!' : 'Copy IP'}
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-slate-600">
+                                  Run <code className="px-1.5 py-0.5 bg-white rounded border">ipconfig</code> in Windows Command Prompt to view your office Wi-Fi/Ethernet IPv4 address.
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Background & Auto-start checkboxes */}
+                            <div className="pt-2 space-y-1.5 border-t border-emerald-200/70">
+                              <label className="flex items-center space-x-2 text-emerald-950 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={lanMinimizeToTray}
+                                  onChange={(e) => setLanMinimizeToTray(e.target.checked)}
+                                  className="w-3.5 h-3.5 rounded text-emerald-600 border-emerald-300"
+                                />
+                                <span className="font-semibold">
+                                  Run quietly in Windows System Tray when closing window (keeps staff PCs connected)
+                                </span>
+                              </label>
+                              <label className="flex items-center space-x-2 text-emerald-950 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={lanAutoStartOnBoot}
+                                  onChange={(e) => setLanAutoStartOnBoot(e.target.checked)}
+                                  className="w-3.5 h-3.5 rounded text-emerald-600 border-emerald-300"
+                                />
+                                <span className="font-semibold">
+                                  Start Office Host automatically in background when Windows boots
+                                </span>
+                              </label>
+                            </div>
+
+                            {/* Save Host Settings button */}
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                disabled={lanSaving}
+                                onClick={() => handleSaveLanDesktopConfig(false, 'LAN_HOST')}
+                                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
+                              >
+                                {lanSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                <span>Save Host Network Settings</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Staff Member Creation Form */}
+                          <div className="p-5 bg-white rounded-xl border border-slate-200 space-y-4 shadow-sm">
+                            <div className="border-b border-slate-100 pb-2.5">
+                              <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                                <Plus className="w-4 h-4 text-brand-600" />
+                                <span>Create Staff Member &amp; Assign Menu Permissions</span>
+                              </h4>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Enter a staff name (e.g. Ramesh) and choose which menus they can access. When they enter this name on their computer, the software will automatically recognize and apply these permissions.
+                              </p>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                  Staff Member Name *
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Ramesh, Priya, Billing Desk, Accounts"
+                                  value={hostNewStaffName}
+                                  onChange={(e) => setHostNewStaffName(e.target.value)}
+                                  className="w-full sm:w-80 border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                              </div>
+
+                              <div>
+                                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                                  <label className="text-xs font-bold text-slate-700">
+                                    Allowed Menus for this Staff Member ({hostNewStaffMenus.length} selected):
+                                  </label>
+                                  <div className="flex items-center space-x-2 text-[11px]">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setHostNewStaffMenus([
+                                          'invoices',
+                                          'invoices_other',
+                                          'quotations',
+                                          'customers',
+                                          'products',
+                                        ])
+                                      }
+                                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold"
+                                    >
+                                      Billing Staff (No Dashboard/Reports)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setHostNewStaffMenus([
+                                          'invoices',
+                                          'invoices_other',
+                                          'quotations',
+                                          'customers',
+                                          'suppliers',
+                                          'products',
+                                          'purchases',
+                                          'inventory',
+                                          'payments',
+                                        ])
+                                      }
+                                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold"
+                                    >
+                                      Accounts &amp; Inventory
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setHostNewStaffMenus(
+                                          permMenuCatalog.length > 0 ? permMenuCatalog.map((m) => m.id) : []
+                                        )
+                                      }
+                                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold"
+                                    >
+                                      Select All
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setHostNewStaffMenus([])}
+                                      className="px-2 py-0.5 text-rose-600 hover:bg-rose-50 rounded font-semibold"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+                                  {permMenuCatalog.map((m) => {
+                                    const checked = hostNewStaffMenus.includes(m.id);
+                                    return (
+                                      <label
+                                        key={m.id}
+                                        className={`flex items-center space-x-2 p-1.5 rounded border cursor-pointer transition-colors ${
+                                          checked
+                                            ? 'bg-brand-50 border-brand-200 text-brand-950 font-semibold'
+                                            : 'bg-white border-slate-200 text-slate-500'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() =>
+                                            setHostNewStaffMenus((prev) =>
+                                              prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]
+                                            )
+                                          }
+                                          className="w-3.5 h-3.5 rounded text-brand-600"
+                                        />
+                                        <span className="truncate">{m.label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  type="button"
+                                  disabled={hostCreatingStaff || !hostNewStaffName.trim()}
+                                  onClick={handleInitiateCreateStaff}
+                                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
+                                >
+                                  {hostCreatingStaff ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Plus className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Create Staff Member</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Existing Staff Members List */}
+                          <div className="p-5 bg-white rounded-xl border border-slate-200 space-y-4 shadow-sm">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                              <div>
+                                <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                                  <Users className="w-4 h-4 text-brand-600" />
+                                  <span>Configured Office Staff Members ({permWorkstations.length})</span>
+                                </h4>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  Staff will automatically receive these permissions when they enter their name on their computer.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={loadWorkstationPermissions}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold flex items-center space-x-1"
+                              >
+                                <RefreshCw className={`w-3 h-3 ${permLoading ? 'animate-spin' : ''}`} />
+                                <span>Refresh</span>
+                              </button>
+                            </div>
+
+                            {permWorkstations.length === 0 ? (
+                              <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                                No staff members created yet. Use the form above to add your office staff members by name.
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {permWorkstations.map((ws) => {
+                                  const isExpanded = expandedStaffId === ws.device_id;
+                                  return (
+                                    <div
+                                      key={ws.device_id}
+                                      className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/50 space-y-3 text-xs"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center space-x-2.5">
+                                          <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase">
+                                            {(ws.device_name || 'S').charAt(0)}
+                                          </div>
+                                          <div>
+                                            <div className="font-bold text-slate-800 flex items-center space-x-2">
+                                              <span>{ws.device_name}</span>
+                                              <span
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                  ws.is_admin
+                                                    ? 'bg-purple-100 text-purple-800'
+                                                    : 'bg-brand-100 text-brand-800'
+                                                }`}
+                                              >
+                                                {ws.is_admin ? 'MD / Full Admin' : 'Staff Member'}
+                                              </span>
+                                            </div>
+                                            <div className="text-[11px] text-slate-500">
+                                              {ws.is_admin
+                                                ? 'All menus allowed'
+                                                : `${ws.allowed_menus?.length || 0} menus allowed (Dashboard & Reports ${
+                                                    ws.allowed_menus?.includes('dashboard') ? 'visible' : 'hidden'
+                                                  })`}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center space-x-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedStaffId(isExpanded ? null : ws.device_id)}
+                                            className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold flex items-center space-x-1"
+                                          >
+                                            <span>{isExpanded ? 'Hide Permissions' : 'Edit Permissions'}</span>
+                                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleInitiateDeleteWorkstation(ws)}
+                                            className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                                            title="Delete Staff Member"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Expanded Menu Editor */}
+                                      {isExpanded && (
+                                        <div className="pt-2 border-t border-slate-200 space-y-2.5">
+                                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-3 rounded-lg border border-slate-200">
+                                            {permMenuCatalog.map((m) => {
+                                              const checked = ws.is_admin || ws.allowed_menus?.includes(m.id);
+                                              return (
+                                                <label
+                                                  key={m.id}
+                                                  className={`flex items-center space-x-1.5 p-1 rounded border cursor-pointer ${
+                                                    checked
+                                                      ? 'bg-brand-50/70 border-brand-200 text-brand-950 font-semibold'
+                                                      : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                  }`}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() => toggleWorkstationMenu(ws.device_id, m.id)}
+                                                    className="w-3.5 h-3.5 rounded text-brand-600"
+                                                  />
+                                                  <span className="text-[11px] truncate">{m.label}</span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+
+                                          <div className="flex justify-end">
+                                            <button
+                                              type="button"
+                                              disabled={permSavingId === ws.device_id}
+                                              onClick={() => handleInitiateSaveWorkstation(ws)}
+                                              className="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold flex items-center space-x-1 shadow-sm disabled:opacity-50"
+                                            >
+                                              <Save className="w-3 h-3" />
+                                              <span>{permSavingId === ws.device_id ? 'Saving...' : 'Save Permissions'}</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* MD PIN Protection (Strict 4 Digits) */}
+                          <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2 text-xs">
+                            <div className="flex items-center justify-between font-bold text-amber-950">
+                              <span className="flex items-center space-x-1.5">
+                                <Lock className="w-3.5 h-3.5 text-amber-700" />
+                                <span>MD / Admin PIN Protection (4 Digits)</span>
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  permHasCustomPin ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {permHasCustomPin ? 'PIN Active (Custom 4-Digit PIN)' : 'PIN Active (Default: 1234)'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-amber-900/80">
+                              A 4-digit PIN is strictly required before saving or changing any staff menu permissions. Default PIN is 1234. Change your 4-digit PIN below to keep it secret.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              {permHasCustomPin && (
+                                <input
+                                  type="password"
+                                  maxLength={4}
+                                  placeholder="Current PIN (4 digits)"
+                                  value={permCurrentPin}
+                                  onChange={(e) => setPermCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                  className="border border-slate-300 rounded px-2.5 py-1 text-xs w-36 bg-white font-mono tracking-widest text-center"
+                                />
+                              )}
+                              <input
+                                type="password"
+                                maxLength={4}
+                                placeholder="New 4-digit PIN"
+                                value={permNewPin}
+                                onChange={(e) => setPermNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                className="border border-slate-300 rounded px-2.5 py-1 text-xs w-36 bg-white font-mono tracking-widest text-center"
+                              />
+                              <button
+                                type="button"
+                                disabled={permNewPin.length !== 4}
+                                onClick={handleUpdateAdminPin}
+                                className="px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-bold disabled:opacity-50"
+                              >
+                                {permHasCustomPin ? 'Change PIN' : 'Set Custom PIN'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ================= 5. IF STAFF (OFFICE STAFF PC) ================= */}
+                      {lanRole === 'LAN_CLIENT' && (
+                        <div className="p-5 bg-white rounded-xl border border-slate-200 space-y-4 shadow-sm text-xs">
+                          <div className="border-b border-slate-100 pb-2.5">
+                            <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                              <Users className="w-4 h-4 text-brand-600" />
+                              <span>Connect to Main Office PC</span>
+                            </h4>
+                            <p className="text-slate-500 mt-0.5">
+                              Enter the Main PC&apos;s IP address and the Staff Name given to you by the Host/MD. The software will connect and recognize your assigned menu permissions.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="block font-bold text-slate-700 mb-1">
+                                Main Office PC IP Address *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 192.168.1.100"
+                                value={lanHostIp}
+                                onChange={(e) => setLanHostIp(e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1">Port</label>
+                              <input
+                                type="number"
+                                placeholder="4200"
+                                value={lanPort}
+                                onChange={(e) => setLanPort(Number(e.target.value) || 4200)}
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">
+                              Your Staff Member Name *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Ramesh, Priya, Billing Desk 1"
+                              value={lanStaffName}
+                              onChange={(e) => setLanStaffName(e.target.value)}
+                              className="w-full sm:w-80 border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            />
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Must match the name created by the Host. Your allowed menus (e.g. Invoices, Quotations) will automatically apply, and restricted menus (Dashboard, Reports) will remain hidden.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                            <div className="flex items-center space-x-2">
+                              <button
+                                type="button"
+                                onClick={handleTestLanHost}
+                                disabled={lanTesting || !lanHostIp.trim()}
+                                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
+                              >
+                                {lanTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
+                                <span>Test Connection</span>
+                              </button>
+
+                              {lanConnectedUrl && (
+                                <span className="text-[11px] text-slate-500">
+                                  Active server: <code className="font-mono text-slate-700">{lanConnectedUrl}</code>
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={lanSaving || !lanHostIp.trim() || !lanStaffName.trim()}
+                              onClick={() => handleSaveLanDesktopConfig(true, 'LAN_CLIENT')}
+                              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 transition-colors"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${lanSaving ? 'animate-spin' : ''}`} />
+                              <span>Save &amp; Connect to Main PC</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* DANGER ZONE: FACTORY RESET */}
+            {activeCategory === 'Factory_Reset' && (
+              <div className="space-y-4">
+                <div className="border-b border-slate-200 pb-3">
+                  <h3 className="text-sm font-bold text-red-700 flex items-center space-x-1.5">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span>Danger Zone: Clear All Companies &amp; Data (Factory Reset)</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Reset the local database to a completely clean slate.
+                  </p>
+                </div>
+
+                <div className="bg-red-50/70 border border-red-200 rounded-xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center space-x-2 text-red-700 font-bold text-sm">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <span>Danger Zone: Clear All Companies &amp; Data (Factory Reset)</span>
+                  </div>
+                  <p className="text-xs text-red-600/90">
+                    Permanently erase all companies, operating branches, invoices, customers, suppliers, inventory, and payment records. Preserves application settings in a pristine clean state.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleResetAllData}
+                    disabled={resetting}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>{resetting ? 'Resetting Data...' : 'Reset & Wipe All Data'}</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -1005,14 +2696,98 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             </button>
             <button
               onClick={handleSave}
-              className="px-5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center space-x-1.5"
+              disabled={loading}
+              className="px-5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center space-x-1.5 disabled:opacity-50"
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>Save Configuration</span>
+              {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{loading ? 'Saving...' : 'Save Configuration'}</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* 4-Digit MD PIN Authorization Modal */}
+      {pinPromptState && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 border border-slate-200 space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">{pinPromptState.title}</h3>
+                <p className="text-[11px] text-slate-500">MD / Admin PIN Authorization</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {pinPromptState.description}
+            </p>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-center">
+                <input
+                  type="password"
+                  maxLength={4}
+                  autoFocus
+                  value={pinPromptInput}
+                  onChange={(e) => {
+                    setPinPromptError('');
+                    setPinPromptInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && pinPromptInput.length === 4) {
+                      handleConfirmPinAction();
+                    }
+                  }}
+                  placeholder="• • • •"
+                  className="w-48 text-center text-2xl font-mono tracking-[0.5em] font-bold py-2 border-2 border-slate-300 focus:border-brand-600 rounded-xl outline-none transition-all shadow-inner bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              {!permHasCustomPin && (
+                <p className="text-[11px] text-amber-700 font-medium text-center">
+                  Default initial PIN is <strong>1234</strong>
+                </p>
+              )}
+
+              {pinPromptError && (
+                <p className="text-xs text-rose-600 font-semibold text-center animate-in fade-in">
+                  {pinPromptError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setPinPromptState(null);
+                  setPinPromptInput('');
+                  setPinPromptError('');
+                }}
+                className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={pinPromptInput.length !== 4 || pinPromptLoading}
+                onClick={handleConfirmPinAction}
+                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 flex items-center space-x-1.5"
+              >
+                {pinPromptLoading ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                <span>Authorize &amp; Save</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    </ModalPortal>
   );
 };

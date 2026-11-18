@@ -9,6 +9,7 @@ import {
   Download,
   Building,
   RefreshCw,
+  Monitor,
 } from 'lucide-react';
 
 interface Props {
@@ -18,19 +19,44 @@ interface Props {
 export const ReportsView: React.FC<Props> = ({ companyId }) => {
   const [reportType, setReportType] = useState<'gst' | 'sales'>('gst');
   const [gstReport, setGstReport] = useState<any>(null);
+  const [staffActivity, setStaffActivity] = useState<any[]>([]);
+  const [activityRange, setActivityRange] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [loading, setLoading] = useState<boolean>(true);
+
+  const getActivityDateBounds = (range: 'today' | 'week' | 'month' | 'all'): { start?: string; end?: string } => {
+    if (range === 'all') return {};
+    const now = new Date();
+    const toIso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = toIso(now);
+    if (range === 'today') return { start: today, end: today };
+    if (range === 'week') {
+      const s = new Date(now);
+      const day = s.getDay();
+      s.setDate(s.getDate() - (day === 0 ? 6 : day - 1));
+      return { start: toIso(s), end: today };
+    }
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { start: toIso(startMonth), end: toIso(endMonth) };
+  };
 
   useEffect(() => {
     if (companyId) {
       loadReport();
     }
-  }, [companyId, reportType]);
+  }, [companyId, reportType, activityRange]);
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      const data = await api.getGstSalesReport(companyId);
-      setGstReport(data);
+      const { start, end } = getActivityDateBounds(activityRange);
+      const [gstData, staffData] = await Promise.all([
+        api.getGstSalesReport(companyId),
+        api.getStaffActivityReport(companyId, start, end).catch(() => []),
+      ]);
+      setGstReport(gstData);
+      setStaffActivity(Array.isArray(staffData) ? staffData : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -134,6 +160,83 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
                   <td className="py-2.5 px-3 text-right font-mono">{formatIndianCurrency(h.integrated_tax)}</td>
                   <td className="py-2.5 px-3 text-right font-bold font-mono text-slate-900 dark:text-white">
                     {formatIndianCurrency(h.total_tax)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MD Oversight: Office Staff & Workstation Document Activity */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <Monitor className="w-4 h-4 text-brand-600" />
+              <span>Office Staff &amp; Workstation Work Summary (MD View)</span>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Tracks how many invoices, quotations, purchase bills, and payments each office computer created.
+            </p>
+          </div>
+          <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg text-[11px] font-semibold">
+            {(
+              [
+                { id: 'today', label: 'Today' },
+                { id: 'week', label: 'This Week' },
+                { id: 'month', label: 'This Month' },
+                { id: 'all', label: 'All Time' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setActivityRange(opt.id)}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  activityRange === opt.id
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+            <tr>
+              <th className="py-2.5 px-3">Staff PC / Workstation</th>
+              <th className="py-2.5 px-3 text-right">Invoices</th>
+              <th className="py-2.5 px-3 text-right">Invoice Value</th>
+              <th className="py-2.5 px-3 text-right">Quotations</th>
+              <th className="py-2.5 px-3 text-right">Purchase Bills</th>
+              <th className="py-2.5 px-3 text-right">Payments (AR/AP)</th>
+              <th className="py-2.5 px-3 text-right">Total Docs</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {staffActivity.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-slate-400">
+                  No staff workstation activity recorded in this period yet.
+                </td>
+              </tr>
+            ) : (
+              staffActivity.map((row) => (
+                <tr key={row.device_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-slate-100">{row.device_name}</td>
+                  <td className="py-2.5 px-3 text-right font-semibold">{row.invoices_count}</td>
+                  <td className="py-2.5 px-3 text-right font-mono">{formatIndianCurrency(row.invoices_total || 0)}</td>
+                  <td className="py-2.5 px-3 text-right font-semibold">{row.quotations_count}</td>
+                  <td className="py-2.5 px-3 text-right font-semibold">{row.purchases_count}</td>
+                  <td className="py-2.5 px-3 text-right font-semibold">
+                    {(row.customer_payments_count || 0) + (row.supplier_payments_count || 0)}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">
+                    {row.total_documents}
                   </td>
                 </tr>
               ))

@@ -1,9 +1,12 @@
 // src/renderer/views/ProductsView.tsx - Product Catalog & Service Registry
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Decimal from 'decimal.js';
 import { Product, Category, Unit } from '../../shared/types';
 import { api } from '../services/api';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
 import { GST_RATES } from '../../shared/constants';
+import { SearchableSelect } from '../components/SearchableSelect';
+import { ModalPortal } from '../components/ModalPortal';
 import {
   Package,
   Plus,
@@ -16,6 +19,7 @@ import {
   AlertTriangle,
   Layers,
   Tags,
+  StickyNote,
 } from 'lucide-react';
 
 interface Props {
@@ -32,9 +36,32 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product>>({});
+  const [showNotesSection, setShowNotesSection] = useState<boolean>(false);
+  const [noteCountInput, setNoteCountInput] = useState<string>('');
+  const [isInlineCatOpen, setIsInlineCatOpen] = useState<boolean>(false);
+  const [inlineCatName, setInlineCatName] = useState<string>('');
+  const [creatingInlineCat, setCreatingInlineCat] = useState<boolean>(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
   const [newCatName, setNewCatName] = useState<string>('');
   const [newCatDesc, setNewCatDesc] = useState<string>('');
+
+  const categoryOptions = useMemo(() => {
+    return [
+      { value: '', label: '-- No Category --' },
+      ...categories.map((c) => ({
+        value: c.id,
+        label: c.name,
+      })),
+    ];
+  }, [categories]);
+
+  const unitOptions = useMemo(() => {
+    return units.map((u) => ({
+      value: u.code,
+      label: `${u.name} (${u.code})`,
+      code: u.code,
+    }));
+  }, [units]);
 
   useEffect(() => {
     if (companyId) {
@@ -72,20 +99,125 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const handleSetNoteCount = (rawCount: number) => {
+    const count = Math.max(0, Math.min(200, Number.isFinite(rawCount) ? rawCount : 0));
+    setEditingProduct((prev) => {
+      const current = [...(prev.custom_notes || [])];
+      if (count > current.length) {
+        while (current.length < count) current.push('');
+      } else {
+        current.length = count;
+      }
+      return { ...prev, custom_notes: current };
+    });
+  };
+
+  const handleNoteCountInputChange = (rawVal: string) => {
+    const digitsOnly = rawVal.replace(/[^0-9]/g, '');
+    if (!digitsOnly) {
+      setNoteCountInput('');
+      handleSetNoteCount(0);
+      return;
+    }
+    const parsed = Math.min(200, parseInt(digitsOnly, 10));
+    if (parsed <= 0) {
+      setNoteCountInput('');
+      handleSetNoteCount(0);
+      return;
+    }
+    setNoteCountInput(String(parsed));
+    handleSetNoteCount(parsed);
+  };
+
+  const handleAddNote = () => {
+    setShowNotesSection(true);
+    setEditingProduct((prev) => {
+      const next = [...(prev.custom_notes || []), ''];
+      setNoteCountInput(String(next.length));
+      return {
+        ...prev,
+        custom_notes: next,
+      };
+    });
+  };
+
+  const handleUpdateNote = (index: number, value: string) => {
+    setEditingProduct((prev) => {
+      const next = [...(prev.custom_notes || [])];
+      next[index] = value;
+      return { ...prev, custom_notes: next };
+    });
+  };
+
+  const handleRemoveNote = (index: number) => {
+    setEditingProduct((prev) => {
+      const next = (prev.custom_notes || []).filter((_, i) => i !== index);
+      setNoteCountInput(next.length > 0 ? String(next.length) : '');
+      return { ...prev, custom_notes: next };
+    });
+  };
+
+  const handleCloseNotesSection = () => {
+    setEditingProduct((prev) => {
+      const cleaned = (prev.custom_notes || []).map((n) => n.trim()).filter((n) => n.length > 0);
+      setNoteCountInput(cleaned.length > 0 ? String(cleaned.length) : '');
+      return {
+        ...prev,
+        custom_notes: cleaned,
+      };
+    });
+    setShowNotesSection(false);
+  };
+
+  const handleToggleNotesSection = () => {
+    if (showNotesSection) {
+      handleCloseNotesSection();
+    } else {
+      setShowNotesSection(true);
+      const current = editingProduct.custom_notes || [];
+      setNoteCountInput(current.length > 0 ? String(current.length) : '');
+    }
+  };
+
   const handleSave = async () => {
     if (!editingProduct.name) {
       alert('Product name is required');
       return;
     }
 
+    const minPriceStr = editingProduct.min_selling_price?.toString().trim() || '';
+    const maxPriceStr = editingProduct.max_selling_price?.toString().trim() || '';
+    if (minPriceStr && maxPriceStr && new Decimal(minPriceStr).gt(new Decimal(maxPriceStr))) {
+      alert('Minimum Selling Price cannot be greater than Maximum Selling Price.');
+      return;
+    }
+
+    const effectiveSellingPrice =
+      maxPriceStr || minPriceStr || editingProduct.selling_price?.toString().trim() || '0.00';
+
+    const cleanedNotes = (editingProduct.custom_notes || [])
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0);
+    const payload: Partial<Product> = {
+      ...editingProduct,
+      selling_price: effectiveSellingPrice,
+      min_selling_price: minPriceStr || null,
+      max_selling_price: maxPriceStr || null,
+      purchase_price: editingProduct.purchase_price?.toString().trim() || '0.00',
+      minimum_stock: editingProduct.minimum_stock?.toString().trim() || '0.00',
+      custom_notes: cleanedNotes,
+    };
+
     try {
       if (editingProduct.id) {
-        await api.updateProduct(companyId, editingProduct.id, editingProduct);
+        await api.updateProduct(companyId, editingProduct.id, payload);
       } else {
-        await api.createProduct(companyId, editingProduct);
+        await api.createProduct(companyId, payload);
       }
       setIsModalOpen(false);
       setEditingProduct({});
+      setShowNotesSection(false);
+      setNoteCountInput('');
       await loadProducts();
     } catch (err: any) {
       alert(err.message || 'Error saving product');
@@ -117,6 +249,33 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const handleCreateInlineCategory = async () => {
+    const trimmed = inlineCatName.trim();
+    if (!trimmed) {
+      setIsInlineCatOpen(false);
+      return;
+    }
+    const existing = categories.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      setEditingProduct((prev) => ({ ...prev, category_id: existing.id }));
+      setInlineCatName('');
+      setIsInlineCatOpen(false);
+      return;
+    }
+    setCreatingInlineCat(true);
+    try {
+      const created = await api.createCategory(companyId, trimmed, '');
+      await loadCategories();
+      setEditingProduct((prev) => ({ ...prev, category_id: created.id }));
+      setInlineCatName('');
+      setIsInlineCatOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Error creating category');
+    } finally {
+      setCreatingInlineCat(false);
+    }
+  };
+
   const handleDeleteCategory = async (catId: string) => {
     if (!window.confirm('Are you sure you want to delete this category? Products in this category will be unassigned.')) return;
     try {
@@ -134,7 +293,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
       return (
         p.name.toLowerCase().includes(s) ||
         (p.sku && p.sku.toLowerCase().includes(s)) ||
-        (p.hsn_or_sac && p.hsn_or_sac.toLowerCase().includes(s))
+        (p.hsn_or_sac && p.hsn_or_sac.toLowerCase().includes(s)) ||
+        (p.custom_notes && p.custom_notes.some((n) => n.toLowerCase().includes(s)))
       );
     }
     return true;
@@ -181,10 +341,17 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                 item_type: 'PRODUCT',
                 unit: 'NOS',
                 gst_rate: '18.00',
-                purchase_price: '0.00',
-                selling_price: '0.00',
-                minimum_stock: '5.00',
+                purchase_price: '',
+                selling_price: '',
+                min_selling_price: '',
+                max_selling_price: '',
+                minimum_stock: '',
+                custom_notes: [],
               });
+              setShowNotesSection(false);
+              setNoteCountInput('');
+              setIsInlineCatOpen(false);
+              setInlineCatName('');
               setIsModalOpen(true);
             }}
             className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
@@ -272,6 +439,29 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-900 dark:text-white">{p.name}</div>
                       {p.sku && <div className="text-[10px] text-slate-400 font-mono">SKU: {p.sku}</div>}
+                      {p.custom_notes && p.custom_notes.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {p.custom_notes.slice(0, 2).map((note, idx) => (
+                            <div
+                              key={idx}
+                              className="text-[10px] text-slate-500 dark:text-slate-400 flex items-start space-x-1"
+                            >
+                              <span className="font-mono text-brand-600 dark:text-brand-400 font-semibold shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <span className="truncate max-w-xs" title={note}>{note}</span>
+                            </div>
+                          ))}
+                          {p.custom_notes.length > 2 && (
+                            <div
+                              className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold"
+                              title={p.custom_notes.map((n, i) => `#${i + 1}: ${n}`).join('\n')}
+                            >
+                              +{p.custom_notes.length - 2} more note{p.custom_notes.length - 2 > 1 ? 's' : ''}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span
@@ -294,7 +484,17 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                       {p.gst_rate}%
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
-                      {formatIndianCurrency(p.selling_price)}
+                      {p.min_selling_price && p.max_selling_price ? (
+                        <div>
+                          {formatIndianCurrency(p.min_selling_price)} – {formatIndianCurrency(p.max_selling_price)}
+                        </div>
+                      ) : p.min_selling_price ? (
+                        <div>Min {formatIndianCurrency(p.min_selling_price)}</div>
+                      ) : p.max_selling_price ? (
+                        <div>Max {formatIndianCurrency(p.max_selling_price)}</div>
+                      ) : (
+                        <div>{formatIndianCurrency(p.selling_price)}</div>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right font-semibold">
                       {p.item_type === 'SERVICE' ? (
@@ -311,7 +511,24 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                         <button
                           type="button"
                           onClick={() => {
-                            setEditingProduct({ ...p });
+                            const existingNotes = Array.isArray(p.custom_notes) ? [...p.custom_notes] : [];
+                            const legacyPrice =
+                              !p.min_selling_price && !p.max_selling_price && Number(p.selling_price) > 0
+                                ? p.selling_price
+                                : '';
+                            setEditingProduct({
+                              ...p,
+                              selling_price: Number(p.selling_price) === 0 ? '' : p.selling_price,
+                              min_selling_price: p.min_selling_price ?? legacyPrice,
+                              max_selling_price: p.max_selling_price ?? '',
+                              purchase_price: Number(p.purchase_price) === 0 ? '' : p.purchase_price,
+                              minimum_stock: Number(p.minimum_stock) === 0 ? '' : p.minimum_stock,
+                              custom_notes: existingNotes,
+                            });
+                            setShowNotesSection(existingNotes.length > 0);
+                            setNoteCountInput(existingNotes.length > 0 ? String(existingNotes.length) : '');
+                            setIsInlineCatOpen(false);
+                            setInlineCatName('');
                             setIsModalOpen(true);
                           }}
                           className="p-1 text-slate-400 hover:text-brand-600"
@@ -339,7 +556,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
 
       {/* Add / Edit Item Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
@@ -365,7 +583,30 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Item Name *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Item Name *</label>
+                    <button
+                      type="button"
+                      onClick={handleToggleNotesSection}
+                      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                        showNotesSection
+                          ? 'bg-brand-600 text-white border-brand-700 hover:bg-brand-700'
+                          : 'text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 border-brand-200 dark:border-brand-700'
+                      }`}
+                      title={showNotesSection ? 'Save & close notes section' : 'Add or edit custom notes for this item'}
+                    >
+                      <StickyNote className="w-3 h-3" />
+                      <span>
+                        {(() => {
+                          const filledCount = (editingProduct.custom_notes || []).filter((n) => n.trim().length > 0).length;
+                          if (showNotesSection) {
+                            return filledCount > 0 ? `Done (${filledCount})` : 'Close Note';
+                          }
+                          return filledCount > 0 ? `Notes (${filledCount})` : '+ Add Note';
+                        })()}
+                      </span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     placeholder="Product or Service Name"
@@ -374,6 +615,85 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
                   />
                 </div>
+
+                {showNotesSection && (
+                  <div className="col-span-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-700 pb-2">
+                      <div className="flex items-center space-x-2">
+                        <StickyNote className="w-4 h-4 text-brand-600 shrink-0" />
+                        <div>
+                          <div className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                            Custom Product Notes
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Enter number of products to create matching notes (e.g. warranty, hard disk / serial numbers)
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <label className="flex items-center space-x-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          <span>No. of Products:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={200}
+                            placeholder="Qty"
+                            value={noteCountInput}
+                            onChange={(e) => handleNoteCountInputChange(e.target.value)}
+                            className="w-16 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-center font-mono bg-white dark:bg-slate-800"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleAddNote}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-[11px] font-semibold shadow-xs transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Note</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCloseNotesSection}
+                          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors"
+                          title="Save & close notes"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {(editingProduct.custom_notes || []).length === 0 ? (
+                      <div className="text-center py-3 text-[11px] text-slate-400">
+                        Enter number of products above or click <span className="font-semibold text-brand-600">+ Add Note</span> to add notes.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {(editingProduct.custom_notes || []).map((note, idx) => (
+                          <div key={idx} className="flex items-center space-x-2">
+                            <span className="w-8 shrink-0 text-center py-1 bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded font-mono text-[11px] font-bold">
+                              #{idx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              placeholder={`Note #${idx + 1} (e.g. Warranty: 3 Years, Hard Disk No: SN-00${idx + 1})`}
+                              value={note}
+                              onChange={(e) => handleUpdateNote(idx, e.target.value)}
+                              className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNote(idx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                              title={`Remove Note #${idx + 1}`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">HSN or SAC Code *</label>
                   <input
@@ -385,28 +705,106 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
-                  <select
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Category</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isInlineCatOpen) {
+                          setIsInlineCatOpen(false);
+                          setInlineCatName('');
+                        } else {
+                          setIsInlineCatOpen(true);
+                        }
+                      }}
+                      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                        isInlineCatOpen
+                          ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
+                          : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700'
+                      }`}
+                      title={isInlineCatOpen ? 'Close new category input' : 'Create a new category and save it'}
+                    >
+                      <Tags className="w-3 h-3" />
+                      <span>{isInlineCatOpen ? 'Close' : '+ New Category'}</span>
+                    </button>
+                  </div>
+                  <SearchableSelect
+                    options={categoryOptions}
                     value={editingProduct.category_id || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, category_id: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    <option value="">-- No Category --</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setEditingProduct({ ...editingProduct, category_id: val })}
+                    placeholder="-- No Category --"
+                  />
+                  {isInlineCatOpen && (
+                    <div className="mt-2 flex items-center space-x-1.5 p-2 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Category name (e.g. Storage, Hardware)"
+                        value={inlineCatName}
+                        onChange={(e) => setInlineCatName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCreateInlineCategory();
+                          } else if (e.key === 'Escape') {
+                            setIsInlineCatOpen(false);
+                            setInlineCatName('');
+                          }
+                        }}
+                        className="flex-1 min-w-0 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={creatingInlineCat || !inlineCatName.trim()}
+                        onClick={handleCreateInlineCategory}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold disabled:opacity-50 transition-colors shrink-0"
+                      >
+                        {creatingInlineCat ? 'Saving...' : 'Add'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsInlineCatOpen(false);
+                          setInlineCatName('');
+                        }}
+                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Selling Price (₹) *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="0.00"
-                    value={editingProduct.selling_price || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, selling_price: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="Min Price"
+                        value={editingProduct.min_selling_price ?? ''}
+                        onChange={(e) =>
+                          setEditingProduct({ ...editingProduct, min_selling_price: e.target.value })
+                        }
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                      />
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="Max Price"
+                        value={editingProduct.max_selling_price ?? ''}
+                        onChange={(e) =>
+                          setEditingProduct({ ...editingProduct, max_selling_price: e.target.value })
+                        }
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Price (₹)</label>
@@ -414,7 +812,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                     type="number"
                     step="any"
                     placeholder="0.00"
-                    value={editingProduct.purchase_price || ''}
+                    value={editingProduct.purchase_price ?? ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, purchase_price: e.target.value })}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
                   />
@@ -433,15 +831,12 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Unit of Measure</label>
-                  <select
+                  <SearchableSelect
+                    options={unitOptions}
                     value={editingProduct.unit || 'NOS'}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    {units.map((u) => (
-                      <option key={u.code} value={u.code}>{u.name} ({u.code})</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setEditingProduct({ ...editingProduct, unit: val })}
+                    placeholder="Search unit (e.g. NOS, PCS, KG)..."
+                  />
                 </div>
                 {editingProduct.item_type === 'PRODUCT' && (
                   <div>
@@ -450,7 +845,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                       type="number"
                       step="any"
                       placeholder="5"
-                      value={editingProduct.minimum_stock || '0'}
+                      value={editingProduct.minimum_stock ?? ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, minimum_stock: e.target.value })}
                       className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
                     />
@@ -487,11 +882,13 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Category Management Modal */}
       {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
@@ -562,6 +959,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

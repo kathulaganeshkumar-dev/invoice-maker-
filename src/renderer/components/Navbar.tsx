@@ -13,36 +13,56 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { getIndianFinancialYear } from '../../server/services/numberingService';
+import { NotificationsBell } from './NotificationsBell';
 
 interface Props {
   company: Company | null;
   branch: Branch | null;
+  softwareIcon?: string | null;
   onOpenCompanyModal: () => void;
   onOpenConfigModal: () => void;
+  onQuickNewInvoice: () => void;
+  onQuickNewQuotation: () => void;
   onNavigate: (tab: string) => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
+  allowedMenus?: string[] | null;
+  canOpenSettings?: boolean;
 }
 
 export const Navbar: React.FC<Props> = ({
   company,
   branch,
+  softwareIcon,
   onOpenCompanyModal,
   onOpenConfigModal,
+  onQuickNewInvoice,
+  onQuickNewQuotation,
   onNavigate,
   isDarkMode,
   onToggleTheme,
+  allowedMenus,
+  canOpenSettings = true,
 }) => {
   const currentFy = getIndianFinancialYear();
+  const canAccess = (menuId: string) => !allowedMenus || allowedMenus.length === 0 || allowedMenus.includes(menuId);
 
   return (
     <header className="h-14 border-b border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between px-4 select-none z-20">
       {/* Left: Brand logo & Active Business Selector */}
       <div className="flex items-center space-x-3">
         <div className="flex items-center space-x-2 text-brand-900 dark:text-white font-extrabold text-base tracking-tight">
-          <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-sm font-bold text-lg">
-            Σ
-          </div>
+          {softwareIcon ? (
+            <img
+              src={softwareIcon}
+              alt="Software Icon"
+              className="w-8 h-8 rounded-lg object-cover shadow-sm shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-sm font-bold text-lg shrink-0">
+              Σ
+            </div>
+          )}
           <span className="hidden sm:inline">Enterprise Invoicer</span>
         </div>
 
@@ -73,32 +93,38 @@ export const Navbar: React.FC<Props> = ({
 
       {/* Right: Quick Actions, Theme, Status */}
       <div className="flex items-center space-x-2.5">
-        <button
-          type="button"
-          onClick={() => onNavigate('invoices')}
-          className="inline-flex items-center space-x-1.5 px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-xs font-bold shadow-sm transition-all"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          <span>New Invoice</span>
-        </button>
+        {canAccess('invoices') && (
+          <button
+            type="button"
+            onClick={onQuickNewInvoice}
+            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-xs font-bold shadow-sm transition-all"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>New Invoice</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => onNavigate('quotations')}
-          className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
-        >
-          <FilePlus className="w-3.5 h-3.5 text-slate-500" />
-          <span className="hidden md:inline">Quotation</span>
-        </button>
+        {canAccess('quotations') && (
+          <button
+            type="button"
+            onClick={onQuickNewQuotation}
+            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+          >
+            <FilePlus className="w-3.5 h-3.5 text-slate-500" />
+            <span className="hidden md:inline">Quotation</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => onNavigate('customers')}
-          className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
-        >
-          <Users className="w-3.5 h-3.5 text-slate-500" />
-          <span className="hidden md:inline">Customer</span>
-        </button>
+        {canAccess('customers') && (
+          <button
+            type="button"
+            onClick={() => onNavigate('customers')}
+            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+          >
+            <Users className="w-3.5 h-3.5 text-slate-500" />
+            <span className="hidden md:inline">Customer</span>
+          </button>
+        )}
 
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
 
@@ -107,6 +133,9 @@ export const Navbar: React.FC<Props> = ({
           <ShieldCheck className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Offline & Local</span>
         </div>
+
+        {/* Notifications Bell */}
+        <NotificationsBell companyId={company?.id} onNavigate={onNavigate} />
 
         {/* Dark/Light toggle */}
         <button
@@ -119,14 +148,16 @@ export const Navbar: React.FC<Props> = ({
         </button>
 
         {/* Configuration Modal Trigger */}
-        <button
-          type="button"
-          onClick={onOpenConfigModal}
-          className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title="Settings & Preferences"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+        {canOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenConfigModal}
+            className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Settings & Preferences"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </header>
   );

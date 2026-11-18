@@ -3,6 +3,7 @@ import React from 'react';
 import {
   LayoutDashboard,
   Receipt,
+  FileText,
   FileSpreadsheet,
   Users,
   Truck,
@@ -10,7 +11,7 @@ import {
   ShoppingCart,
   Boxes,
   CreditCard,
-  Stamp,
+  FileUp,
   BarChart3,
   FileDown,
   Database,
@@ -21,12 +22,21 @@ interface Props {
   activeTab: string;
   onSelectTab: (tab: string) => void;
   onOpenSettings?: () => void;
+  allowedMenus?: string[] | null;
+  canOpenSettings?: boolean;
 }
 
-export const Sidebar: React.FC<Props> = ({ activeTab, onSelectTab, onOpenSettings }) => {
-  const menuItems = [
+export const Sidebar: React.FC<Props> = ({
+  activeTab,
+  onSelectTab,
+  onOpenSettings,
+  allowedMenus,
+  canOpenSettings = true,
+}) => {
+  const allMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'invoices', label: 'Invoices (Sales)', icon: Receipt },
+    { id: 'invoices_other', label: 'Invoices (Other)', icon: FileText },
     { id: 'quotations', label: 'Quotations', icon: FileSpreadsheet },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'suppliers', label: 'Suppliers', icon: Truck },
@@ -34,11 +44,16 @@ export const Sidebar: React.FC<Props> = ({ activeTab, onSelectTab, onOpenSetting
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
     { id: 'inventory', label: 'Inventory & Stock', icon: Boxes },
     { id: 'payments', label: 'Payments (AR/AP)', icon: CreditCard },
-    { id: 'letterheads', label: 'Letterheads & OCR', icon: Stamp },
+    { id: 'letterheads', label: 'Print Templates', icon: FileUp },
     { id: 'reports', label: 'Reports & GST', icon: BarChart3 },
     { id: 'import_export', label: 'Excel Import/Export', icon: FileDown },
     { id: 'backup_restore', label: 'Backup & Restore', icon: Database },
   ];
+
+  const menuItems =
+    allowedMenus && allowedMenus.length > 0
+      ? allMenuItems.filter((item) => allowedMenus.includes(item.id))
+      : allMenuItems;
 
   return (
     <aside className="w-56 border-r border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex flex-col py-3 select-none flex-shrink-0">
@@ -68,7 +83,7 @@ export const Sidebar: React.FC<Props> = ({ activeTab, onSelectTab, onOpenSetting
       </nav>
 
       {/* Settings Shortcut Button */}
-      {onOpenSettings && (
+      {onOpenSettings && canOpenSettings && (
         <div className="px-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"

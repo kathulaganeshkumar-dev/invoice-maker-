@@ -35,16 +35,22 @@ export class PaymentService {
       customerName: string;
       amount: string | number;
       paymentMethod: PaymentMethod;
+      bankAccount?: string;
       paymentDate?: string;
       referenceNumber?: string;
       notes?: string;
       allocations?: { invoiceId: string; amount: string | number }[];
+      created_by_device_id?: string;
+      created_by_device_name?: string;
     }
   ): Promise<CustomerPayment> {
     return this.db.transaction(async (trx) => {
       const now = new Date().toISOString();
       const paymentId = uuidv4();
-      const totalPaymentAmount = new Decimal(input.amount);
+      const totalPaymentAmount = new Decimal(input.amount || 0);
+      if (!totalPaymentAmount.isFinite() || totalPaymentAmount.lte(0)) {
+        throw new Error('Customer payment amount must be greater than zero.');
+      }
 
       const { number: payNum } = await NumberingService.getNextNumber(
         trx,
@@ -126,6 +132,7 @@ export class PaymentService {
         customer_name: input.customerName,
         amount: totalPaymentAmount.toFixed(2),
         payment_method: input.paymentMethod || 'BANK_TRANSFER',
+        bank_account: input.bankAccount || undefined,
         reference_number: input.referenceNumber || undefined,
         notes: input.notes || undefined,
         allocations: allocationRecords,
@@ -134,7 +141,11 @@ export class PaymentService {
       };
 
       const { allocations: _, ...paymentRow } = paymentRecord;
-      await trx('customer_payments').insert(paymentRow);
+      await trx('customer_payments').insert({
+        ...paymentRow,
+        created_by_device_id: input.created_by_device_id || null,
+        created_by_device_name: input.created_by_device_name || null,
+      });
 
       return paymentRecord;
     });
@@ -161,10 +172,14 @@ export class PaymentService {
       supplierName?: string;
       amount: string | number;
       paymentMethod: PaymentMethod;
+      bankAccount?: string;
+      vendorBankAccount?: string;
       paymentDate?: string;
       referenceNumber?: string;
       notes?: string;
       allocations?: { billId: string; amount: string | number }[];
+      created_by_device_id?: string;
+      created_by_device_name?: string;
     }
   ): Promise<SupplierPayment> {
     return this.db.transaction(async (trx) => {
@@ -259,6 +274,8 @@ export class PaymentService {
         supplier_name: input.supplierName || supplier.name,
         amount: totalAmount.toFixed(2),
         payment_method: input.paymentMethod || 'BANK_TRANSFER',
+        bank_account: input.bankAccount || undefined,
+        vendor_bank_account: input.vendorBankAccount || undefined,
         reference_number: input.referenceNumber || undefined,
         notes: input.notes || undefined,
         allocations: allocationRecords,
@@ -267,7 +284,11 @@ export class PaymentService {
       };
 
       const { allocations: _, ...row } = paymentRecord;
-      await trx('supplier_payments').insert(row);
+      await trx('supplier_payments').insert({
+        ...row,
+        created_by_device_id: input.created_by_device_id || null,
+        created_by_device_name: input.created_by_device_name || null,
+      });
 
       return paymentRecord;
     });

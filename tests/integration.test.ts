@@ -15,6 +15,7 @@ import { InventoryService } from '../src/server/services/inventoryService';
 import { PaymentService } from '../src/server/services/paymentService';
 import { LetterheadService } from '../src/server/services/letterheadService';
 import { ReportService } from '../src/server/services/reportService';
+import { BackupRestoreService } from '../src/server/services/backupRestoreService';
 import { PdfEngine } from '../src/server/services/pdfEngine';
 import Decimal from 'decimal.js';
 
@@ -498,6 +499,112 @@ describe('End-to-End Business Application Operations', () => {
       company: companyTwo,
     });
     expect(overlaidBytes.length).toBeGreaterThan(pdfBuffer.length);
+  });
+
+  it('restores a downloaded .sqlite3 backup live into the running database immediately', async () => {
+    const backupService = new BackupRestoreService(db);
+
+    // 1. Create a WAL-flushed full backup and read its bytes (simulating user download)
+    const snapshot = await backupService.createFullBackup();
+    const downloadedBuffer = fs.readFileSync(snapshot.filePath);
+    expect(downloadedBuffer.length).toBeGreaterThan(4096);
+
+    const companiesBefore = await companyService.getAllCompanies();
+    const invoicesBefore = await invoiceService.getInvoices(company.id);
+
+    // 2. Create a new company and delete one existing company (simulating new company / altered state)
+    const tempComp = await companyService.createCompany({
+      name: 'Temporary Replacement Co',
+      registered_address: 'New Addr',
+      state: 'Maharashtra',
+      state_code: '27',
+    });
+    await companyService.deleteCompany(companyTwo.id);
+    const alteredCompanies = await companyService.getAllCompanies();
+    expect(alteredCompanies.some((c) => c.id === tempComp.id)).toBe(true);
+    expect(alteredCompanies.some((c) => c.id === companyTwo.id)).toBe(false);
+
+    // 3. Upload & restore the downloaded backup live without restarting the DB connection
+    const summary = await backupService.restoreFromUploadedFile(downloadedBuffer, snapshot.filename);
+    expect(summary.companies).toBe(companiesBefore.length);
+    expect(summary.invoices).toBeGreaterThanOrEqual(invoicesBefore.length);
+
+    // 4. Verify live queries immediately reflect the restored backup state
+    const restoredCompanies = await companyService.getAllCompanies();
+    expect(restoredCompanies.map((c) => c.id).sort()).toEqual(companiesBefore.map((c) => c.id).sort());
+    expect(restoredCompanies.some((c) => c.id === tempComp.id)).toBe(false);
+    expect(restoredCompanies.some((c) => c.id === companyTwo.id)).toBe(true);
+
+    const restoredInvoices = await invoiceService.getInvoices(company.id);
+    expect(restoredInvoices.length).toBe(invoicesBefore.length);
+  });
+
+  it('creates a per-company backup and restores into a newly created company without deleting existing companies', async () => {
+    const backupService = new BackupRestoreService(db);
+
+    const sourceCustomers = await masterDataService.getCustomers(company.id);
+    const sourceProducts = await masterDataService.getProducts(company.id);
+    const sourceInvoices = await invoiceService.getInvoices(company.id);
+
+    // 1. Create a single-company backup and inspect it
+    const companySnap = await backupService.createCompanyBackup(company.id);
+    const companyBuf = fs.readFileSync(companySnap.filePath);
+    const inspection = await backupService.inspectUploadedBuffer(companyBuf, companySnap.filename);
+    expect(inspection.companies.length).toBe(1);
+    expect(inspection.companies[0].id).toBe(company.id);
+    expect(inspection.companies[0].customers).toBe(sourceCustomers.length);
+    expect(inspection.companies[0].invoices).toBe(sourceInvoices.length);
+
+    // 2. User creates a brand-new company (e.g. "ganesh") and restores the backup into it
+    const ganeshCo = await companyService.createCompany({
+      name: 'ganesh',
+      registered_address: 'New Shop Address',
+      state: 'Maharashtra',
+      state_code: '27',
+    });
+
+    const restoreSummary = await backupService.restoreFromUploadedFile(companyBuf, companySnap.filename, {
+      mode: 'INTO_COMPANY',
+      targetCompanyId: ganeshCo.id,
+      sourceCompanyId: company.id,
+    });
+    expect(restoreSummary.mode).toBe('INTO_COMPANY');
+    expect(restoreSummary.targetCompanyName).toBe('ganesh');
+    expect(restoreSummary.customers).toBe(sourceCustomers.length);
+    expect(restoreSummary.products).toBe(sourceProducts.length);
+    expect(restoreSummary.invoices).toBe(sourceInvoices.length);
+
+    // 3. Verify newly created company STILL exists alongside existing companies
+    const allCompanies = await companyService.getAllCompanies();
+    expect(allCompanies.some((c) => c.id === ganeshCo.id && c.name === 'ganesh')).toBe(true);
+    expect(allCompanies.some((c) => c.id === company.id)).toBe(true);
+    expect(allCompanies.some((c) => c.id === companyTwo.id)).toBe(true);
+
+    // 4. Verify all business data was restored cleanly inside the new company with isolated IDs
+    const ganeshCustomers = await masterDataService.getCustomers(ganeshCo.id);
+    const ganeshProducts = await masterDataService.getProducts(ganeshCo.id);
+    const ganeshInvoices = await invoiceService.getInvoices(ganeshCo.id);
+    expect(ganeshCustomers.length).toBe(sourceCustomers.length);
+    expect(ganeshProducts.length).toBe(sourceProducts.length);
+    expect(ganeshInvoices.length).toBe(sourceInvoices.length);
+    expect(ganeshInvoices[0].id).not.toBe(sourceInvoices[0].id);
+    expect(ganeshInvoices[0].company_id).toBe(ganeshCo.id);
+
+    // Original source company must remain untouched
+    expect((await invoiceService.getInvoices(company.id)).length).toBe(sourceInvoices.length);
+
+    // 5. Verify strict per-company backup history isolation (each company only sees its own backups/restores)
+    const comp1History = await backupService.listBackups(company.id);
+    const ganeshHistory = await backupService.listBackups(ganeshCo.id);
+    const comp2History = await backupService.listBackups(companyTwo.id);
+    expect(comp1History.length).toBe(1);
+    expect(comp1History[0].filename).toBe(companySnap.filename);
+    expect(ganeshHistory.length).toBe(2); // pre_restore safety snapshot + uploaded file for ganesh only
+    expect(ganeshHistory.every((b) => b.filename !== companySnap.filename)).toBe(true);
+    expect(comp2History.length).toBe(0);
+
+    // Clean up temporary company so subsequent test sees original 2 companies
+    await companyService.deleteCompany(ganeshCo.id);
   });
 
   it('allows deleting ALL companies including the very last remaining company', async () => {

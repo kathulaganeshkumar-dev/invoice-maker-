@@ -49,3 +49,7 @@ Thumbs.db
 
 .vercel
 .env*
+
+scratch/
+invoice/
+*.png

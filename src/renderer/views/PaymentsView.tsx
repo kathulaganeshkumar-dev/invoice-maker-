@@ -1,6 +1,7 @@
 // src/renderer/views/PaymentsView.tsx - Customer Receipts (AR) & Supplier Payments (AP)
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Decimal from 'decimal.js';
+import { ModalPortal } from '../components/ModalPortal';
 import {
   CustomerPayment,
   SupplierPayment,
@@ -8,9 +9,13 @@ import {
   Supplier,
   Invoice,
   PurchaseInvoice,
+  Company,
+  Branch,
 } from '../../shared/types';
 import { api } from '../services/api';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
+import { SearchableSelect } from '../components/SearchableSelect';
+import { DateInput, isoToDisplayDate } from '../components/DateInput';
 import {
   CreditCard,
   Plus,
@@ -20,6 +25,7 @@ import {
   X,
   Trash2,
   Wand2,
+  Landmark,
 } from 'lucide-react';
 
 interface Props {
@@ -32,21 +38,196 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
   const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [allCompanyInvoices, setAllCompanyInvoices] = useState<Invoice[]>([]);
+  const [allUnpaidInvoices, setAllUnpaidInvoices] = useState<Invoice[]>([]);
+  const [allCompanyBills, setAllCompanyBills] = useState<PurchaseInvoice[]>([]);
+  const [allUnpaidBills, setAllUnpaidBills] = useState<PurchaseInvoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [showMoreInvoices, setShowMoreInvoices] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
 
   // Form State
   const [selectedPartyId, setSelectedPartyId] = useState<string>('');
-  const [paymentAmount, setPaymentAmount] = useState<string>('0.00');
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
+  const [paymentType, setPaymentType] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('BANK_TRANSFER');
+  const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
+  const [selectedVendorBankAccount, setSelectedVendorBankAccount] = useState<string>('');
+  const [cashNote, setCashNote] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [referenceNumber, setReferenceNumber] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [unpaidInvoices, setUnpaidInvoices] = useState<Invoice[]>([]);
   const [unpaidBills, setUnpaidBills] = useState<PurchaseInvoice[]>([]);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+
+  // Build Company Bank Options from the company & branch bank accounts entered during creation
+  const companyBankOptions = useMemo(() => {
+    const opts: { value: string; label: string; sublabel?: string; code?: string }[] = [];
+    const seen = new Set<string>();
+
+    const addBank = (
+      bankName?: string,
+      accNo?: string,
+      ifsc?: string,
+      bankBranch?: string,
+      tag?: string
+    ) => {
+      const name = bankName?.trim();
+      if (!name) return;
+      const acct = accNo?.trim() || '';
+      const key = `${name.toLowerCase()}|${acct.toLowerCase()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const valueLabel = acct ? `${name} (A/C ${acct})` : name;
+      const subParts: string[] = [];
+      if (acct) subParts.push(`A/C: ${acct}`);
+      if (bankBranch?.trim()) subParts.push(bankBranch.trim());
+      if (tag) subParts.push(tag);
+
+      opts.push({
+        value: valueLabel,
+        label: name,
+        sublabel: subParts.join(' • ') || undefined,
+        code: ifsc?.trim() || undefined,
+      });
+    };
+
+    if (companyInfo) {
+      addBank(
+        companyInfo.bank_name,
+        companyInfo.bank_account_no,
+        companyInfo.bank_ifsc,
+        companyInfo.bank_branch,
+        'Main Company Bank'
+      );
+    }
+
+    for (const br of branches) {
+      if (br.use_company_bank === false && br.bank_name) {
+        addBank(
+          br.bank_name,
+          br.bank_account_no,
+          br.bank_ifsc,
+          br.bank_branch,
+          `Branch: ${br.name}`
+        );
+      }
+    }
+
+    return opts;
+  }, [companyInfo, branches]);
+
+  const invoiceDropdownOptions = useMemo(() => {
+    const source = selectedPartyId
+      ? allUnpaidInvoices.filter((inv) => inv.customer_id === selectedPartyId)
+      : allUnpaidInvoices;
+    return [
+      { value: '', label: '-- Select Invoice Number (Optional) --' },
+      ...source.map((inv) => ({
+        value: inv.id,
+        label: inv.invoice_number,
+        sublabel: `${inv.customer_name} • Due: ${formatIndianCurrency(inv.balance_amount)}`,
+        badge: `Total ${formatIndianCurrency(inv.grand_total)}`,
+      })),
+    ];
+  }, [allUnpaidInvoices, selectedPartyId]);
+
+  const billDropdownOptions = useMemo(() => {
+    const source = selectedPartyId
+      ? allUnpaidBills.filter((b) => b.supplier_id === selectedPartyId)
+      : allUnpaidBills;
+    return [
+      { value: '', label: '-- Select Purchase Bill # (Optional) --' },
+      ...source.map((b) => ({
+        value: b.id,
+        label: b.bill_number,
+        sublabel: `${b.supplier_name} • Owed: ${formatIndianCurrency(b.balance_amount)}`,
+        badge: `Total ${formatIndianCurrency(b.grand_total)}`,
+      })),
+    ];
+  }, [allUnpaidBills, selectedPartyId]);
+
+  const buildVendorBanks = (vendor?: Supplier) => {
+    if (!vendor) return [];
+    const list: { value: string; label: string; sublabel?: string; code?: string }[] = [];
+    const seen = new Set<string>();
+
+    const addBank = (
+      bankName?: string,
+      accNo?: string,
+      ifsc?: string,
+      bankBranch?: string,
+      tag?: string
+    ) => {
+      const name = bankName?.trim() || '';
+      const acct = accNo?.trim() || '';
+      if (!name && !acct) return;
+      const key = `${name.toLowerCase()}|${acct.toLowerCase()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const displayName = name || 'Bank Account';
+      const valueLabel = acct ? `${displayName} (A/C ${acct})` : displayName;
+      const subParts: string[] = [];
+      if (acct) subParts.push(`A/C: ${acct}`);
+      if (bankBranch?.trim()) subParts.push(bankBranch.trim());
+      if (tag) subParts.push(tag);
+
+      list.push({
+        value: valueLabel,
+        label: displayName,
+        sublabel: subParts.join(' • ') || undefined,
+        code: ifsc?.trim() || undefined,
+      });
+    };
+
+    addBank(vendor.bank_name, vendor.bank_account_no, vendor.bank_ifsc, vendor.bank_branch, 'Primary Bank');
+    if (Array.isArray(vendor.additional_bank_accounts)) {
+      vendor.additional_bank_accounts.forEach((b, i) => {
+        addBank(b.bank_name, b.bank_account_no, b.bank_ifsc, b.bank_branch, `Bank #${i + 2}`);
+      });
+    }
+    return list;
+  };
+
+  const vendorBankOptions = useMemo(() => {
+    if (activeTab !== 'supplier' || !selectedPartyId) return [];
+    const vendor = suppliers.find((s) => s.id === selectedPartyId);
+    const banks = buildVendorBanks(vendor);
+    if (banks.length === 0) return [];
+    return [{ value: '', label: '-- Select Vendor Bank Account --' }, ...banks];
+  }, [activeTab, selectedPartyId, suppliers]);
+
+  const partyOptions = useMemo(() => {
+    if (activeTab === 'customer') {
+      return [
+        { value: '', label: '-- Select Customer --' },
+        ...customers.map((c) => ({
+          value: c.id,
+          label: c.name,
+          sublabel: `Receivable: ₹${c.current_balance}`,
+          code: c.gstin || undefined,
+        })),
+      ];
+    } else {
+      return [
+        { value: '', label: '-- Select Supplier --' },
+        ...suppliers.map((s) => ({
+          value: s.id,
+          label: s.name,
+          sublabel: `Payable: ₹${s.current_balance}`,
+          code: s.gstin || undefined,
+        })),
+      ];
+    }
+  }, [activeTab, customers, suppliers]);
 
   useEffect(() => {
     if (companyId) {
@@ -74,12 +255,25 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
 
   const loadMaster = async () => {
     try {
-      const [cList, sList] = await Promise.all([
+      const [cList, sList, comp, brList, invList, billList] = await Promise.all([
         api.getCustomers(companyId),
         api.getSuppliers(companyId),
+        api.getCompany(companyId).catch(() => null),
+        api.getBranches(companyId).catch(() => []),
+        api.getInvoices(companyId).catch(() => []),
+        api.getPurchaseInvoices(companyId).catch(() => []),
       ]);
+      const nonCancelledInvs = invList.filter((i) => i.status !== 'CANCELLED');
       setCustomers(cList);
       setSuppliers(sList);
+      setCompanyInfo(comp);
+      setBranches(brList);
+      setAllCompanyInvoices(nonCancelledInvs);
+      setAllUnpaidInvoices(
+        nonCancelledInvs.filter((i) => i.status === 'FINALIZED' && new Decimal(i.balance_amount || 0).gt(0))
+      );
+      setAllCompanyBills(billList);
+      setAllUnpaidBills(billList.filter((b) => b.is_finalized && new Decimal(b.balance_amount || 0).gt(0)));
     } catch (err) {
       console.error(err);
     }
@@ -87,8 +281,14 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
 
   const resetForm = () => {
     setSelectedPartyId('');
-    setPaymentAmount('0.00');
+    setSelectedInvoiceId('');
+    setShowMoreInvoices(false);
+    setPaymentType('FULL');
+    setPaymentAmount('');
     setPaymentMethod('BANK_TRANSFER');
+    setSelectedBankAccount(companyBankOptions[0]?.value || '');
+    setSelectedVendorBankAccount('');
+    setCashNote('');
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setReferenceNumber('');
     setNotes('');
@@ -105,26 +305,185 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
 
   const handlePartyChange = async (partyId: string) => {
     setSelectedPartyId(partyId);
+    setSelectedInvoiceId('');
+    setSelectedVendorBankAccount('');
+    setShowMoreInvoices(false);
     setAllocations({});
     setUnpaidInvoices([]);
     setUnpaidBills([]);
 
     if (!partyId) return;
 
-    try {
-      if (activeTab === 'customer') {
-        const invs = await api.getInvoices(companyId, { customer_id: partyId, status: 'FINALIZED' } as any);
-        const pending = invs.filter((i) => new Decimal(i.balance_amount || 0).gt(0));
-        setUnpaidInvoices(pending);
-      } else {
-        const bills = await api.getPurchaseInvoices(companyId);
-        const pendingBills = bills.filter(
-          (b) => b.supplier_id === partyId && b.is_finalized && new Decimal(b.balance_amount || 0).gt(0)
+    if (activeTab === 'customer') {
+      let sourceInvs = allCompanyInvoices;
+      try {
+        const fresh = await api.getInvoices(companyId);
+        sourceInvs = fresh.filter((i) => i.status !== 'CANCELLED');
+        setAllCompanyInvoices(sourceInvs);
+        setAllUnpaidInvoices(
+          sourceInvs.filter((i) => i.status === 'FINALIZED' && new Decimal(i.balance_amount || 0).gt(0))
         );
-        setUnpaidBills(pendingBills);
+      } catch {
+        // fallback to cached list
       }
-    } catch (err) {
-      console.error(err);
+      const pending = sourceInvs.filter(
+        (i) => i.customer_id === partyId && i.status === 'FINALIZED' && new Decimal(i.balance_amount || 0).gt(0)
+      );
+      setUnpaidInvoices(pending);
+      if (pending.length === 1) {
+        const only = pending[0];
+        setSelectedInvoiceId(only.id);
+        if (paymentType === 'FULL') {
+          const bal = new Decimal(only.balance_amount || 0).toFixed(2);
+          setPaymentAmount(bal);
+          setAllocations({ [only.id]: bal });
+        }
+      }
+    } else {
+      let sourceBills = allCompanyBills;
+      try {
+        sourceBills = await api.getPurchaseInvoices(companyId);
+        setAllCompanyBills(sourceBills);
+        setAllUnpaidBills(sourceBills.filter((b) => b.is_finalized && new Decimal(b.balance_amount || 0).gt(0)));
+      } catch {
+        // fallback to cached list
+      }
+      const pendingBills = sourceBills.filter(
+        (b) => b.supplier_id === partyId && b.is_finalized && new Decimal(b.balance_amount || 0).gt(0)
+      );
+      setUnpaidBills(pendingBills);
+      const chosenSup = suppliers.find((s) => s.id === partyId);
+      const supBanks = buildVendorBanks(chosenSup);
+      // Auto-select only when there is 1 bank; if vendor has 2+ banks leave blank for manual selection
+      setSelectedVendorBankAccount(supBanks.length === 1 ? supBanks[0].value : '');
+      if (pendingBills.length === 1) {
+        const only = pendingBills[0];
+        setSelectedInvoiceId(only.id);
+        if (paymentType === 'FULL') {
+          const bal = new Decimal(only.balance_amount || 0).toFixed(2);
+          setPaymentAmount(bal);
+          setAllocations({ [only.id]: bal });
+        }
+      }
+    }
+  };
+
+  const handleInvoiceOrBillSelect = (docId: string) => {
+    setSelectedInvoiceId(docId);
+    if (!docId) {
+      setAllocations({});
+      return;
+    }
+
+    if (activeTab === 'customer') {
+      const inv = allUnpaidInvoices.find((i) => i.id === docId);
+      if (!inv) return;
+      if (selectedPartyId !== inv.customer_id) {
+        setSelectedPartyId(inv.customer_id);
+        setUnpaidInvoices(allUnpaidInvoices.filter((i) => i.customer_id === inv.customer_id));
+      }
+      const bal = new Decimal(inv.balance_amount || 0).toFixed(2);
+      if (paymentType === 'FULL') {
+        setPaymentAmount(bal);
+        setAllocations({ [inv.id]: bal });
+      } else {
+        const currentAmt = paymentAmount && Number(paymentAmount) > 0 ? paymentAmount : '';
+        setAllocations(currentAmt ? { [inv.id]: currentAmt } : {});
+      }
+    } else {
+      const bill = allUnpaidBills.find((b) => b.id === docId);
+      if (!bill) return;
+      if (selectedPartyId !== bill.supplier_id) {
+        setSelectedPartyId(bill.supplier_id);
+        setUnpaidBills(allUnpaidBills.filter((b) => b.supplier_id === bill.supplier_id));
+        const chosenSup = suppliers.find((s) => s.id === bill.supplier_id);
+        const supBanks = buildVendorBanks(chosenSup);
+        setSelectedVendorBankAccount(supBanks.length === 1 ? supBanks[0].value : '');
+      }
+      const bal = new Decimal(bill.balance_amount || 0).toFixed(2);
+      if (paymentType === 'FULL') {
+        setPaymentAmount(bal);
+        setAllocations({ [bill.id]: bal });
+      } else {
+        const currentAmt = paymentAmount && Number(paymentAmount) > 0 ? paymentAmount : '';
+        setAllocations(currentAmt ? { [bill.id]: currentAmt } : {});
+      }
+    }
+  };
+
+  const handlePaymentTypeChange = (nextType: 'FULL' | 'PARTIAL') => {
+    setPaymentType(nextType);
+    const docs = activeTab === 'customer' ? unpaidInvoices : unpaidBills;
+    if (nextType === 'FULL') {
+      if (selectedInvoiceId) {
+        const doc = docs.find((d) => d.id === selectedInvoiceId);
+        if (doc) {
+          const bal = new Decimal(doc.balance_amount || 0).toFixed(2);
+          setPaymentAmount(bal);
+          setAllocations({ [doc.id]: bal });
+          return;
+        }
+      }
+      if (docs.length > 0) {
+        let total = new Decimal(0);
+        const nextAlloc: Record<string, string> = {};
+        for (const d of docs) {
+          const bal = new Decimal(d.balance_amount || 0);
+          if (bal.gt(0)) {
+            nextAlloc[d.id] = bal.toFixed(2);
+            total = total.add(bal);
+          }
+        }
+        setPaymentAmount(total.gt(0) ? total.toFixed(2) : '');
+        setAllocations(nextAlloc);
+      }
+    } else {
+      // Partial payment: let user enter custom partial amount cleanly
+      setPaymentAmount('');
+      setAllocations({});
+    }
+  };
+
+  const handlePaymentAmountChange = (val: string) => {
+    setPaymentAmount(val);
+    // If a single invoice/bill is explicitly selected and no multi-invoice split exists, keep its allocation synced
+    if (selectedInvoiceId) {
+      const otherAllocs = Object.entries(allocations).filter(
+        ([id, amt]) => id !== selectedInvoiceId && amt && Number(amt) > 0
+      );
+      if (otherAllocs.length === 0) {
+        const docs = activeTab === 'customer' ? allUnpaidInvoices : allUnpaidBills;
+        const doc = docs.find((d) => d.id === selectedInvoiceId);
+        if (doc && val && Number(val) > 0) {
+          try {
+            const entered = new Decimal(val);
+            const bal = new Decimal(doc.balance_amount || 0);
+            setAllocations({ [selectedInvoiceId]: Decimal.min(entered, bal).toFixed(2) });
+          } catch {
+            // ignore while typing
+          }
+        } else {
+          setAllocations({});
+        }
+      }
+    }
+  };
+
+  const handleAllocationInputChange = (docId: string, val: string) => {
+    const nextAlloc = { ...allocations, [docId]: val };
+    setAllocations(nextAlloc);
+    let sum = new Decimal(0);
+    for (const v of Object.values(nextAlloc)) {
+      if (v && Number(v) > 0) {
+        try {
+          sum = sum.add(new Decimal(v));
+        } catch {
+          // ignore
+        }
+      }
+    }
+    if (sum.gt(0)) {
+      setPaymentAmount(sum.toFixed(2));
     }
   };
 
@@ -208,6 +567,10 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           customerName: cust.name,
           amount: enteredAmt.toFixed(2),
           paymentMethod,
+          bankAccount:
+            paymentMethod === 'CASH'
+              ? (cashNote.trim() ? `Cash: ${cashNote.trim()}` : undefined)
+              : (selectedBankAccount || undefined),
           paymentDate,
           referenceNumber,
           notes,
@@ -223,13 +586,19 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
 
         const billAllocations = Object.entries(allocations)
           .filter(([_, amt]) => amt && new Decimal(amt || 0).gt(0))
-          .map(([purchaseInvoiceId, amount]) => ({ purchaseInvoiceId, amount }));
+          .map(([billId, amount]) => ({ billId, amount }));
 
         await api.recordSupplierPayment(companyId, {
           supplierId: sup.id,
           supplierName: sup.name,
           amount: enteredAmt.toFixed(2),
           paymentMethod,
+          bankAccount:
+            paymentMethod === 'CASH'
+              ? (cashNote.trim() ? `Cash: ${cashNote.trim()}` : undefined)
+              : (selectedBankAccount || undefined),
+          vendorBankAccount:
+            paymentMethod === 'CASH' ? undefined : (selectedVendorBankAccount || undefined),
           paymentDate,
           referenceNumber,
           notes,
@@ -317,7 +686,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           type="button"
           onClick={() => {
             resetForm();
-            setReferenceNumber(`TXN-${Date.now().toString().slice(-6)}`);
+            loadMaster();
             setIsModalOpen(true);
           }}
           className={`inline-flex items-center space-x-1.5 px-4 py-2 text-white rounded-lg text-xs font-bold shadow-sm transition-all ${
@@ -416,7 +785,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 <th className="py-3 px-4">Receipt #</th>
                 <th className="py-3 px-4">Receipt Date</th>
                 <th className="py-3 px-4">Received From (Customer)</th>
-                <th className="py-3 px-4">Method</th>
+                <th className="py-3 px-4">Method &amp; Bank</th>
                 <th className="py-3 px-4">UTR / Ref #</th>
                 <th className="py-3 px-4 text-right">Amount Received</th>
                 <th className="py-3 px-4 text-right">Invoices Settled</th>
@@ -436,12 +805,20 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                     <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
                       {p.payment_number}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{p.payment_date}</td>
+                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                      {isoToDisplayDate(p.payment_date) || p.payment_date}
+                    </td>
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">{p.customer_name}</td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                         {p.payment_method}
                       </span>
+                      {p.bank_account && (
+                        <div className="text-[10px] text-brand-700 dark:text-brand-300 font-medium mt-0.5 flex items-center space-x-1">
+                          <Landmark className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[180px]" title={p.bank_account}>{p.bank_account}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-500">{p.reference_number || '-'}</td>
                     <td className="py-3 px-4 text-right font-bold text-emerald-600">
@@ -449,9 +826,14 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                     </td>
                     <td className="py-3 px-4 text-right font-semibold text-slate-700 dark:text-slate-300">
                       {p.allocations && p.allocations.length > 0 ? (
-                        <span title={p.allocations.map((a) => `${a.document_number}: ₹${a.allocated_amount}`).join(', ')}>
-                          {p.allocations.length} Invoice{p.allocations.length > 1 ? 's' : ''}
-                        </span>
+                        <div className="inline-flex flex-col items-end">
+                          <span title={p.allocations.map((a) => `${a.document_number}: ₹${a.allocated_amount}`).join(', ')}>
+                            {p.allocations.length} Invoice{p.allocations.length > 1 ? 's' : ''}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {p.allocations.map((a) => a.document_number).join(', ')}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-amber-600">On-Account Advance</span>
                       )}
@@ -501,7 +883,9 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                       <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
                         {p.payment_number}
                       </td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{p.payment_date}</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                      {isoToDisplayDate(p.payment_date) || p.payment_date}
+                    </td>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900 dark:text-white">{p.supplier_name}</div>
                         {p.notes && <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{p.notes}</div>}
@@ -510,6 +894,22 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                           {p.payment_method}
                         </span>
+                        {p.bank_account && (
+                          <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium mt-0.5 flex items-center space-x-1">
+                            <Landmark className="w-3 h-3 shrink-0 text-brand-600" />
+                            <span className="truncate max-w-[190px]" title={`From: ${p.bank_account}`}>
+                              From: {p.bank_account}
+                            </span>
+                          </div>
+                        )}
+                        {p.vendor_bank_account && (
+                          <div className="text-[10px] text-rose-700 dark:text-rose-300 font-medium mt-0.5 flex items-center space-x-1">
+                            <Landmark className="w-3 h-3 shrink-0 text-rose-600" />
+                            <span className="truncate max-w-[190px]" title={`To Vendor: ${p.vendor_bank_account}`}>
+                              To: {p.vendor_bank_account}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 font-mono text-[11px] text-slate-500">{p.reference_number || '-'}</td>
                       <td className="py-3 px-4 text-right font-bold text-rose-600 dark:text-rose-400">
@@ -555,8 +955,9 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
 
       {/* Record Payment Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 {activeTab === 'customer' ? (
@@ -576,50 +977,265 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
-              {activeTab === 'supplier' && (
-                <div className="p-3 bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg text-rose-900 dark:text-rose-200 text-[11px]">
-                  <strong>Outgoing Payment to Vendor (Accounts Payable):</strong> You are paying this supplier for purchases or vendor advance. Their payable balance will be reduced accordingly.
-                </div>
-              )}
+              {activeTab === 'supplier' && (() => {
+                const selectedVendor = suppliers.find((s) => s.id === selectedPartyId);
+                if (!selectedVendor) {
+                  return (
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 text-[11px]">
+                      Select a supplier below to view their full vendor details (name, address, PIN code, GSTIN, bank &amp; payable balance).
+                    </div>
+                  );
+                }
+                return (
+                  <div className="p-3.5 bg-rose-50/60 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-900/60 rounded-lg space-y-2 text-[11px]">
+                    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-rose-200/70 dark:border-rose-900/50 pb-2">
+                      <div>
+                        <div className="text-xs font-extrabold text-slate-900 dark:text-white flex items-center flex-wrap gap-2">
+                          <span>{selectedVendor.name}</span>
+                          {selectedVendor.company_name &&
+                            selectedVendor.company_name.trim().toLowerCase() !== selectedVendor.name.trim().toLowerCase() && (
+                              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                                ({selectedVendor.company_name})
+                              </span>
+                            )}
+                        </div>
+                        {selectedVendor.contact_person && (
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Contact Person: <span className="font-semibold text-slate-700 dark:text-slate-200">{selectedVendor.contact_person}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-500 uppercase font-semibold">Payable Balance</div>
+                        <div className="text-xs font-extrabold text-rose-700 dark:text-rose-400">
+                          {formatIndianCurrency(selectedVendor.current_balance || '0.00')}
+                        </div>
+                        {(() => {
+                          const vendorPending = allUnpaidBills.filter((b) => b.supplier_id === selectedVendor.id);
+                          const terms = selectedVendor.payment_terms_days || 0;
+                          const now = new Date();
+                          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          const countdowns = vendorPending
+                            .map((b) => {
+                              const bPart = (b.bill_date || '').split('T')[0];
+                              const dPart = (b.due_date || '').split('T')[0];
+                              let dueDt: Date | null = null;
+                              if (dPart && (!bPart || dPart > bPart)) {
+                                const [y, m, d] = dPart.split('-').map(Number);
+                                if (y && m && d) dueDt = new Date(y, m - 1, d);
+                              } else if (bPart && terms > 0) {
+                                const [y, m, d] = bPart.split('-').map(Number);
+                                if (y && m && d) {
+                                  dueDt = new Date(y, m - 1, d);
+                                  dueDt.setDate(dueDt.getDate() + terms);
+                                }
+                              }
+                              if (!dueDt) return null;
+                              return Math.round((dueDt.getTime() - today.getTime()) / 86400000);
+                            })
+                            .filter((d): d is number => d !== null)
+                            .sort((a, b) => a - b);
+
+                          if (countdowns.length > 0) {
+                            const earliest = countdowns[0];
+                            return (
+                              <div className={`text-[10px] font-bold mt-0.5 ${earliest <= 0 ? 'text-rose-600' : earliest <= 5 ? 'text-amber-600' : 'text-sky-700'}`}>
+                                {earliest < 0
+                                  ? `Overdue by ${Math.abs(earliest)} day${Math.abs(earliest) === 1 ? '' : 's'}`
+                                  : earliest === 0
+                                    ? 'Payment Due Today'
+                                    : `${earliest} day${earliest === 1 ? '' : 's'} remaining`}
+                              </div>
+                            );
+                          }
+                          if (terms > 0) {
+                            return (
+                              <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                Reminder: {terms} days
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-slate-700 dark:text-slate-300">
+                      <div>
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Address: </span>
+                        <span>{selectedVendor.address || '-'}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">State &amp; PIN: </span>
+                        <span>
+                          {selectedVendor.state} ({selectedVendor.state_code})
+                          {selectedVendor.pin_code ? ` — PIN: ${selectedVendor.pin_code}` : ''}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Mobile: </span>
+                        <span className="font-mono">{selectedVendor.mobile || '-'}</span>
+                        {selectedVendor.email && (
+                          <>
+                            <span className="mx-1.5 text-slate-400">•</span>
+                            <span>{selectedVendor.email}</span>
+                          </>
+                        )}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">GSTIN: </span>
+                        <span className="font-mono">{selectedVendor.gstin || '-'}</span>
+                        {selectedVendor.pan && (
+                          <>
+                            <span className="mx-1.5 text-slate-400">•</span>
+                            <span className="font-semibold text-slate-500 dark:text-slate-400">PAN: </span>
+                            <span className="font-mono">{selectedVendor.pan}</span>
+                          </>
+                        )}
+                      </div>
+                      {(() => {
+                        const vBanks = buildVendorBanks(selectedVendor);
+                        if (vBanks.length === 0) return null;
+                        return (
+                          <div className="sm:col-span-2 pt-1.5 border-t border-rose-200/60 dark:border-rose-900/40 space-y-1">
+                            <div className="font-semibold text-slate-500 dark:text-slate-400">
+                              Vendor Bank Accounts ({vBanks.length}) — click to select:
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {vBanks.map((vb) => {
+                                const active = selectedVendorBankAccount === vb.value;
+                                return (
+                                  <button
+                                    key={vb.value}
+                                    type="button"
+                                    onClick={() => setSelectedVendorBankAccount(vb.value)}
+                                    className={`text-left px-2 py-1 rounded border text-[10px] transition-colors ${
+                                      active
+                                        ? 'bg-rose-600 text-white border-rose-700 font-bold shadow-xs'
+                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-rose-200 dark:border-slate-600 hover:bg-rose-50'
+                                    }`}
+                                  >
+                                    <span className="font-semibold">{vb.label}</span>
+                                    {vb.sublabel && (
+                                      <span className={active ? 'text-rose-100 ml-1.5' : 'text-slate-500 ml-1.5'}>
+                                        {vb.sublabel}
+                                      </span>
+                                    )}
+                                    {vb.code && (
+                                      <span className={`font-mono ml-1.5 ${active ? 'text-white' : 'text-slate-500'}`}>
+                                        [{vb.code}]
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {activeTab === 'customer' ? 'Received From Customer *' : 'Paid To Supplier *'}
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={partyOptions}
                     value={selectedPartyId}
-                    onChange={(e) => handlePartyChange(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    <option value="">
-                      {activeTab === 'customer' ? '-- Select Customer --' : '-- Select Supplier --'}
-                    </option>
-                    {activeTab === 'customer'
-                      ? customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} (Receivable: ₹{c.current_balance})
-                          </option>
-                        ))
-                      : suppliers.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} (Payable: ₹{s.current_balance})
-                          </option>
-                        ))}
-                  </select>
+                    onChange={(val) => handlePartyChange(val)}
+                    placeholder={activeTab === 'customer' ? 'Search customer by name or GSTIN...' : 'Search supplier by name or GSTIN...'}
+                  />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {activeTab === 'customer' ? 'Amount Received (₹) *' : 'Amount Paid to Supplier (₹) *'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      {activeTab === 'customer' ? 'Invoice Number' : 'Purchase Bill #'}
+                    </label>
+                    {selectedPartyId && (() => {
+                      const partyDocCount =
+                        activeTab === 'customer'
+                          ? allCompanyInvoices.filter((i) => i.customer_id === selectedPartyId).length
+                          : allCompanyBills.filter((b) => b.supplier_id === selectedPartyId).length;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreInvoices((prev) => !prev)}
+                          className={`inline-flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                            showMoreInvoices
+                              ? 'bg-brand-600 text-white border-brand-700 hover:bg-brand-700'
+                              : 'text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 border-brand-200 dark:border-brand-700'
+                          }`}
+                          title="Show all existing invoices for this party to select or split payment"
+                        >
+                          <span>
+                            {showMoreInvoices
+                              ? 'Hide Invoices'
+                              : `Show More (${partyDocCount})`}
+                          </span>
+                        </button>
+                      );
+                    })()}
+                  </div>
+                  <SearchableSelect
+                    options={activeTab === 'customer' ? invoiceDropdownOptions : billDropdownOptions}
+                    value={selectedInvoiceId}
+                    onChange={(val) => handleInvoiceOrBillSelect(val)}
+                    placeholder={activeTab === 'customer' ? 'Select company invoice number...' : 'Select supplier bill #...'}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      {activeTab === 'customer' ? 'Amount Received (₹) *' : 'Amount Paid to Supplier (₹) *'}
+                    </label>
+                    <div className="inline-flex rounded-md border border-slate-200 dark:border-slate-600 overflow-hidden text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentTypeChange('FULL')}
+                        className={`px-2 py-0.5 transition-colors ${
+                          paymentType === 'FULL'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        Full Amount
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentTypeChange('PARTIAL')}
+                        className={`px-2 py-0.5 transition-colors border-l border-slate-200 dark:border-slate-600 ${
+                          paymentType === 'PARTIAL'
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        Partial Amount
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="number"
                     step="any"
                     min="0"
+                    placeholder={paymentType === 'PARTIAL' ? 'Enter partial amount...' : '0.00'}
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    onChange={(e) => handlePaymentAmountChange(e.target.value)}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Date</label>
+                  <DateInput
+                    value={paymentDate}
+                    onChange={(val) => setPaymentDate(val)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -631,22 +1247,76 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
                   >
                     <option value="BANK_TRANSFER">Bank Transfer (NEFT / RTGS / IMPS)</option>
-                    <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
                     <option value="CHEQUE">Cheque</option>
                     <option value="CASH">Cash</option>
                     <option value="CARD">Card</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Date</label>
-                  <input
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  />
-                </div>
+                {paymentMethod !== 'CASH' ? (
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
+                      <Landmark className="w-3.5 h-3.5 text-brand-600" />
+                      <span>
+                        {activeTab === 'customer' ? 'Company Bank Account (Received In)' : 'Company Bank Account (Paid From)'}
+                      </span>
+                    </label>
+                    {companyBankOptions.length > 0 ? (
+                      <SearchableSelect
+                        options={companyBankOptions}
+                        value={selectedBankAccount}
+                        onChange={(val) => setSelectedBankAccount(val)}
+                        placeholder="Select company bank account..."
+                      />
+                    ) : (
+                      <div className="px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-800 text-[11px]">
+                        No bank account saved on company profile yet. Add your bank in Company Details.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      {activeTab === 'customer' ? 'Cash Note (Received By / Details)' : 'Cash Note (Paid By / Details)'}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={
+                        activeTab === 'customer'
+                          ? 'e.g. Received cash in hand / Counter cash'
+                          : 'e.g. Paid cash from petty cash / office counter'
+                      }
+                      value={cashNote}
+                      onChange={(e) => setCashNote(e.target.value)}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    />
+                  </div>
+                )}
+
+                {activeTab === 'supplier' && paymentMethod !== 'CASH' && (
+                  <div className="col-span-2">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
+                      <Landmark className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Select Vendor Bank Account (Paid To)</span>
+                    </label>
+                    {!selectedPartyId ? (
+                      <div className="px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-slate-400 text-[11px]">
+                        Select a vendor first to choose their bank account
+                      </div>
+                    ) : vendorBankOptions.length > 0 ? (
+                      <SearchableSelect
+                        options={vendorBankOptions}
+                        value={selectedVendorBankAccount}
+                        onChange={(val) => setSelectedVendorBankAccount(val)}
+                        placeholder="-- Select Vendor Bank Account --"
+                      />
+                    ) : (
+                      <div className="px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-800 text-[11px]">
+                        No bank accounts saved for this vendor yet. You can add bank accounts in Suppliers.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -654,7 +1324,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                   </label>
                   <input
                     type="text"
-                    placeholder="Transaction Reference"
+                    placeholder="Enter UTR / Cheque / Ref #"
                     value={referenceNumber}
                     onChange={(e) => setReferenceNumber(e.target.value)}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono"
@@ -677,121 +1347,298 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 </div>
               </div>
 
-              {/* Outstanding Sales Invoices Allocation (Customer Tab) */}
-              {activeTab === 'customer' && unpaidInvoices.length > 0 && (
-                <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2 bg-slate-50 dark:bg-slate-900/50">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                      Allocate Receipt to Outstanding Sales Invoices:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleAutoAllocate}
-                      className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
-                    >
-                      <Wand2 className="w-3 h-3" />
-                      <span>Auto-Allocate</span>
-                    </button>
+              {/* Selected Invoice / Bill Partial vs Full Live Balance Summary */}
+              {selectedInvoiceId && (() => {
+                const doc =
+                  activeTab === 'customer'
+                    ? allUnpaidInvoices.find((i) => i.id === selectedInvoiceId)
+                    : allUnpaidBills.find((b) => b.id === selectedInvoiceId);
+                if (!doc) return null;
+                const due = new Decimal(doc.balance_amount || 0);
+                let payingNow = new Decimal(0);
+                try {
+                  const allocVal = allocations[doc.id] || paymentAmount || '0';
+                  if (Number(allocVal) > 0) payingNow = new Decimal(allocVal);
+                } catch {
+                  payingNow = new Decimal(0);
+                }
+                const remainingAfter = Decimal.max(new Decimal(0), due.sub(payingNow));
+                const docLabel = activeTab === 'customer' ? (doc as Invoice).invoice_number : (doc as PurchaseInvoice).bill_number;
+                return (
+                  <div className="p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/70 dark:bg-sky-950/30 grid grid-cols-4 gap-2 text-[11px]">
+                    <div>
+                      <div className="text-slate-500">Selected Document</div>
+                      <div className="font-mono font-bold text-slate-800 dark:text-slate-100">{docLabel}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Current Balance Due</div>
+                      <div className="font-bold text-slate-800 dark:text-slate-100">{formatIndianCurrency(due.toFixed(2))}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">{paymentType === 'PARTIAL' ? 'Partial Amount Now' : 'Paying Now'}</div>
+                      <div className="font-bold text-emerald-700 dark:text-emerald-400">{formatIndianCurrency(payingNow.toFixed(2))}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Remaining Balance</div>
+                      <div className={`font-bold ${remainingAfter.gt(0) ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {formatIndianCurrency(remainingAfter.toFixed(2))}
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {unpaidInvoices.map((inv) => (
-                      <div
-                        key={inv.id}
-                        className="flex items-center justify-between bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700"
-                      >
-                        <div>
-                          <span className="font-mono font-bold">{inv.invoice_number}</span>
-                          <span className="text-slate-400 ml-2">({inv.invoice_date})</span>
-                          <span className="text-slate-600 dark:text-slate-300 ml-2 font-semibold">
-                            Due: {formatIndianCurrency(inv.balance_amount)}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-1.5">
+                );
+              })()}
+
+              {/* Existing Customer Invoices Drawer (opened via Show More) */}
+              {activeTab === 'customer' && selectedPartyId && showMoreInvoices && (() => {
+                const partyInvoices = allCompanyInvoices
+                  .filter((i) => i.customer_id === selectedPartyId)
+                  .sort((a, b) => {
+                    const aPending = a.status === 'FINALIZED' && new Decimal(a.balance_amount || 0).gt(0) ? 0 : 1;
+                    const bPending = b.status === 'FINALIZED' && new Decimal(b.balance_amount || 0).gt(0) ? 0 : 1;
+                    return aPending - bPending;
+                  });
+                return (
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2 bg-slate-50 dark:bg-slate-900/50">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        Customer Existing Invoices ({partyInvoices.length}) — Click to Select or Enter Split Amount:
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        {unpaidInvoices.length > 0 && (
                           <button
                             type="button"
-                            onClick={() => handleFillSingleDoc(inv.id, inv.balance_amount)}
-                            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 rounded text-[10px] font-semibold"
+                            onClick={handleAutoAllocate}
+                            className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
                           >
-                            Full
+                            <Wand2 className="w-3 h-3" />
+                            <span>Auto-Allocate</span>
                           </button>
-                          <span>₹</span>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="0.00"
-                            max={inv.balance_amount}
-                            value={allocations[inv.id] || ''}
-                            onChange={(e) => setAllocations({ ...allocations, [inv.id]: e.target.value })}
-                            className="w-24 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-right font-mono"
-                          />
-                        </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreInvoices(false)}
+                          className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded"
+                          title="Close invoices list"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    </div>
 
-              {/* Outstanding Purchase Bills Allocation (Supplier Tab) */}
-              {activeTab === 'supplier' && selectedPartyId && (
-                <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2 bg-slate-50 dark:bg-slate-900/50">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                      Settle Unpaid Purchase Bills ({unpaidBills.length} Pending):
-                    </span>
-                    {unpaidBills.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleAutoAllocate}
-                        className="inline-flex items-center space-x-1 text-rose-600 font-bold hover:underline"
-                      >
-                        <Wand2 className="w-3 h-3" />
-                        <span>Auto-Allocate</span>
-                      </button>
+                    {partyInvoices.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 py-3 text-center">
+                        No existing invoices found for this customer yet. You can still record an On-Account Advance receipt.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                        {partyInvoices.map((inv) => {
+                          const due = new Decimal(inv.balance_amount || 0);
+                          const isPayable = inv.status === 'FINALIZED' && due.gt(0);
+                          const isPaid = inv.status === 'FINALIZED' && due.lte(0);
+                          const isPicked = inv.id === selectedInvoiceId;
+                          return (
+                            <div
+                              key={inv.id}
+                              onClick={() => {
+                                if (isPayable) handleInvoiceOrBillSelect(inv.id);
+                              }}
+                              className={`flex flex-wrap items-center justify-between gap-2 p-2.5 rounded border transition-colors ${
+                                isPayable ? 'cursor-pointer' : 'opacity-75'
+                              } ${
+                                isPicked
+                                  ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-400 dark:border-sky-600'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                                    {inv.invoice_number}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">({isoToDisplayDate(inv.invoice_date) || inv.invoice_date})</span>
+                                  {isPaid ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                                      PAID
+                                    </span>
+                                  ) : inv.status === 'DRAFT' ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700">
+                                      DRAFT (Finalize first)
+                                    </span>
+                                  ) : new Decimal(inv.paid_amount || 0).gt(0) ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-700">
+                                      PARTIAL
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-700">
+                                      UNPAID
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  Total: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatIndianCurrency(inv.grand_total)}</span>
+                                  {' • '}
+                                  Paid: <span className="font-semibold text-emerald-700">{formatIndianCurrency(inv.paid_amount)}</span>
+                                  {' • '}
+                                  Due: <span className="font-bold text-rose-600">{formatIndianCurrency(inv.balance_amount)}</span>
+                                </div>
+                              </div>
+
+                              {isPayable && (
+                                <div
+                                  className="flex items-center space-x-1.5"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInvoiceOrBillSelect(inv.id)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors ${
+                                      isPicked
+                                        ? 'bg-brand-600 text-white border-brand-700'
+                                        : 'bg-brand-50 hover:bg-brand-100 text-brand-700 border-brand-200'
+                                    }`}
+                                  >
+                                    {isPicked ? 'Selected' : 'Select'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFillSingleDoc(inv.id, inv.balance_amount)}
+                                    className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 rounded text-[10px] font-semibold"
+                                  >
+                                    Full
+                                  </button>
+                                  <span>₹</span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="Partial / Amt"
+                                    max={inv.balance_amount}
+                                    value={allocations[inv.id] || ''}
+                                    onChange={(e) => handleAllocationInputChange(inv.id, e.target.value)}
+                                    className="w-28 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-right font-mono bg-white dark:bg-slate-900"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
-                  {unpaidBills.length === 0 ? (
-                    <div className="text-[11px] text-slate-500 py-2">
-                      No unpaid finalized purchase bills found for this supplier. This payment will be recorded as a Vendor Advance / On-Account payment.
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {unpaidBills.map((bill) => (
-                        <div
-                          key={bill.id}
-                          className="flex items-center justify-between bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700"
+                );
+              })()}
+
+              {/* Existing Supplier Purchase Bills Drawer (opened via Show More) */}
+              {activeTab === 'supplier' && selectedPartyId && showMoreInvoices && (() => {
+                const partyBills = allCompanyBills
+                  .filter((b) => b.supplier_id === selectedPartyId)
+                  .sort((a, b) => {
+                    const aPending = a.is_finalized && new Decimal(a.balance_amount || 0).gt(0) ? 0 : 1;
+                    const bPending = b.is_finalized && new Decimal(b.balance_amount || 0).gt(0) ? 0 : 1;
+                    return aPending - bPending;
+                  });
+                return (
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2 bg-slate-50 dark:bg-slate-900/50">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        Supplier Existing Purchase Bills ({partyBills.length}) — Click to Select or Enter Split Amount:
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        {unpaidBills.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleAutoAllocate}
+                            className="inline-flex items-center space-x-1 text-rose-600 font-bold hover:underline"
+                          >
+                            <Wand2 className="w-3 h-3" />
+                            <span>Auto-Allocate</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreInvoices(false)}
+                          className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded"
+                          title="Close bills list"
                         >
-                          <div>
-                            <span className="font-mono font-bold">{bill.bill_number}</span>
-                            <span className="text-slate-400 ml-2">({bill.bill_date})</span>
-                            <span className="text-rose-600 ml-2 font-semibold">
-                              Owed: {formatIndianCurrency(bill.balance_amount)}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleFillSingleDoc(bill.id, bill.balance_amount)}
-                              className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-[10px] font-semibold border border-rose-200"
-                            >
-                              Pay Full
-                            </button>
-                            <span>₹</span>
-                            <input
-                              type="number"
-                              step="any"
-                              placeholder="0.00"
-                              max={bill.balance_amount}
-                              value={allocations[bill.id] || ''}
-                              onChange={(e) => setAllocations({ ...allocations, [bill.id]: e.target.value })}
-                              className="w-24 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-right font-mono"
-                            />
-                          </div>
-                        </div>
-                      ))}
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
+                    {partyBills.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 py-2 text-center">
+                        No purchase bills found for this supplier. This payment will be recorded as a Vendor Advance / On-Account payment.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                        {partyBills.map((bill) => {
+                          const due = new Decimal(bill.balance_amount || 0);
+                          const isPayable = bill.is_finalized && due.gt(0);
+                          const isPicked = bill.id === selectedInvoiceId;
+                          return (
+                            <div
+                              key={bill.id}
+                              onClick={() => {
+                                if (isPayable) handleInvoiceOrBillSelect(bill.id);
+                              }}
+                              className={`flex flex-wrap items-center justify-between gap-2 p-2.5 rounded border ${
+                                isPayable ? 'cursor-pointer' : 'opacity-75'
+                              } ${
+                                isPicked
+                                  ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-300 dark:border-rose-700'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              <div>
+                                <span className="font-mono font-bold">{bill.bill_number}</span>
+                                <span className="text-slate-400 ml-2">({isoToDisplayDate(bill.bill_date) || bill.bill_date})</span>
+                                <span className="text-rose-600 ml-2 font-semibold">
+                                  Owed: {formatIndianCurrency(bill.balance_amount)}
+                                </span>
+                                {!bill.is_finalized && (
+                                  <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700">
+                                    DRAFT
+                                  </span>
+                                )}
+                              </div>
+                              {isPayable && (
+                                <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInvoiceOrBillSelect(bill.id)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                      isPicked
+                                        ? 'bg-rose-600 text-white border-rose-700'
+                                        : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                    }`}
+                                  >
+                                    {isPicked ? 'Selected' : 'Select'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFillSingleDoc(bill.id, bill.balance_amount)}
+                                    className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 rounded text-[10px] font-semibold"
+                                  >
+                                    Full
+                                  </button>
+                                  <span>₹</span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="Partial / Amt"
+                                    max={bill.balance_amount}
+                                    value={allocations[bill.id] || ''}
+                                    onChange={(e) => handleAllocationInputChange(bill.id, e.target.value)}
+                                    className="w-28 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-right font-mono bg-white dark:bg-slate-900"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
@@ -821,6 +1668,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

@@ -46,9 +46,18 @@ export class PurchaseService {
 
       const lineInputs = input.items || [];
       for (const item of lineInputs) {
-        const qty = new Decimal(item.quantity || 1);
-        const rate = new Decimal(item.rate || 0);
-        const gstRate = new Decimal(item.gst_rate || 18);
+        const qty = new Decimal(item.quantity ?? 1);
+        const rate = new Decimal(item.rate ?? 0);
+        const gstRate = new Decimal(item.gst_rate !== undefined ? item.gst_rate : 18);
+        if (!qty.isFinite() || qty.lte(0)) {
+          throw new Error(`Invalid quantity for purchase item "${item.item_name || 'Item'}": must be greater than zero.`);
+        }
+        if (!rate.isFinite() || rate.lt(0)) {
+          throw new Error(`Invalid rate for purchase item "${item.item_name || 'Item'}": cannot be negative.`);
+        }
+        if (!gstRate.isFinite() || gstRate.lt(0) || gstRate.gt(100)) {
+          throw new Error(`Invalid GST rate for purchase item "${item.item_name || 'Item'}": must be between 0% and 100%.`);
+        }
         const taxable = qty.mul(rate);
         const tax = taxable.mul(gstRate).div(100);
         const lineTotal = taxable.add(tax);
@@ -125,9 +134,18 @@ export class PurchaseService {
 
       const lineInputs = input.items || [];
       for (const item of lineInputs) {
-        const qty = new Decimal(item.quantity || 1);
-        const rate = new Decimal(item.rate || 0);
-        const gstRate = new Decimal(item.gst_rate || 18);
+        const qty = new Decimal(item.quantity ?? 1);
+        const rate = new Decimal(item.rate ?? 0);
+        const gstRate = new Decimal(item.gst_rate !== undefined ? item.gst_rate : 18);
+        if (!qty.isFinite() || qty.lte(0)) {
+          throw new Error(`Invalid quantity for purchase item "${item.item_name || 'Item'}": must be greater than zero.`);
+        }
+        if (!rate.isFinite() || rate.lt(0)) {
+          throw new Error(`Invalid rate for purchase item "${item.item_name || 'Item'}": cannot be negative.`);
+        }
+        if (!gstRate.isFinite() || gstRate.lt(0) || gstRate.gt(100)) {
+          throw new Error(`Invalid GST rate for purchase item "${item.item_name || 'Item'}": must be between 0% and 100%.`);
+        }
         const taxable = qty.mul(rate);
         const tax = taxable.mul(gstRate).div(100);
         const lineTotal = taxable.add(tax);
@@ -155,7 +173,41 @@ export class PurchaseService {
         });
       }
 
-      const grandTotal = subtotal.add(totalTax);
+      const grossTotal = subtotal.add(totalTax);
+
+      // Compute Overall Bill Discount using strict Decimal arithmetic (ROUND_HALF_UP)
+      const safeDec = (val: any): Decimal => {
+        if (val === null || val === undefined || String(val).trim() === '') return new Decimal(0);
+        try {
+          const d = new Decimal(val);
+          return d.isFinite() && d.gt(0) ? d : new Decimal(0);
+        } catch {
+          return new Decimal(0);
+        }
+      };
+
+      const discountType: 'AMOUNT' | 'PERCENTAGE' =
+        input.overall_discount_type === 'PERCENTAGE' ? 'PERCENTAGE' : 'AMOUNT';
+
+      let discountPercentage = new Decimal(0);
+      let discountAmount = new Decimal(0);
+
+      if (discountType === 'PERCENTAGE') {
+        const rawPct = safeDec(input.overall_discount_percentage);
+        discountPercentage = Decimal.min(new Decimal(100), rawPct).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+        discountAmount = grossTotal
+          .mul(discountPercentage)
+          .div(100)
+          .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      } else {
+        const rawAmt = safeDec(input.overall_discount_amount);
+        discountAmount = Decimal.min(grossTotal, rawAmt).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+        discountPercentage = grossTotal.gt(0)
+          ? discountAmount.div(grossTotal).mul(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+          : new Decimal(0);
+      }
+
+      const grandTotal = Decimal.max(0, grossTotal.sub(discountAmount)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
       let branch = null;
       if (input.branch_id) {
@@ -181,16 +233,24 @@ export class PurchaseService {
         items,
         subtotal: subtotal.toFixed(2),
         total_tax: totalTax.toFixed(2),
+        overall_discount_type: discountType,
+        overall_discount_percentage: discountPercentage.toFixed(2),
+        overall_discount_amount: discountAmount.toFixed(2),
         grand_total: grandTotal.toFixed(2),
         paid_amount: '0.00',
         balance_amount: grandTotal.toFixed(2),
         is_finalized: false,
+        notes: input.notes || undefined,
         created_at: now,
         updated_at: now,
       };
 
       const { items: _, ...billRow } = bill;
-      await trx('purchase_invoices').insert(billRow);
+      await trx('purchase_invoices').insert({
+        ...billRow,
+        created_by_device_id: input.created_by_device_id || null,
+        created_by_device_name: input.created_by_device_name || null,
+      });
       for (const item of items) {
         await trx('purchase_invoice_items').insert(item);
       }

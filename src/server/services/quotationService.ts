@@ -84,12 +84,25 @@ export class QuotationService {
 
       for (let i = 0; i < lineInputs.length; i++) {
         const item = lineInputs[i];
+        const rawQty = new Decimal(item.quantity ?? 0);
+        const rawRate = new Decimal(item.rate ?? item.unit_price ?? 0);
+        const rawGst = new Decimal(item.gst_rate !== undefined ? item.gst_rate : 18);
+        if (!rawQty.isFinite() || rawQty.lte(0)) {
+          throw new Error(`Invalid quantity for quotation item "${item.item_name || i + 1}": must be greater than zero.`);
+        }
+        if (!rawRate.isFinite() || rawRate.lt(0)) {
+          throw new Error(`Invalid rate for quotation item "${item.item_name || i + 1}": cannot be negative.`);
+        }
+        if (!rawGst.isFinite() || rawGst.lt(0) || rawGst.gt(100)) {
+          throw new Error(`Invalid GST rate for quotation item "${item.item_name || i + 1}": must be between 0% and 100%.`);
+        }
+
         const lineCalc = calculateLineItem({
-          quantity: item.quantity,
-          rate: item.rate ?? item.unit_price ?? 0,
+          quantity: rawQty.toString(),
+          rate: rawRate.toString(),
           discountPercentage: item.discount_percentage,
           discountAmount: item.discount_amount,
-          gstRate: item.gst_rate !== undefined ? item.gst_rate : 18,
+          gstRate: rawGst.toString(),
           isTaxInclusive: false,
           isInterState,
         });
@@ -174,7 +187,11 @@ export class QuotationService {
       };
 
       const { items, ...quoteRow } = quotation;
-      await trx('quotations').insert(quoteRow);
+      await trx('quotations').insert({
+        ...quoteRow,
+        created_by_device_id: input.created_by_device_id || null,
+        created_by_device_name: input.created_by_device_name || null,
+      });
 
       for (const item of calculatedItems) {
         await trx('quotation_items').insert(item);

@@ -16,6 +16,7 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.integer('server_port').defaultTo(4200);
       table.boolean('show_company_selector_on_startup').defaultTo(true);
       table.string('theme').defaultTo('light');
+      table.text('software_icon').nullable();
       table.string('created_at').notNullable();
       table.string('updated_at').notNullable();
     });
@@ -32,6 +33,11 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.text('registered_address').notNullable();
       table.string('gstin').nullable();
       table.string('pan').nullable();
+      table.string('tan').nullable();
+      table.string('cin').nullable();
+      table.string('iso').nullable();
+      table.string('msme').nullable();
+      table.string('financial_year').nullable();
       table.string('state').notNullable();
       table.string('state_code', 2).notNullable();
       table.string('pin_code', 10).notNullable();
@@ -63,6 +69,11 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('phone').notNullable();
       table.string('email').notNullable();
       table.string('gstin').nullable();
+      table.string('tan').nullable();
+      table.string('cin').nullable();
+      table.string('iso').nullable();
+      table.string('msme').nullable();
+      table.string('financial_year').nullable();
       table.string('state').notNullable();
       table.string('state_code', 2).notNullable();
       table.boolean('is_default').defaultTo(false);
@@ -161,12 +172,15 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('barcode').nullable();
       table.string('category_id').nullable().references('id').inTable('categories').onDelete('SET NULL');
       table.text('description').nullable();
+      table.text('custom_notes').nullable();
       table.text('image_url').nullable();
       table.string('unit').defaultTo('NOS');
       table.string('hsn_or_sac').notNullable();
       table.string('gst_rate').defaultTo('18.00');
       table.string('purchase_price').defaultTo('0.00');
       table.string('selling_price').defaultTo('0.00');
+      table.string('min_selling_price').nullable();
+      table.string('max_selling_price').nullable();
       table.boolean('is_tax_inclusive').defaultTo(false);
       table.string('minimum_stock').defaultTo('0.00');
       table.string('current_stock').defaultTo('0.00');
@@ -186,7 +200,7 @@ export async function runMigrations(db: Knex): Promise<void> {
     await db.schema.createTable('customers', (table) => {
       table.string('id').primary();
       table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
-      table.string('customer_type').defaultTo('BUSINESS');
+      table.string('customer_type').defaultTo('CORPORATE');
       table.string('name').notNullable();
       table.string('company_name').nullable();
       table.string('contact_person').nullable();
@@ -195,12 +209,22 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('email').nullable();
       table.string('gstin').nullable();
       table.string('pan').nullable();
+      table.string('tan').nullable();
+      table.string('cin').nullable();
+      table.string('iso').nullable();
+      table.string('msme').nullable();
+      table.string('financial_year').nullable();
       table.text('billing_address').notNullable();
       table.text('shipping_address').notNullable();
       table.string('city').notNullable();
       table.string('state').notNullable();
       table.string('state_code', 2).notNullable();
       table.string('pin_code', 10).notNullable();
+      table.string('bank_name').nullable();
+      table.string('bank_account_no').nullable();
+      table.string('bank_ifsc').nullable();
+      table.string('bank_branch').nullable();
+      table.string('upi_id').nullable();
       table.string('opening_balance').defaultTo('0.00');
       table.string('current_balance').defaultTo('0.00');
       table.string('credit_limit').defaultTo('0.00');
@@ -244,6 +268,11 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('email').nullable();
       table.string('gstin').nullable();
       table.string('pan').nullable();
+      table.string('tan').nullable();
+      table.string('cin').nullable();
+      table.string('iso').nullable();
+      table.string('msme').nullable();
+      table.string('financial_year').nullable();
       table.text('address').notNullable();
       table.string('state').notNullable();
       table.string('state_code', 2).notNullable();
@@ -251,6 +280,7 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('bank_name').nullable();
       table.string('bank_account_no').nullable();
       table.string('bank_ifsc').nullable();
+      table.string('bank_branch').nullable();
       table.string('upi_id').nullable();
       table.string('opening_balance').defaultTo('0.00');
       table.string('current_balance').defaultTo('0.00');
@@ -503,10 +533,14 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('warehouse_id').notNullable().references('id').inTable('warehouses');
       table.string('subtotal').defaultTo('0.00');
       table.string('total_tax').defaultTo('0.00');
+      table.string('overall_discount_type').defaultTo('AMOUNT');
+      table.string('overall_discount_percentage').defaultTo('0.00');
+      table.string('overall_discount_amount').defaultTo('0.00');
       table.string('grand_total').defaultTo('0.00');
       table.string('paid_amount').defaultTo('0.00');
       table.string('balance_amount').defaultTo('0.00');
       table.boolean('is_finalized').defaultTo(false);
+      table.text('notes').nullable();
       table.string('created_at').notNullable();
       table.string('updated_at').notNullable();
 
@@ -593,6 +627,7 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('customer_name').notNullable();
       table.string('amount').notNullable();
       table.string('payment_method').defaultTo('BANK_TRANSFER');
+      table.string('bank_account').nullable();
       table.string('reference_number').nullable();
       table.text('notes').nullable();
       table.string('unallocated_amount').defaultTo('0.00');
@@ -615,6 +650,8 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('supplier_name').notNullable();
       table.string('amount').notNullable();
       table.string('payment_method').defaultTo('BANK_TRANSFER');
+      table.string('bank_account').nullable();
+      table.string('vendor_bank_account').nullable();
       table.string('reference_number').nullable();
       table.text('notes').nullable();
       table.string('unallocated_amount').defaultTo('0.00');
@@ -717,6 +754,38 @@ export async function runMigrations(db: Knex): Promise<void> {
     }
   }
 
+  const companyExtraCols = [
+    'tan',
+    'cin',
+    'iso',
+    'msme',
+    'financial_year',
+  ];
+  for (const col of companyExtraCols) {
+    const exists = await db.schema.hasColumn('companies', col);
+    if (!exists) {
+      await db.schema.alterTable('companies', (table) => {
+        table.string(col).nullable();
+      });
+    }
+  }
+
+  const branchExtraCols = [
+    'tan',
+    'cin',
+    'iso',
+    'msme',
+    'financial_year',
+  ];
+  for (const col of branchExtraCols) {
+    const exists = await db.schema.hasColumn('branches', col);
+    if (!exists) {
+      await db.schema.alterTable('branches', (table) => {
+        table.string(col).nullable();
+      });
+    }
+  }
+
   const branchCols = [
     { name: 'bank_name', type: 'string' },
     { name: 'bank_account_no', type: 'string' },
@@ -731,6 +800,156 @@ export async function runMigrations(db: Knex): Promise<void> {
         if (col.type === 'string') table.string(col.name).nullable();
         else if (col.type === 'boolean') table.boolean(col.name).defaultTo(true);
       });
+    }
+  }
+
+  const customerCols = [
+    { name: 'bank_name', type: 'string' },
+    { name: 'bank_account_no', type: 'string' },
+    { name: 'bank_ifsc', type: 'string' },
+    { name: 'bank_branch', type: 'string' },
+    { name: 'upi_id', type: 'string' },
+    { name: 'registration_year', type: 'string' },
+    { name: 'additional_bank_accounts', type: 'text' },
+  ];
+  for (const col of customerCols) {
+    const exists = await db.schema.hasColumn('customers', col.name);
+    if (!exists) {
+      await db.schema.alterTable('customers', (table) => {
+        if (col.type === 'text') table.text(col.name).nullable();
+        else table.string(col.name).nullable();
+      });
+    }
+  }
+
+  const supplierCols = [
+    { name: 'bank_name', type: 'string' },
+    { name: 'bank_account_no', type: 'string' },
+    { name: 'bank_ifsc', type: 'string' },
+    { name: 'bank_branch', type: 'string' },
+    { name: 'upi_id', type: 'string' },
+    { name: 'additional_bank_accounts', type: 'text' },
+  ];
+  for (const col of supplierCols) {
+    const exists = await db.schema.hasColumn('suppliers', col.name);
+    if (!exists) {
+      await db.schema.alterTable('suppliers', (table) => {
+        if (col.type === 'text') table.text(col.name).nullable();
+        else table.string(col.name).nullable();
+      });
+    }
+  }
+
+  const productHasCustomNotes = await db.schema.hasColumn('products', 'custom_notes');
+  if (!productHasCustomNotes) {
+    await db.schema.alterTable('products', (table) => {
+      table.text('custom_notes').nullable();
+    });
+  }
+
+  for (const col of ['min_selling_price', 'max_selling_price']) {
+    const exists = await db.schema.hasColumn('products', col);
+    if (!exists) {
+      await db.schema.alterTable('products', (table) => {
+        table.string(col).nullable();
+      });
+    }
+  }
+
+  for (const tbl of ['customer_payments', 'supplier_payments']) {
+    const exists = await db.schema.hasColumn(tbl, 'bank_account');
+    if (!exists) {
+      await db.schema.alterTable(tbl, (table) => {
+        table.string('bank_account').nullable();
+      });
+    }
+  }
+
+  const supplierPayHasVendorBank = await db.schema.hasColumn('supplier_payments', 'vendor_bank_account');
+  if (!supplierPayHasVendorBank) {
+    await db.schema.alterTable('supplier_payments', (table) => {
+      table.string('vendor_bank_account').nullable();
+    });
+  }
+
+  const purchaseDiscountCols = [
+    { name: 'overall_discount_type', defaultVal: 'AMOUNT' },
+    { name: 'overall_discount_percentage', defaultVal: '0.00' },
+    { name: 'overall_discount_amount', defaultVal: '0.00' },
+  ];
+  for (const col of purchaseDiscountCols) {
+    const exists = await db.schema.hasColumn('purchase_invoices', col.name);
+    if (!exists) {
+      await db.schema.alterTable('purchase_invoices', (table) => {
+        table.string(col.name).defaultTo(col.defaultVal);
+      });
+    }
+  }
+
+  // Remove any legacy built-in/default templates that do not have an actual uploaded template file
+  if (await db.schema.hasTable('letterhead_templates')) {
+    await db('letterhead_templates')
+      .whereNull('file_path')
+      .orWhereRaw("TRIM(file_path) = ''")
+      .del();
+  }
+
+  const purchaseHasNotes = await db.schema.hasColumn('purchase_invoices', 'notes');
+  if (!purchaseHasNotes) {
+    await db.schema.alterTable('purchase_invoices', (table) => {
+      table.text('notes').nullable();
+    });
+  }
+
+  const appSettingsHasSoftwareIcon = await db.schema.hasColumn('app_settings', 'software_icon');
+  if (!appSettingsHasSoftwareIcon) {
+    await db.schema.alterTable('app_settings', (table) => {
+      table.text('software_icon').nullable();
+    });
+  }
+
+  // 28. Per-Workstation Menu Access Permissions (MD / Office Staff Control)
+  if (!(await db.schema.hasTable('workstation_permissions'))) {
+    await db.schema.createTable('workstation_permissions', (table) => {
+      table.string('device_id').primary();
+      table.string('device_name').notNullable();
+      table.string('staff_name').nullable();
+      table.string('role').defaultTo('STAFF'); // 'ADMIN' | 'STAFF'
+      table.boolean('is_admin').defaultTo(false);
+      table.text('allowed_menus_json').notNullable();
+      table.boolean('can_open_settings').defaultTo(true);
+      table.string('last_ip').nullable();
+      table.string('last_seen_at').notNullable();
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+    });
+  } else {
+    const hasStaffName = await db.schema.hasColumn('workstation_permissions', 'staff_name');
+    if (!hasStaffName) {
+      await db.schema.alterTable('workstation_permissions', (table) => {
+        table.string('staff_name').nullable();
+      });
+    }
+  }
+
+  for (const col of ['admin_pin_hash', 'default_staff_menus_json']) {
+    const exists = await db.schema.hasColumn('app_settings', col);
+    if (!exists) {
+      await db.schema.alterTable('app_settings', (table) => {
+        table.text(col).nullable();
+      });
+    }
+  }
+
+  // Track which Office PC / Staff Workstation created each document (for MD Activity Reporting)
+  for (const tbl of ['invoices', 'quotations', 'purchase_invoices', 'customer_payments', 'supplier_payments']) {
+    for (const col of ['created_by_device_id', 'created_by_device_name']) {
+      const exists = await db.schema.hasColumn(tbl, col);
+      if (!exists) {
+        await db.schema.alterTable(tbl, (table) => {
+          table.string(col).nullable();
+        });
+      }
     }
   }
 }

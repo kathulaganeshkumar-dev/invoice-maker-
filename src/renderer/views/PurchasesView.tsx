@@ -1,9 +1,13 @@
 // src/renderer/views/PurchasesView.tsx - Purchase Orders & Vendor Bills
-import React, { useState, useEffect } from 'react';
-import { PurchaseInvoice, Supplier, Product, Warehouse } from '../../shared/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import Decimal from 'decimal.js';
+import { PurchaseInvoice, Supplier, Product, Warehouse, Category, Unit } from '../../shared/types';
 import { api } from '../services/api';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
 import { GST_RATES } from '../../shared/constants';
+import { SearchableSelect } from '../components/SearchableSelect';
+import { ModalPortal } from '../components/ModalPortal';
+import { DateInput, isoToDisplayDate } from '../components/DateInput';
 import {
   ShoppingCart,
   Plus,
@@ -12,10 +16,42 @@ import {
   Trash2,
   X,
   PackageCheck,
+  Package,
+  Tags,
   Eye,
   Warehouse as WarehouseIcon,
   Edit2,
+  Clock,
 } from 'lucide-react';
+
+function addDaysIso(dateStr: string, days: number): string {
+  const part = (dateStr || '').split('T')[0];
+  const [y, m, d] = part.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+function getPurchaseDaysRemaining(bill: PurchaseInvoice, fallbackTermsDays = 0): { daysLeft: number; dueDateStr: string } | null {
+  const billPart = (bill.bill_date || '').split('T')[0];
+  const duePart = (bill.due_date || '').split('T')[0];
+  let effectiveDue = duePart;
+  if ((!duePart || duePart <= billPart) && billPart && fallbackTermsDays > 0) {
+    effectiveDue = addDaysIso(billPart, fallbackTermsDays);
+  }
+  if (!effectiveDue) return null;
+  const [y, m, d] = effectiveDue.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const dueDt = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysLeft = Math.round((dueDt.getTime() - today.getTime()) / 86400000);
+  return { daysLeft, dueDateStr: effectiveDue };
+}
 
 interface Props {
   companyId: string;
@@ -25,13 +61,45 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   const [bills, setBills] = useState<PurchaseInvoice[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [viewingBill, setViewingBill] = useState<PurchaseInvoice | null>(null);
   const [isWarehouseManagerOpen, setIsWarehouseManagerOpen] = useState<boolean>(false);
   const [whForm, setWhForm] = useState<Partial<Warehouse> | null>(null);
+
+  // Quick New Product Modal State
+  const [isQuickProductOpen, setIsQuickProductOpen] = useState<boolean>(false);
+  const [quickProductTargetIdx, setQuickProductTargetIdx] = useState<number | null>(null);
+  const [quickProduct, setQuickProduct] = useState<{
+    name: string;
+    hsn_or_sac: string;
+    category_id: string;
+    unit: string;
+    purchase_price: string;
+    min_selling_price: string;
+    max_selling_price: string;
+    gst_rate: string;
+    minimum_stock: string;
+    sku: string;
+  }>({
+    name: '',
+    hsn_or_sac: '',
+    category_id: '',
+    unit: 'NOS',
+    purchase_price: '',
+    min_selling_price: '',
+    max_selling_price: '',
+    gst_rate: '18.00',
+    minimum_stock: '',
+    sku: '',
+  });
+  const [isQuickInlineCatOpen, setIsQuickInlineCatOpen] = useState<boolean>(false);
+  const [quickInlineCatName, setQuickInlineCatName] = useState<string>('');
 
   // Form State
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
@@ -39,9 +107,133 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   const [billNumber, setBillNumber] = useState<string>('');
   const [billDate, setBillDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [receiveImmediately, setReceiveImmediately] = useState<boolean>(true);
+  const [overallDiscountType, setOverallDiscountType] = useState<'AMOUNT' | 'PERCENTAGE'>('AMOUNT');
+  const [overallDiscountValue, setOverallDiscountValue] = useState<string>('');
   const [items, setItems] = useState<any[]>([
-    { item_name: '', hsn_code: '', quantity: '1', rate: '0.00', gst_rate: '18.00' },
+    {
+      product_id: '',
+      item_name: '',
+      hsn_code: '',
+      unit: 'NOS',
+      quantity: '',
+      rate: '',
+      min_selling_price: '',
+      max_selling_price: '',
+      gst_rate: '18.00',
+    },
   ]);
+
+  const supplierOptions = useMemo(() => {
+    return [
+      { value: '', label: '-- Select Vendor --' },
+      ...suppliers.map((s) => ({
+        value: s.id,
+        label: s.name,
+        code: s.gstin || undefined,
+        sublabel: s.company_name ? s.company_name : undefined,
+      })),
+    ];
+  }, [suppliers]);
+
+  const productOptions = useMemo(() => {
+    return [
+      ...products.map((p) => ({
+        value: p.id,
+        label: p.name,
+        sublabel: `${formatIndianCurrency(p.purchase_price || p.selling_price)}`,
+        badge: p.unit || undefined,
+        code: p.hsn_or_sac || undefined,
+      })),
+      { value: '__NEW__', label: '+ Create New Product...', isAction: true },
+    ];
+  }, [products]);
+
+  const categoryOptions = useMemo(() => {
+    return [
+      { value: '', label: '-- No Category --' },
+      ...categories.map((c) => ({ value: c.id, label: c.name })),
+    ];
+  }, [categories]);
+
+  const unitOptions = useMemo(() => {
+    return units.map((u) => ({
+      value: u.code,
+      label: `${u.name} (${u.code})`,
+      code: u.code,
+    }));
+  }, [units]);
+
+  const compactUnitOptions = useMemo(() => {
+    return units.map((u) => ({
+      value: u.code,
+      label: u.code,
+      sublabel: u.name,
+    }));
+  }, [units]);
+
+  // Live Bill Totals & Overall Discount Calculation (Strict Decimal Arithmetic)
+  const billTotals = useMemo(() => {
+    const parseNonNeg = (val: any): Decimal => {
+      if (val === null || val === undefined || String(val).trim() === '') return new Decimal(0);
+      try {
+        const d = new Decimal(val);
+        return d.isFinite() && d.gt(0) ? d : new Decimal(0);
+      } catch {
+        return new Decimal(0);
+      }
+    };
+
+    let subtotal = new Decimal(0);
+    let totalTax = new Decimal(0);
+
+    for (const it of items) {
+      const qty = parseNonNeg(it.quantity);
+      const rate = parseNonNeg(it.rate);
+      const gstRate = parseNonNeg(it.gst_rate ?? '18.00');
+      const taxable = qty.mul(rate);
+      const tax = taxable.mul(gstRate).div(100);
+      subtotal = subtotal.add(taxable);
+      totalTax = totalTax.add(tax);
+    }
+
+    subtotal = subtotal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    totalTax = totalTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    const grossTotal = subtotal.add(totalTax).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+    const rawDisc = parseNonNeg(overallDiscountValue);
+    let discountAmount = new Decimal(0);
+    let discountPercentage = new Decimal(0);
+    let isDiscountCapped = false;
+
+    if (overallDiscountType === 'PERCENTAGE') {
+      if (rawDisc.gt(100)) isDiscountCapped = true;
+      discountPercentage = Decimal.min(new Decimal(100), rawDisc).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      discountAmount = grossTotal
+        .mul(discountPercentage)
+        .div(100)
+        .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    } else {
+      if (grossTotal.gt(0) && rawDisc.gt(grossTotal)) isDiscountCapped = true;
+      discountAmount = Decimal.min(grossTotal, rawDisc).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      discountPercentage = grossTotal.gt(0)
+        ? discountAmount.div(grossTotal).mul(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+        : new Decimal(0);
+    }
+
+    const netTotal = Decimal.max(0, grossTotal.sub(discountAmount)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+    return {
+      subtotal: subtotal.toFixed(2),
+      totalTax: totalTax.toFixed(2),
+      grossTotal: grossTotal.toFixed(2),
+      discountAmount: discountAmount.toFixed(2),
+      discountPercentage: discountPercentage.toFixed(2),
+      netTotal: netTotal.toFixed(2),
+      hasDiscount: discountAmount.gt(0),
+      isDiscountCapped,
+    };
+  }, [items, overallDiscountType, overallDiscountValue]);
 
   useEffect(() => {
     if (companyId) {
@@ -49,6 +241,15 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       loadMaster();
     }
   }, [companyId]);
+
+  // Automatically calculate Due Date from Bill Date + Supplier's Payment Reminder Days
+  useEffect(() => {
+    const sup = suppliers.find((s) => s.id === selectedSupplierId);
+    const terms = sup?.payment_terms_days || 0;
+    if (billDate) {
+      setDueDate(terms > 0 ? addDaysIso(billDate, terms) : billDate);
+    }
+  }, [selectedSupplierId, billDate, suppliers]);
 
   const loadBills = async () => {
     setLoading(true);
@@ -64,14 +265,18 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
 
   const loadMaster = async () => {
     try {
-      const [sList, pList, wList] = await Promise.all([
+      const [sList, pList, wList, cList, uList] = await Promise.all([
         api.getSuppliers(companyId),
         api.getProducts(companyId, { item_type: 'PRODUCT' }),
         api.getWarehouses(companyId),
+        api.getCategories(companyId),
+        api.getUnits(companyId),
       ]);
       setSuppliers(sList);
       setProducts(pList);
       setWarehouses(wList);
+      setCategories(cList);
+      setUnits(uList);
       if (wList.length > 0 && (!selectedWarehouseId || !wList.some((w) => w.id === selectedWarehouseId))) {
         const def = wList.find((w) => w.is_default) || wList[0];
         setSelectedWarehouseId(def.id);
@@ -113,7 +318,20 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   };
 
   const handleAddItem = () => {
-    setItems([...items, { item_name: '', hsn_code: '', quantity: '1', rate: '0.00', gst_rate: '18.00' }]);
+    setItems([
+      ...items,
+      {
+        product_id: '',
+        item_name: '',
+        hsn_code: '',
+        unit: 'NOS',
+        quantity: '',
+        rate: '',
+        min_selling_price: '',
+        max_selling_price: '',
+        gst_rate: '18.00',
+      },
+    ]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -122,19 +340,161 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const handleOpenQuickProduct = (rowIndex: number | null) => {
+    const existingRow = rowIndex !== null ? items[rowIndex] : null;
+    setQuickProductTargetIdx(rowIndex);
+    setQuickProduct({
+      name: existingRow?.item_name || '',
+      hsn_or_sac: existingRow?.hsn_code || '',
+      category_id: '',
+      unit: existingRow?.unit || 'NOS',
+      purchase_price: existingRow?.rate || '',
+      min_selling_price: '',
+      max_selling_price: '',
+      gst_rate: existingRow?.gst_rate || '18.00',
+      minimum_stock: '',
+      sku: '',
+    });
+    setIsQuickInlineCatOpen(false);
+    setQuickInlineCatName('');
+    setIsQuickProductOpen(true);
+  };
+
+  const handleCreateQuickInlineCategory = async () => {
+    const trimmed = quickInlineCatName.trim();
+    if (!trimmed) {
+      setIsQuickInlineCatOpen(false);
+      return;
+    }
+    const existing = categories.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      setQuickProduct((prev) => ({ ...prev, category_id: existing.id }));
+      setQuickInlineCatName('');
+      setIsQuickInlineCatOpen(false);
+      return;
+    }
+    try {
+      const created = await api.createCategory(companyId, trimmed, '');
+      const updatedCats = await api.getCategories(companyId);
+      setCategories(updatedCats);
+      setQuickProduct((prev) => ({ ...prev, category_id: created.id }));
+      setQuickInlineCatName('');
+      setIsQuickInlineCatOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Error creating category');
+    }
+  };
+
+  const handleSaveQuickProduct = async () => {
+    if (!quickProduct.name.trim()) {
+      alert('Product name is required');
+      return;
+    }
+    const minPriceStr = quickProduct.min_selling_price.trim();
+    const maxPriceStr = quickProduct.max_selling_price.trim();
+    if (minPriceStr && maxPriceStr && new Decimal(minPriceStr).gt(new Decimal(maxPriceStr))) {
+      alert('Minimum Selling Price cannot be greater than Maximum Selling Price.');
+      return;
+    }
+    const effectiveSellingPrice =
+      maxPriceStr || minPriceStr || quickProduct.purchase_price.trim() || '0.00';
+
+    try {
+      const created = await api.createProduct(companyId, {
+        item_type: 'PRODUCT',
+        name: quickProduct.name.trim(),
+        hsn_or_sac: quickProduct.hsn_or_sac.trim(),
+        category_id: quickProduct.category_id || undefined,
+        unit: quickProduct.unit || 'NOS',
+        purchase_price: quickProduct.purchase_price.trim() || '0.00',
+        selling_price: effectiveSellingPrice,
+        min_selling_price: minPriceStr || null,
+        max_selling_price: maxPriceStr || null,
+        gst_rate: quickProduct.gst_rate || '18.00',
+        minimum_stock: quickProduct.minimum_stock.trim() || '0.00',
+        sku: quickProduct.sku.trim() || undefined,
+        current_stock: '0.00',
+        is_active: true,
+      });
+      setProducts((prev) => [...prev, created]);
+
+      const rateVal = Number(created.purchase_price) > 0 ? created.purchase_price : '';
+      const emptyIdx =
+        quickProductTargetIdx !== null && items[quickProductTargetIdx]
+          ? quickProductTargetIdx
+          : items.findIndex((it) => !it.product_id && !it.item_name?.trim());
+
+      if (emptyIdx !== -1 && items[emptyIdx]) {
+        const copy = [...items];
+        copy[emptyIdx] = {
+          ...copy[emptyIdx],
+          product_id: created.id,
+          item_name: created.name,
+          hsn_code: created.hsn_or_sac,
+          unit: created.unit || 'NOS',
+          rate: rateVal || copy[emptyIdx].rate || '',
+          min_selling_price: created.min_selling_price || '',
+          max_selling_price: created.max_selling_price || '',
+          gst_rate: created.gst_rate,
+        };
+        setItems(copy);
+      } else {
+        setItems([
+          ...items,
+          {
+            product_id: created.id,
+            item_name: created.name,
+            hsn_code: created.hsn_or_sac,
+            unit: created.unit || 'NOS',
+            quantity: '',
+            rate: rateVal,
+            min_selling_price: created.min_selling_price || '',
+            max_selling_price: created.max_selling_price || '',
+            gst_rate: created.gst_rate,
+          },
+        ]);
+      }
+
+      setIsQuickProductOpen(false);
+      setQuickProductTargetIdx(null);
+    } catch (err: any) {
+      alert(err.message || 'Error creating product');
+    }
+  };
+
   const handleProductSelect = (index: number, productId: string) => {
+    if (productId === '__NEW__') {
+      handleOpenQuickProduct(index);
+      return;
+    }
+    if (!productId) {
+      const copy = [...items];
+      copy[index] = {
+        ...copy[index],
+        product_id: '',
+      };
+      setItems(copy);
+      return;
+    }
+
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
 
     const copy = [...items];
+    const legacySelling =
+      !prod.min_selling_price && !prod.max_selling_price && Number(prod.selling_price) > 0
+        ? prod.selling_price
+        : '';
     copy[index] = {
       ...copy[index],
       product_id: prod.id,
       item_name: prod.name,
       hsn_code: prod.hsn_or_sac,
-      rate: prod.purchase_price || prod.selling_price,
+      rate: Number(prod.purchase_price || prod.selling_price) > 0 ? (prod.purchase_price || prod.selling_price) : '',
+      min_selling_price: prod.min_selling_price || legacySelling,
+      max_selling_price: prod.max_selling_price || '',
       gst_rate: prod.gst_rate,
-      unit: prod.unit,
+      unit: prod.unit || 'NOS',
     };
     setItems(copy);
   };
@@ -149,24 +509,109 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       alert('Please select a receiving warehouse');
       return;
     }
+    if (!billNumber.trim()) {
+      alert('Please enter the Vendor Bill #');
+      return;
+    }
+    const validItems = items.filter((it) => it.item_name && it.item_name.trim() !== '');
+    if (validItems.length === 0) {
+      alert('Please select or enter at least one product.');
+      return;
+    }
+    const invalidQty = validItems.find((it) => !it.quantity || Number(it.quantity) <= 0);
+    if (invalidQty) {
+      alert(`Please enter a valid quantity for "${invalidQty.item_name}".`);
+      return;
+    }
 
+    for (const it of validItems) {
+      const minStr = String(it.min_selling_price ?? '').trim();
+      const maxStr = String(it.max_selling_price ?? '').trim();
+      if (minStr && maxStr && new Decimal(minStr).gt(new Decimal(maxStr))) {
+        alert(`Minimum Selling Price cannot be greater than Maximum Selling Price for "${it.item_name}".`);
+        return;
+      }
+    }
+
+    setSaving(true);
     try {
-      await api.createPurchaseInvoice(companyId, {
+      // Auto-create any newly entered products and sync Min/Max Selling Price back to Products catalog
+      const existingProductsMap = new Map<string, Product>(
+        products.map((p) => [p.name.trim().toLowerCase(), p])
+      );
+      const resolvedItems = [];
+      for (const it of validItems) {
+        let productId = it.product_id || undefined;
+        const minStr = String(it.min_selling_price ?? '').trim();
+        const maxStr = String(it.max_selling_price ?? '').trim();
+        const effectiveSelling = maxStr || minStr || it.rate || '0.00';
+
+        if (!productId) {
+          const cleanName = it.item_name.trim();
+          const matched = existingProductsMap.get(cleanName.toLowerCase());
+          if (matched) {
+            productId = matched.id;
+          } else {
+            const createdProd = await api.createProduct(companyId, {
+              item_type: 'PRODUCT',
+              name: cleanName,
+              hsn_or_sac: (it.hsn_code || '').trim(),
+              unit: (it.unit || 'NOS').trim().toUpperCase() || 'NOS',
+              purchase_price: it.rate || '0.00',
+              selling_price: effectiveSelling,
+              min_selling_price: minStr || null,
+              max_selling_price: maxStr || null,
+              gst_rate: it.gst_rate || '18.00',
+              current_stock: '0.00',
+              is_active: true,
+            });
+            productId = createdProd.id;
+            existingProductsMap.set(cleanName.toLowerCase(), createdProd);
+          }
+        } else if (minStr || maxStr) {
+          await api.updateProduct(companyId, productId, {
+            unit: (it.unit || 'NOS').trim().toUpperCase() || 'NOS',
+            selling_price: effectiveSelling,
+            min_selling_price: minStr || null,
+            max_selling_price: maxStr || null,
+          });
+        }
+        resolvedItems.push({
+          ...it,
+          product_id: productId,
+          item_name: it.item_name.trim(),
+          unit: (it.unit || 'NOS').trim().toUpperCase() || 'NOS',
+          quantity: it.quantity || '1',
+          rate: it.rate || '0.00',
+        });
+      }
+
+      const trimmedDisc = overallDiscountValue.trim();
+      const createdBill = await api.createPurchaseInvoice(companyId, {
         supplier_id: sup.id,
         supplier_name: sup.name,
         supplier_gstin: sup.gstin,
         warehouse_id: selectedWarehouseId,
-        bill_number: billNumber || `BILL-${Date.now()}`,
+        bill_number: billNumber.trim(),
         bill_date: billDate,
         due_date: dueDate,
-        items,
+        overall_discount_type: overallDiscountType,
+        overall_discount_percentage: overallDiscountType === 'PERCENTAGE' ? (trimmedDisc || '0.00') : '0.00',
+        overall_discount_amount: overallDiscountType === 'AMOUNT' ? (trimmedDisc || '0.00') : billTotals.discountAmount,
+        items: resolvedItems,
       });
+
+      if (receiveImmediately && createdBill?.id) {
+        await api.finalizePurchaseInvoice(companyId, createdBill.id);
+      }
 
       setIsModalOpen(false);
       resetForm();
-      await loadBills();
+      await Promise.all([loadBills(), loadMaster()]);
     } catch (err: any) {
       alert(err.message || 'Error creating purchase bill');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -202,7 +647,22 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   const resetForm = () => {
     setSelectedSupplierId('');
     setBillNumber('');
-    setItems([{ item_name: '', hsn_code: '', quantity: '1', rate: '0.00', gst_rate: '18.00' }]);
+    setReceiveImmediately(true);
+    setOverallDiscountType('AMOUNT');
+    setOverallDiscountValue('');
+    setItems([
+      {
+        product_id: '',
+        item_name: '',
+        hsn_code: '',
+        unit: 'NOS',
+        quantity: '',
+        rate: '',
+        min_selling_price: '',
+        max_selling_price: '',
+        gst_rate: '18.00',
+      },
+    ]);
   };
 
   const filtered = bills.filter((b) => {
@@ -243,7 +703,9 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
           <button
             type="button"
             onClick={() => {
-              setBillNumber(`BILL-${Date.now().toString().slice(-6)}`);
+              setBillNumber('');
+              setOverallDiscountType('AMOUNT');
+              setOverallDiscountValue('');
               setIsModalOpen(true);
             }}
             className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
@@ -269,13 +731,15 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto shadow-sm">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
             <tr>
               <th className="py-3 px-4">Bill #</th>
               <th className="py-3 px-4">Date</th>
               <th className="py-3 px-4">Supplier</th>
+              <th className="py-3 px-4 text-right">Total (After GST)</th>
+              <th className="py-3 px-4 text-right">Discount</th>
               <th className="py-3 px-4 text-right">Grand Total</th>
               <th className="py-3 px-4 text-right">Balance Due</th>
               <th className="py-3 px-4 text-center">Status</th>
@@ -285,12 +749,18 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400">
+                <td colSpan={9} className="py-8 text-center text-slate-400">
                   No purchase bills recorded. Click "+ New Purchase Bill" to log vendor purchases.
                 </td>
               </tr>
             ) : (
-              filtered.map((b) => (
+              filtered.map((b) => {
+                const totalAfterGst = new Decimal(b.subtotal || 0)
+                  .add(new Decimal(b.total_tax || 0))
+                  .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                const taxDec = new Decimal(b.total_tax || 0);
+                const discDec = new Decimal(b.overall_discount_amount || 0);
+                return (
                 <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                   <td className="py-3 px-4 font-mono font-bold">
                     <button
@@ -303,15 +773,68 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       <Eye className="w-3.5 h-3.5 text-slate-400 opacity-60 hover:opacity-100" />
                     </button>
                   </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{b.bill_date}</td>
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                    {isoToDisplayDate(b.bill_date) || b.bill_date}
+                  </td>
                   <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">
                     {b.supplier_name}
+                  </td>
+                  <td className="py-3 px-4 text-right font-semibold text-slate-700 dark:text-slate-200">
+                    <div>{formatIndianCurrency(totalAfterGst.toFixed(2))}</div>
+                    {taxDec.gt(0) && (
+                      <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                        GST: {formatIndianCurrency(taxDec.toFixed(2))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-right font-semibold">
+                    {discDec.gt(0) ? (
+                      <div className="text-emerald-600 dark:text-emerald-400">
+                        <div>- {formatIndianCurrency(discDec.toFixed(2))}</div>
+                        {b.overall_discount_type === 'PERCENTAGE' &&
+                          new Decimal(b.overall_discount_percentage || 0).gt(0) && (
+                            <div className="text-[10px] font-medium">
+                              ({new Decimal(b.overall_discount_percentage || 0).toString()}%)
+                            </div>
+                          )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">{formatIndianCurrency('0.00')}</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                     {formatIndianCurrency(b.grand_total)}
                   </td>
                   <td className="py-3 px-4 text-right font-bold text-rose-600">
-                    {formatIndianCurrency(b.balance_amount)}
+                    <div>{formatIndianCurrency(b.balance_amount)}</div>
+                    {Number(b.balance_amount) > 0 && (() => {
+                      const sup = suppliers.find((s) => s.id === b.supplier_id);
+                      const cd = getPurchaseDaysRemaining(b, sup?.payment_terms_days || 0);
+                      if (!cd) return null;
+                      return (
+                        <div className="mt-0.5 flex justify-end">
+                          <span
+                            className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                              cd.daysLeft <= 0
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                : cd.daysLeft <= 5
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                            }`}
+                            title={`Payment Due Date: ${isoToDisplayDate(cd.dueDateStr) || cd.dueDateStr}`}
+                          >
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>
+                              {cd.daysLeft < 0
+                                ? `Overdue ${Math.abs(cd.daysLeft)}d`
+                                : cd.daysLeft === 0
+                                  ? 'Due Today'
+                                  : `${cd.daysLeft}d left`}
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span
@@ -348,7 +871,8 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -356,8 +880,9 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
 
       {/* New Purchase Bill Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-[96vw] max-w-7xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <ShoppingCart className="w-4 h-4 text-brand-600" />
@@ -372,16 +897,12 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Supplier *</label>
-                  <select
+                  <SearchableSelect
+                    options={supplierOptions}
                     value={selectedSupplierId}
-                    onChange={(e) => setSelectedSupplierId(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="">-- Select Vendor --</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedSupplierId(val)}
+                    placeholder="Search vendor by name or GSTIN..."
+                  />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -409,9 +930,10 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vendor Bill #</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vendor Bill # *</label>
                   <input
                     type="text"
+                    placeholder="Enter vendor bill number"
                     value={billNumber}
                     onChange={(e) => setBillNumber(e.target.value)}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 font-mono"
@@ -419,60 +941,86 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bill Date</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={billDate}
-                    onChange={(e) => setBillDate(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700"
+                    onChange={(val) => setBillDate(val)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   />
+                  {(() => {
+                    const sup = suppliers.find((s) => s.id === selectedSupplierId);
+                    if (!sup || !sup.payment_terms_days || sup.payment_terms_days <= 0) return null;
+                    return (
+                      <div className="mt-1 text-[10px] font-semibold text-brand-700 dark:text-brand-300 flex items-center space-x-1">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>
+                          Pay in {sup.payment_terms_days} days (Due: {isoToDisplayDate(dueDate)})
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* Items */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden mt-3">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible mt-3">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold">
                     <tr>
-                      <th className="p-2 w-52">Product</th>
+                      <th className="p-2 min-w-[230px]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>Product</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickProduct(null)}
+                            className="inline-flex items-center space-x-0.5 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5 transition-colors shrink-0"
+                            title="Create a new product and add it to this bill"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>New Product</span>
+                          </button>
+                        </div>
+                      </th>
                       <th className="p-2 w-24">HSN</th>
                       <th className="p-2 w-20">Inward Qty</th>
+                      <th className="p-2 w-24">Unit</th>
                       <th className="p-2 w-28">Purchase Rate (₹)</th>
+                      <th className="p-2 w-48">Selling Price (₹)</th>
                       <th className="p-2 w-24">GST %</th>
-                      <th className="p-2 text-center w-10"></th>
+                      <th className="p-2 text-center w-9"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {items.map((item, idx) => (
                       <tr key={idx} className="bg-white dark:bg-slate-800">
-                        <td className="p-2 space-y-1">
-                          <select
-                            onChange={(e) => handleProductSelect(idx, e.target.value)}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs"
-                          >
-                            <option value="">-- Choose Product to Receive --</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>
-                            ))}
-                          </select>
+                        <td className="p-2 align-middle">
+                          <SearchableSelect
+                            options={productOptions}
+                            value={item.product_id || ''}
+                            onChange={(val) => handleProductSelect(idx, val)}
+                            placeholder="Enter your product"
+                            size="sm"
+                          />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 align-middle">
                           <input
                             type="text"
-                            value={item.hsn_code}
+                            placeholder="HSN"
+                            value={item.hsn_code || ''}
                             onChange={(e) => {
                               const copy = [...items];
                               copy[idx].hsn_code = e.target.value;
                               setItems(copy);
                             }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 font-mono"
                           />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 align-middle">
                           <input
                             type="number"
                             min="0.01"
                             step="any"
-                            value={item.quantity}
+                            placeholder="Qty"
+                            value={item.quantity ?? ''}
                             onChange={(e) => {
                               const copy = [...items];
                               copy[idx].quantity = e.target.value;
@@ -481,12 +1029,26 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                             className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
                           />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 align-middle">
+                          <SearchableSelect
+                            options={compactUnitOptions}
+                            value={item.unit || 'NOS'}
+                            onChange={(val) => {
+                              const copy = [...items];
+                              copy[idx].unit = val || 'NOS';
+                              setItems(copy);
+                            }}
+                            placeholder="NOS"
+                            size="sm"
+                          />
+                        </td>
+                        <td className="p-2 align-middle">
                           <input
                             type="number"
                             min="0"
                             step="any"
-                            value={item.rate}
+                            placeholder="0.00"
+                            value={item.rate ?? ''}
                             onChange={(e) => {
                               const copy = [...items];
                               copy[idx].rate = e.target.value;
@@ -495,7 +1057,39 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                             className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
                           />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 align-middle">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="Min"
+                              value={item.min_selling_price ?? ''}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].min_selling_price = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                              title="Minimum Selling Price (₹)"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              placeholder="Max"
+                              value={item.max_selling_price ?? ''}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].max_selling_price = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                              title="Maximum Selling Price (₹)"
+                            />
+                          </div>
+                        </td>
+                        <td className="p-2 align-middle">
                           <select
                             value={item.gst_rate}
                             onChange={(e) => {
@@ -503,14 +1097,14 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                               copy[idx].gst_rate = e.target.value;
                               setItems(copy);
                             }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700"
                           >
                             {GST_RATES.map((rate) => (
                               <option key={rate} value={rate}>{rate}%</option>
                             ))}
                           </select>
                         </td>
-                        <td className="p-2 text-center">
+                        <td className="p-2 align-middle text-center">
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(idx)}
@@ -525,39 +1119,355 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                 </table>
               </div>
 
+              <div className="flex flex-col md:flex-row items-start justify-between gap-4 pt-2">
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Item Row</span>
+                  </button>
+                </div>
+
+                {/* Overall Bill Value & Overall Discount Summary */}
+                <div className="w-full md:w-96 p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                    <span>Subtotal (Taxable):</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {formatIndianCurrency(billTotals.subtotal)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                    <span>Total GST:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {formatIndianCurrency(billTotals.totalTax)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-semibold pt-1.5 border-t border-slate-200/80 dark:border-slate-700/80">
+                    <span>Overall Bill Value:</span>
+                    <span>{formatIndianCurrency(billTotals.grossTotal)}</span>
+                  </div>
+
+                  {/* Overall Discount Input */}
+                  <div className="pt-1.5 border-t border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        Overall Discount
+                      </label>
+                      <div className="flex items-center space-x-1.5">
+                        <div className="inline-flex rounded border border-slate-300 dark:border-slate-600 overflow-hidden bg-white dark:bg-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOverallDiscountType('AMOUNT');
+                              setOverallDiscountValue('');
+                            }}
+                            className={`px-2 py-1 text-[11px] font-bold transition-colors ${
+                              overallDiscountType === 'AMOUNT'
+                                ? 'bg-brand-600 text-white'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }`}
+                            title="Flat discount amount in ₹"
+                          >
+                            ₹
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOverallDiscountType('PERCENTAGE');
+                              setOverallDiscountValue('');
+                            }}
+                            className={`px-2 py-1 text-[11px] font-bold transition-colors ${
+                              overallDiscountType === 'PERCENTAGE'
+                                ? 'bg-brand-600 text-white'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }`}
+                            title="Percentage discount on overall bill"
+                          >
+                            %
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder={overallDiscountType === 'PERCENTAGE' ? '0%' : '0.00'}
+                          value={overallDiscountValue}
+                          onChange={(e) => setOverallDiscountValue(e.target.value)}
+                          className="w-28 text-right border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none"
+                          title={
+                            overallDiscountType === 'PERCENTAGE'
+                              ? 'Enter overall bill discount percentage'
+                              : 'Enter overall bill discount amount (₹)'
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {billTotals.hasDiscount && (
+                      <div className="flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                        <span>
+                          Discount Applied
+                          {overallDiscountType === 'PERCENTAGE' ? ` (${billTotals.discountPercentage}%)` : ''}:
+                        </span>
+                        <span>- {formatIndianCurrency(billTotals.discountAmount)}</span>
+                      </div>
+                    )}
+                    {billTotals.isDiscountCapped && (
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400 text-right">
+                        {overallDiscountType === 'PERCENTAGE'
+                          ? 'Capped at 100% of overall bill value'
+                          : 'Capped at overall bill value'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between font-extrabold text-sm text-slate-900 dark:text-white pt-2 border-t border-slate-300 dark:border-slate-600">
+                    <span>Net Grand Total:</span>
+                    <span className="text-brand-600 dark:text-brand-400">
+                      {formatIndianCurrency(billTotals.netTotal)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex flex-wrap items-center justify-between gap-3">
+              <label className="inline-flex items-center space-x-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={receiveImmediately}
+                  onChange={(e) => setReceiveImmediately(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <span>Receive stock into Inventory immediately</span>
+              </label>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleCreateBill}
+                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm disabled:opacity-50"
+                >
+                  {saving
+                    ? 'Saving...'
+                    : receiveImmediately
+                      ? 'Save & Receive into Inventory'
+                      : 'Save Draft Purchase Bill'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </ModalPortal>
+      )}
+
+      {/* Quick Create New Product Modal (saves to Products Catalog & links to Purchase Bill) */}
+      {isQuickProductOpen && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                <Package className="w-4 h-4 text-emerald-600" />
+                <span>Create New Product (Saves to Products &amp; Inventory)</span>
+              </h3>
               <button
                 type="button"
-                onClick={handleAddItem}
-                className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
+                onClick={() => setIsQuickProductOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Add Item Row</span>
+                <X className="w-5 h-5" />
               </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Product Name *</label>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="e.g. Seagate 1TB Hard Disk"
+                    value={quickProduct.name}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, name: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">HSN Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 8471"
+                    value={quickProduct.hsn_or_sac}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, hsn_or_sac: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono bg-white dark:bg-slate-700"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Category</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickInlineCatOpen((prev) => !prev);
+                        setQuickInlineCatName('');
+                      }}
+                      className="inline-flex items-center space-x-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                    >
+                      <Tags className="w-3 h-3" />
+                      <span>{isQuickInlineCatOpen ? 'Close' : '+ New'}</span>
+                    </button>
+                  </div>
+                  <SearchableSelect
+                    options={categoryOptions}
+                    value={quickProduct.category_id}
+                    onChange={(val) => setQuickProduct({ ...quickProduct, category_id: val })}
+                    placeholder="-- No Category --"
+                    size="sm"
+                  />
+                  {isQuickInlineCatOpen && (
+                    <div className="mt-1.5 flex items-center space-x-1">
+                      <input
+                        type="text"
+                        placeholder="New category name"
+                        value={quickInlineCatName}
+                        onChange={(e) => setQuickInlineCatName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCreateQuickInlineCategory();
+                          }
+                        }}
+                        className="flex-1 min-w-0 border border-emerald-300 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateQuickInlineCategory}
+                        className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Price (₹)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="0.00"
+                    value={quickProduct.purchase_price}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, purchase_price: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Selling Price (₹)</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="Min Price"
+                      value={quickProduct.min_selling_price}
+                      onChange={(e) => setQuickProduct({ ...quickProduct, min_selling_price: e.target.value })}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 bg-white dark:bg-slate-700"
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="Max Price"
+                      value={quickProduct.max_selling_price}
+                      onChange={(e) => setQuickProduct({ ...quickProduct, max_selling_price: e.target.value })}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 bg-white dark:bg-slate-700"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">GST Rate (%)</label>
+                  <select
+                    value={quickProduct.gst_rate}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, gst_rate: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                  >
+                    {GST_RATES.map((rate) => (
+                      <option key={rate} value={rate}>{rate}%</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Unit of Measure</label>
+                  <SearchableSelect
+                    options={unitOptions}
+                    value={quickProduct.unit}
+                    onChange={(val) => setQuickProduct({ ...quickProduct, unit: val })}
+                    placeholder="NOS"
+                    size="sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Minimum Stock Alert</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="5"
+                    value={quickProduct.minimum_stock}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, minimum_stock: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">SKU / Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. PRD-1001"
+                    value={quickProduct.sku}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, sku: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono bg-white dark:bg-slate-700"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => setIsQuickProductOpen(false)}
                 className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleCreateBill}
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                onClick={handleSaveQuickProduct}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
               >
-                Save Purchase Bill
+                Save Product &amp; Add to Bill
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* View Purchase Bill Modal */}
       {viewingBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center space-x-3">
@@ -570,7 +1480,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     </span>
                   </h2>
                   <div className="text-xs text-slate-500">
-                    Bill Date: {viewingBill.bill_date} | Due Date: {viewingBill.due_date}
+                    Bill Date: {isoToDisplayDate(viewingBill.bill_date) || viewingBill.bill_date} | Due Date: {isoToDisplayDate(viewingBill.due_date) || viewingBill.due_date}
                   </div>
                 </div>
               </div>
@@ -596,6 +1506,12 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     <div>Paid Amount: <span className="font-bold text-emerald-600">{formatIndianCurrency(viewingBill.paid_amount)}</span></div>
                   </div>
                 </div>
+                {viewingBill.notes && (
+                  <div className="col-span-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <div className="font-semibold text-slate-400 uppercase text-[10px]">Notes / Extra Details</div>
+                    <div className="text-slate-700 dark:text-slate-300 whitespace-pre-line mt-0.5">{viewingBill.notes}</div>
+                  </div>
+                )}
               </div>
 
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
@@ -635,6 +1551,30 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     <span>Total Tax:</span>
                     <span>{formatIndianCurrency(viewingBill.total_tax)}</span>
                   </div>
+                  {Number(viewingBill.overall_discount_amount || 0) > 0 && (
+                    <>
+                      <div className="flex justify-between text-slate-700 dark:text-slate-300 font-semibold pt-1 border-t border-slate-200/80 dark:border-slate-700/80">
+                        <span>Overall Bill Value:</span>
+                        <span>
+                          {formatIndianCurrency(
+                            new Decimal(viewingBill.subtotal || 0)
+                              .add(new Decimal(viewingBill.total_tax || 0))
+                              .toFixed(2)
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-emerald-700 dark:text-emerald-400 font-semibold">
+                        <span>
+                          Overall Discount
+                          {viewingBill.overall_discount_type === 'PERCENTAGE' &&
+                          Number(viewingBill.overall_discount_percentage || 0) > 0
+                            ? ` (${Number(viewingBill.overall_discount_percentage)}%)`
+                            : ''}:
+                        </span>
+                        <span>- {formatIndianCurrency(viewingBill.overall_discount_amount || '0.00')}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between font-extrabold text-sm text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span>Grand Total:</span>
                     <span className="text-brand-600 dark:text-brand-400">{formatIndianCurrency(viewingBill.grand_total)}</span>
@@ -678,11 +1618,13 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Warehouse Manager Modal (Create / Edit / Delete Warehouses right inside Purchases) */}
       {isWarehouseManagerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden text-xs">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
@@ -867,6 +1809,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

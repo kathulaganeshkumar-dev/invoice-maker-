@@ -38,7 +38,15 @@ async function createApp(): Promise<express.Express> {
       return callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-EIM-Confirm-Reset',
+      'X-EIM-Device-Id',
+      'X-EIM-Device-Name',
+      'X-EIM-Admin-Pin',
+      'X-EIM-Staff-Name',
+    ],
   }));
 
   app.use(express.json({ limit: '50mb' }));

@@ -21,6 +21,7 @@ export interface AppSettings {
   purchase_save_path?: string;
   report_save_path?: string;
   backup_save_path?: string;
+  software_icon?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +35,11 @@ export interface Company {
   registered_address: string;
   gstin?: string;
   pan?: string;
+  tan?: string;
+  cin?: string;
+  iso?: string;
+  msme?: string;
+  financial_year?: string;
   state: string;
   state_code: string;
   pin_code: string;
@@ -62,6 +68,11 @@ export interface Branch {
   phone: string;
   email: string;
   gstin?: string;
+  tan?: string;
+  cin?: string;
+  iso?: string;
+  msme?: string;
+  financial_year?: string;
   state: string;
   state_code: string;
   bank_name?: string;
@@ -106,7 +117,18 @@ export interface CompanySettings {
   updated_at: string;
 }
 
-export type CustomerType = 'INDIVIDUAL' | 'BUSINESS';
+export type CustomerType =
+  | 'GOVERNMENT'
+  | 'INFRASTRUCTURE'
+  | 'CORPORATE'
+  | 'EDUCATION';
+
+export const CUSTOMER_TYPE_OPTIONS: { value: CustomerType; label: string }[] = [
+  { value: 'GOVERNMENT', label: 'Government' },
+  { value: 'INFRASTRUCTURE', label: 'Infrastructure' },
+  { value: 'CORPORATE', label: 'Corporate' },
+  { value: 'EDUCATION', label: 'Education' },
+];
 
 export interface CustomerAddress {
   id: string;
@@ -118,6 +140,13 @@ export interface CustomerAddress {
   state_code: string;
   pin_code: string;
   is_default: boolean;
+}
+
+export interface CustomerBankAccount {
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
 }
 
 export interface Customer {
@@ -132,12 +161,19 @@ export interface Customer {
   email?: string;
   gstin?: string;
   pan?: string;
+  registration_year?: string;
   billing_address: string;
   shipping_address: string;
   city: string;
   state: string;
   state_code: string;
   pin_code: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
+  additional_bank_accounts?: CustomerBankAccount[];
+  upi_id?: string;
   opening_balance: string; // Decimal string representation
   current_balance: string; // Decimal string representation
   credit_limit: string;
@@ -165,6 +201,8 @@ export interface Supplier {
   bank_name?: string;
   bank_account_no?: string;
   bank_ifsc?: string;
+  bank_branch?: string;
+  additional_bank_accounts?: CustomerBankAccount[];
   upi_id?: string;
   opening_balance: string;
   current_balance: string;
@@ -206,12 +244,15 @@ export interface Product {
   category_id?: string;
   category_name?: string;
   description?: string;
+  custom_notes?: string[];
   image_url?: string;
   unit: string;
   hsn_or_sac: string;
   gst_rate: string; // e.g. "18.00"
   purchase_price: string;
   selling_price: string;
+  min_selling_price?: string | null;
+  max_selling_price?: string | null;
   is_tax_inclusive: boolean;
   minimum_stock: string;
   current_stock: string;
@@ -457,10 +498,14 @@ export interface PurchaseInvoice {
   items: PurchaseInvoiceItem[];
   subtotal: string;
   total_tax: string;
+  overall_discount_type?: 'AMOUNT' | 'PERCENTAGE';
+  overall_discount_percentage?: string;
+  overall_discount_amount?: string;
   grand_total: string;
   paid_amount: string;
   balance_amount: string;
   is_finalized: boolean;
+  notes?: string;
   created_at: string;
   updated_at: string;
 }
@@ -542,6 +587,7 @@ export interface CustomerPayment {
   customer_name: string;
   amount: string;
   payment_method: PaymentMethod;
+  bank_account?: string;
   reference_number?: string;
   notes?: string;
   allocations: PaymentAllocation[];
@@ -559,6 +605,8 @@ export interface SupplierPayment {
   supplier_name: string;
   amount: string;
   payment_method: PaymentMethod;
+  bank_account?: string;
+  vendor_bank_account?: string;
   reference_number?: string;
   notes?: string;
   allocations: PaymentAllocation[];

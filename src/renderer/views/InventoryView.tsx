@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import Decimal from 'decimal.js';
 import { Warehouse, StockBalance, InventoryTransaction, Product } from '../../shared/types';
 import { api } from '../services/api';
+import { ModalPortal } from '../components/ModalPortal';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
+import { isoToDisplayDate } from '../components/DateInput';
 import {
   Boxes,
   Plus,
@@ -36,14 +38,14 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
   // Adjustment Modal state
   const [adjustProductId, setAdjustProductId] = useState<string>('');
   const [adjustType, setAdjustType] = useState<'ADJUSTMENT_ADD' | 'ADJUSTMENT_REDUCE'>('ADJUSTMENT_ADD');
-  const [adjustQty, setAdjustQty] = useState<string>('1');
+  const [adjustQty, setAdjustQty] = useState<string>('');
   const [adjustNotes, setAdjustNotes] = useState<string>('');
 
   // Transfer Modal state
   const [transferProductId, setTransferProductId] = useState<string>('');
   const [transferFromWhId, setTransferFromWhId] = useState<string>('');
   const [transferToWhId, setTransferToWhId] = useState<string>('');
-  const [transferQty, setTransferQty] = useState<string>('1');
+  const [transferQty, setTransferQty] = useState<string>('');
   const [transferNotes, setTransferNotes] = useState<string>('');
 
   // Warehouse CRUD Modal state
@@ -83,6 +85,10 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
       alert('Please select a product');
       return;
     }
+    if (!adjustQty || Number(adjustQty) <= 0) {
+      alert('Please enter a valid quantity');
+      return;
+    }
     if (!adjustNotes.trim()) {
       alert('Mandatory audit notes required for stock adjustment');
       return;
@@ -105,7 +111,7 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
 
       setIsAdjustModalOpen(false);
       setAdjustNotes('');
-      setAdjustQty('1');
+      setAdjustQty('');
       await loadData();
     } catch (err: any) {
       alert(err.message || 'Error recording adjustment');
@@ -115,6 +121,10 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
   const handleStockTransfer = async () => {
     if (!transferProductId || !transferFromWhId || !transferToWhId) {
       alert('Select product, source warehouse, and destination warehouse');
+      return;
+    }
+    if (!transferQty || Number(transferQty) <= 0) {
+      alert('Please enter a valid quantity to transfer');
       return;
     }
     if (transferFromWhId === transferToWhId) {
@@ -130,7 +140,7 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
         notes: transferNotes,
       });
       setIsTransferModalOpen(false);
-      setTransferQty('1');
+      setTransferQty('');
       setTransferNotes('');
       await loadData();
       alert('Stock transferred successfully!');
@@ -393,7 +403,9 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                   const isPositive = Number(tx.quantity) > 0;
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{tx.transaction_date}</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                        {isoToDisplayDate(tx.transaction_date) || tx.transaction_date}
+                      </td>
                       <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{tx.product_name}</td>
                       <td className="py-3 px-4">
                         <span
@@ -515,7 +527,8 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
 
       {/* Create / Edit Warehouse Modal */}
       {isWarehouseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
@@ -590,11 +603,13 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Stock Transfer Modal */}
       {isTransferModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
@@ -656,6 +671,7 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                   type="number"
                   min="0.01"
                   step="any"
+                  placeholder="Enter quantity"
                   value={transferQty}
                   onChange={(e) => setTransferQty(e.target.value)}
                   className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
@@ -692,11 +708,13 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Manual Stock Adjustment Modal */}
       {isAdjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
@@ -741,6 +759,7 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                   type="number"
                   min="0.01"
                   step="any"
+                  placeholder="Enter quantity"
                   value={adjustQty}
                   onChange={(e) => setAdjustQty(e.target.value)}
                   className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
@@ -777,6 +796,7 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );
