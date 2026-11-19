@@ -32,6 +32,7 @@ const BUSINESS_TABLES = [
   'branches',
   'companies',
   'audit_logs',
+  'workstation_permissions',
 ];
 
 export async function purgeDatabaseFile(dbPath: string): Promise<void> {
@@ -51,8 +52,19 @@ export async function purgeDatabaseFile(dbPath: string): Promise<void> {
         }
       }
       await db.raw('PRAGMA foreign_keys = ON');
+      if (await db.schema.hasTable('app_settings')) {
+        await db('app_settings').update({
+          operating_mode: 'SINGLE_COMPUTER',
+          theme: 'light',
+          server_port: 4200,
+          show_company_selector_on_startup: 1,
+          admin_pin_hash: null,
+          default_staff_menus_json: null,
+        }).catch(() => {});
+      }
       try {
         await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
+        await db.raw('VACUUM');
       } catch {
         // ignore
       }
@@ -79,12 +91,13 @@ export async function purgeAllData(): Promise<void> {
   const appData = process.env.APPDATA;
   if (appData) {
     targets.push(path.join(appData, 'enterprise-invoice-manager', 'data', 'invoice_manager.sqlite3'));
+    targets.push(path.join(appData, 'enterprise-invoice-manager-dev', 'data', 'invoice_manager.sqlite3'));
   }
 
   for (const target of targets) {
     await purgeDatabaseFile(target);
     const dataDir = path.dirname(target);
-    for (const sub of ['backups', 'letterheads']) {
+    for (const sub of ['backups', 'letterheads', 'icons']) {
       const subDir = path.join(dataDir, sub);
       if (fs.existsSync(subDir)) {
         try {
@@ -94,6 +107,27 @@ export async function purgeAllData(): Promise<void> {
         } catch (err) {
           console.warn(`[Purge] Could not clear ${subDir}:`, err);
         }
+      }
+    }
+
+    // Reset Direct LAN desktop config file to clean standalone defaults
+    const lanFile = path.join(dataDir, 'lan-config.json');
+    if (fs.existsSync(lanFile)) {
+      try {
+        const cleanLanConfig = {
+          role: 'STANDALONE',
+          hostIp: '',
+          port: 4200,
+          deviceId: 'pc-main-workstation',
+          deviceName: 'Main Workstation',
+          staffName: '',
+          minimizeToTray: true,
+          autoStartOnBoot: false,
+        };
+        fs.writeFileSync(lanFile, JSON.stringify(cleanLanConfig, null, 2), 'utf8');
+        console.log(`[Purge] Reset LAN config at ${lanFile}`);
+      } catch (err) {
+        console.warn(`[Purge] Could not reset ${lanFile}:`, err);
       }
     }
   }

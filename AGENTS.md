@@ -54,4 +54,15 @@ This application is a commercial-grade, desktop-first Invoicing, Quotation, Inve
   1. Make requested code changes directly in the local workspace (`src/`).
   2. Build and update local files with `npm run build` (or run Vite dev server `npm run dev:vite` on port 5173 with proxy to 4200 for instant live reload).
   3. Verify changes locally on `http://127.0.0.1:4200` and in the Version 2 desktop application.
-  4. **'Make Live' Clean Slate Protocol**: Whenever the user instructs to "make live", "go live", or prepare for live release, immediately purge all test/demo entries (companies, branches, invoices, quotations, customers, suppliers, products, purchase invoices, stock, payments, templates, audit logs) from both the local server database (`data/invoice_manager.sqlite3`) and the desktop software database (`%APPDATA%/enterprise-invoice-manager/data/invoice_manager.sqlite3`) using `npm run db:purge`. Ensure the software and website start with a 100% clean slate with zero dummy records.
+  4. **MANDATORY 'LIVE' / 'MAKE LIVE' CLEAN SLATE PROTOCOL**:
+     Whenever the user says "live", "make live", "change the settings and live", or "live the changes in local folder and in vercel", you MUST automatically execute the following 4 clean slate actions:
+     - **Requirement 1 - Purge All Transactional Business Data**: Delete all invoices, invoice items, quotation items, quotations, purchase orders, purchase order items, purchase invoices, purchase invoice items, inventory movements, stock balances, customers, customer addresses, suppliers, products, categories, units, and payment records.
+     - **Requirement 2 - Delete All Companies & Branches**: Delete every company, branch, and company settings entry created while testing or making changes.
+     - **Requirement 3 - Delete & Reset Settings & Network Configurations**:
+       * Reset `app_settings` to pristine factory defaults (Single-computer mode, light theme, default 1234 PIN, clear custom MD PIN).
+       * Purge all office staff members and workstation records (`workstation_permissions`).
+       * Reset all LAN network configurations, IP creations, and host paths (`lan-config.json` in workspace and AppData) back to blank standalone defaults.
+       * Delete uploaded letterheads, custom icons, and temporary backups (`data/icons`, `data/letterheads`, `data/backups`).
+     - **Requirement 4 - Remove All Default & Custom Bill Numbering Sequences**:
+       * Delete all entries from `numbering_sequences` table so invoice numbers, quotation numbers, and purchase numbers start 100% fresh from #1 when a new company is created.
+     - **Execution**: Run `npm run db:purge` across local database (`data/invoice_manager.sqlite3`) and desktop AppData databases (`%APPDATA%/enterprise-invoice-manager/data/invoice_manager.sqlite3` & `enterprise-invoice-manager-dev`), verify zero records remain, and rebuild with `npm run build`.

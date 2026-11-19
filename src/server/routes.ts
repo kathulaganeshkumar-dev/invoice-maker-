@@ -203,12 +203,19 @@ export function createApiRouter(db: Knex): Router {
           'branches',
           'company_settings',
           'companies',
+          'workstation_permissions',
         ];
         for (const table of tablesToClear) {
           const exists = await trx.schema.hasTable(table);
           if (exists) {
             await trx(table).del();
           }
+        }
+        if (await trx.schema.hasTable('app_settings')) {
+          await trx('app_settings').update({
+            admin_pin_hash: null,
+            default_staff_menus_json: null,
+          }).catch(() => {});
         }
       });
       res.json({ success: true, message: 'All companies and data have been cleared successfully.' });
