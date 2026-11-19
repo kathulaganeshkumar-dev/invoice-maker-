@@ -61,13 +61,13 @@ export const PRESET_PERMISSIONS = {
   BILLING_STAFF: {
     label: 'Billing Staff (No Dashboard/Reports)',
     is_admin: false,
-    can_open_settings: false,
+    can_open_settings: true,
     allowed_menus: ['invoices', 'invoices_other', 'quotations', 'customers', 'products'] as MenuId[],
   },
   ACCOUNTS_STAFF: {
     label: 'Accounts & Inventory Staff (No Dashboard/Reports)',
     is_admin: false,
-    can_open_settings: false,
+    can_open_settings: true,
     allowed_menus: [...DEFAULT_STAFF_MENUS],
   },
 };
@@ -269,7 +269,7 @@ export class WorkstationService {
   async createStaffMember(
     staffName: string,
     allowedMenus?: MenuId[],
-    canOpenSettings = false
+    canOpenSettings = true
   ): Promise<WorkstationPermission> {
     const cleanName = sanitizeDeviceName(staffName, '').trim();
     if (!cleanName) {
@@ -360,7 +360,7 @@ export class WorkstationService {
         role: 'STAFF',
         is_admin: false,
         allowed_menus_json: JSON.stringify(defaultStaffMenus),
-        can_open_settings: false,
+        can_open_settings: true,
         last_ip: remoteIp || null,
         last_seen_at: now,
         created_at: now,

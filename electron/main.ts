@@ -142,6 +142,13 @@ if (!gotSingleLock) {
           } else if (choice.response === 1) {
             resolvedRemote = true;
             connectToRemoteHost = false;
+            activeLanConfig.role = 'STANDALONE';
+            try {
+              saveLanConfig(resolvedDataDir, activeLanConfig);
+              console.log('[Electron] Switched to STANDALONE mode and updated lan-config.json');
+            } catch (saveErr) {
+              console.warn('[Electron] Failed to update lan config to STANDALONE:', saveErr);
+            }
           } else {
             app.quit();
             return;

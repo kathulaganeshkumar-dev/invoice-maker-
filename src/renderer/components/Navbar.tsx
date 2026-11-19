@@ -147,17 +147,15 @@ export const Navbar: React.FC<Props> = ({
           {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
         </button>
 
-        {/* Configuration Modal Trigger */}
-        {canOpenSettings && (
-          <button
-            type="button"
-            onClick={onOpenConfigModal}
-            className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            title="Settings & Preferences"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        )}
+        {/* Configuration Modal Trigger - Always accessible so staff can configure network or switch to Standalone mode */}
+        <button
+          type="button"
+          onClick={onOpenConfigModal}
+          className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Settings & Preferences (Network, Deployment, Configuration)"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );

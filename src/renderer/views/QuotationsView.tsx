@@ -26,6 +26,8 @@ import {
   BookmarkPlus,
   Sparkles,
   Package,
+  Users,
+  Shield,
 } from 'lucide-react';
 
 interface Props {
@@ -46,6 +48,7 @@ export const QuotationsView: React.FC<Props> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [templates, setTemplates] = useState<LetterheadTemplate[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterAuthor, setFilterAuthor] = useState<'ALL' | 'STAFF' | 'HOST'>('ALL');
   const [loading, setLoading] = useState<boolean>(!modalOnly);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(Boolean(modalOnly));
   const [viewingQuotation, setViewingQuotation] = useState<Quotation | null>(null);
@@ -146,14 +149,37 @@ export const QuotationsView: React.FC<Props> = ({
     }
   }, [companyId, modalOnly]);
 
+  const loadQuotationsSilently = async () => {
+    try {
+      const data = await api.getQuotations(companyId);
+      setQuotations(data);
+    } catch {
+      // ignore silent errors
+    }
+  };
+
   useEffect(() => {
     if (modalOnly || !companyId) return;
     const onDataChanged = () => {
-      loadQuotations();
+      loadQuotationsSilently();
       loadMaster();
     };
+
+    // Live silent auto-sync every 3.5 seconds so newly created quotations from staff show up automatically!
+    const syncTimer = setInterval(() => {
+      loadQuotationsSilently();
+    }, 3500);
+
     window.addEventListener('eim-data-changed', onDataChanged);
-    return () => window.removeEventListener('eim-data-changed', onDataChanged);
+    window.addEventListener('eim-data-sync', onDataChanged);
+    window.addEventListener('focus', onDataChanged);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', onDataChanged);
+      window.removeEventListener('eim-data-sync', onDataChanged);
+      window.removeEventListener('focus', onDataChanged);
+    };
   }, [companyId, modalOnly]);
 
   const loadQuotations = async () => {
@@ -469,12 +495,8 @@ export const QuotationsView: React.FC<Props> = ({
   };
 
   const handlePrintPdf = (quoteId: string, mode: 'DIGITAL_LETTERHEAD' | 'PREPRINTED_STATIONERY' = 'DIGITAL_LETTERHEAD') => {
-    const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id;
-    if (!templateId) {
-      alert('No print template uploaded yet. Please upload your quotation template in Print Templates first.');
-      return;
-    }
-    const url = api.getQuotationPdfUrl(companyId, quoteId, mode, templateId);
+    const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id || '';
+    const url = api.getQuotationPdfUrl(companyId, quoteId, mode, templateId || undefined);
     window.open(url, '_blank');
   };
 
@@ -505,7 +527,59 @@ export const QuotationsView: React.FC<Props> = ({
     }) as any,
   });
 
+  const isStaffQuotation = (q: Quotation) => {
+    const devName = (q.created_by_device_name || '').trim();
+    const devId = (q.created_by_device_id || '').trim();
+    if (!devName && !devId) return false;
+    if (devName === 'Main Office PC' || devId === 'local-host-pc') return false;
+    return true;
+  };
+
+  const staffQuotations = useMemo(() => {
+    return quotations.filter(isStaffQuotation);
+  }, [quotations]);
+
+  const hostQuotations = useMemo(() => {
+    return quotations.filter((q) => !isStaffQuotation(q));
+  }, [quotations]);
+
+  const staffContributors = useMemo(() => {
+    const names = new Set<string>();
+    for (const q of staffQuotations) {
+      if (q.created_by_device_name) names.add(q.created_by_device_name);
+    }
+    return Array.from(names);
+  }, [staffQuotations]);
+
+  const staffTotalAmount = useMemo(() => {
+    let tot = new Decimal(0);
+    for (const q of staffQuotations) {
+      if (q.status !== 'REJECTED') {
+        tot = tot.plus(new Decimal(q.grand_total || '0'));
+      }
+    }
+    return tot.toFixed(2);
+  }, [staffQuotations]);
+
+  const quotationStats = useMemo(() => {
+    let totRev = new Decimal(0);
+    let acceptedCount = 0;
+    for (const q of quotations) {
+      if (q.status !== 'REJECTED') {
+        totRev = totRev.plus(new Decimal(q.grand_total || '0'));
+        if (q.status === 'ACCEPTED' || q.status === 'CONVERTED') acceptedCount++;
+      }
+    }
+    return {
+      revenue: totRev.toFixed(2),
+      acceptedCount,
+    };
+  }, [quotations]);
+
   const filtered = quotations.filter((q) => {
+    if (filterAuthor === 'STAFF' && !isStaffQuotation(q)) return false;
+    if (filterAuthor === 'HOST' && isStaffQuotation(q)) return false;
+
     if (searchQuery) {
       const s = searchQuery.toLowerCase();
       return (
@@ -525,7 +599,7 @@ export const QuotationsView: React.FC<Props> = ({
         <div>
           <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
             <FileSpreadsheet className="w-5 h-5 text-brand-600" />
-            <span>Commercial Quotations & Estimates</span>
+            <span>Commercial Quotations &amp; Estimates</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Create professional price estimates, revisions, print with uploaded templates, and 1-click convert to Sales Invoices.
@@ -542,9 +616,126 @@ export const QuotationsView: React.FC<Props> = ({
         </button>
       </div>
 
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+        <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="text-slate-500 dark:text-slate-400 font-medium">Total Quotations</div>
+          <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
+            {quotations.length}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">
+            Rs. {formatIndianCurrency(quotationStats.revenue)}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="text-slate-500 dark:text-slate-400 font-medium">Accepted / Converted</div>
+          <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+            {quotationStats.acceptedCount}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Converted to Invoices</div>
+        </div>
+
+        {/* Staff Created Quotations Card */}
+        <div
+          onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
+          className={`p-3.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
+            filterAuthor === 'STAFF'
+              ? 'bg-purple-100 dark:bg-purple-900/50 border-purple-400 dark:border-purple-600'
+              : 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/60 hover:border-purple-300'
+          }`}
+          title="Click to filter quotations created by staff"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-purple-800 dark:text-purple-300 font-bold flex items-center space-x-1">
+              <Users className="w-3.5 h-3.5 text-purple-600" />
+              <span>Created by Staff</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200/80 text-purple-900 dark:bg-purple-800 dark:text-purple-100">
+              {staffQuotations.length} Quotes
+            </span>
+          </div>
+          <div className="text-lg font-extrabold text-purple-950 dark:text-purple-100 mt-0.5">
+            Rs. {formatIndianCurrency(staffTotalAmount)}
+          </div>
+          <div className="text-[10px] text-purple-700 dark:text-purple-300 truncate mt-0.5">
+            {staffContributors.length > 0 ? staffContributors.join(', ') : 'No staff quotes yet'}
+          </div>
+        </div>
+      </div>
+
+      {/* Staff Activity Alert Banner */}
+      {staffQuotations.length > 0 && (
+        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
+          <div className="flex items-center space-x-2.5">
+            <div className="p-1.5 bg-purple-600 text-white rounded-lg">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-purple-950 dark:text-purple-200">
+                Staff Activity: {staffQuotations.length} quotation{staffQuotations.length > 1 ? 's' : ''} created by office staff ({staffContributors.join(', ') || 'Staff Workstations'})
+              </span>
+              <span className="text-purple-700 dark:text-purple-300 ml-2">
+                Total value: Rs. {formatIndianCurrency(staffTotalAmount)}. Synced live over office LAN.
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
+              filterAuthor === 'STAFF'
+                ? 'bg-purple-700 text-white'
+                : 'bg-white dark:bg-slate-800 text-purple-800 dark:text-purple-200 border border-purple-300 hover:bg-purple-100'
+            }`}
+          >
+            {filterAuthor === 'STAFF' ? 'Showing Staff Quotes (Show All)' : `View Only Staff Quotes (${staffQuotations.length})`}
+          </button>
+        </div>
+      )}
+
       {/* Filter Bar */}
-      <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <div className="relative w-80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterAuthor('ALL')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              filterAuthor === 'ALL'
+                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            All Quotes ({quotations.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterAuthor('STAFF')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+              filterAuthor === 'STAFF'
+                ? 'bg-purple-700 text-white'
+                : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 mr-1" />
+            <span>Staff ({staffQuotations.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterAuthor('HOST')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+              filterAuthor === 'HOST'
+                ? 'bg-slate-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5 mr-1" />
+            <span>Host / MD ({hostQuotations.length})</span>
+          </button>
+        </div>
+
+        <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
@@ -565,6 +756,7 @@ export const QuotationsView: React.FC<Props> = ({
               <th className="py-3 px-4">Date</th>
               <th className="py-3 px-4">Valid Until</th>
               <th className="py-3 px-4">Customer</th>
+              <th className="py-3 px-4">Created By</th>
               <th className="py-3 px-4 text-right">Grand Total</th>
               <th className="py-3 px-4 text-center">Status</th>
               <th className="py-3 px-4 text-center">Actions</th>
@@ -573,8 +765,8 @@ export const QuotationsView: React.FC<Props> = ({
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400">
-                  No quotations found. Click "+ New Quotation" to create an estimate.
+                <td colSpan={8} className="py-8 text-center text-slate-400">
+                  No quotations found matching current filter.
                 </td>
               </tr>
             ) : (
@@ -603,6 +795,25 @@ export const QuotationsView: React.FC<Props> = ({
                   <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">
                     {q.customer_name}
                   </td>
+                  <td className="py-3 px-4">
+                    {isStaffQuotation(q) ? (
+                      <span
+                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                        title={`Created on staff workstation: ${q.created_by_device_name || 'Staff'}`}
+                      >
+                        <Users className="w-3 h-3 text-purple-600" />
+                        <span>Staff: {q.created_by_device_name || 'Staff PC'}</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                        title="Created on Host PC / MD Workstation"
+                      >
+                        <Shield className="w-3 h-3 text-slate-500" />
+                        <span>Main PC / MD</span>
+                      </span>
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                     {formatIndianCurrency(q.grand_total)}
                   </td>
@@ -622,7 +833,20 @@ export const QuotationsView: React.FC<Props> = ({
                     </span>
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center space-x-2">
+                    <div className="flex items-center justify-center space-x-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrintPdf(q.id, 'DIGITAL_LETTERHEAD');
+                        }}
+                        className="inline-flex items-center space-x-1 px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 rounded text-xs font-bold border border-brand-200 dark:border-brand-800 transition-colors shadow-xs"
+                        title="Open Quotation PDF immediately"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                        <span>PDF</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {

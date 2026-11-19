@@ -359,6 +359,8 @@ export interface Invoice {
   letterhead_template_id?: string;
   notes?: string;
   terms_conditions?: string;
+  created_by_device_id?: string;
+  created_by_device_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -422,6 +424,8 @@ export interface Quotation {
   letterhead_template_id?: string;
   notes?: string;
   terms_conditions?: string;
+  created_by_device_id?: string;
+  created_by_device_name?: string;
   created_at: string;
   updated_at: string;
 }

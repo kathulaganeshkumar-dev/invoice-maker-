@@ -82,13 +82,14 @@ export const Sidebar: React.FC<Props> = ({
         })}
       </nav>
 
-      {/* Settings Shortcut Button */}
-      {onOpenSettings && canOpenSettings && (
+      {/* Settings Shortcut Button - Always accessible so staff can configure network or switch to Standalone mode */}
+      {onOpenSettings && (
         <div className="px-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={onOpenSettings}
             className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 transition-all"
+            title="Settings & Preferences (Deployment, Network, Business Rules)"
           >
             <Settings className="w-4 h-4 text-slate-400 dark:text-slate-500" />
             <span className="truncate">Settings & Preferences</span>

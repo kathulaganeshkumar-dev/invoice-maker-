@@ -45,8 +45,32 @@ export const CompanyBranchModal: React.FC<Props> = ({
   useEffect(() => {
     if (isOpen) {
       loadData();
+      const interval = setInterval(async () => {
+        // Silently poll for newly created companies on Host PC
+        if (!isEditing && !isBranchFormOpen) {
+          try {
+            const comps = await api.getCompanies();
+            setCompanies(comps);
+            if (!selectedCompanyId && comps.length > 0) {
+              const active = comps.find((c) => c.is_default) || comps[0];
+              setSelectedCompanyId(active.id);
+              api
+                .getBranches(active.id)
+                .then((brs) => {
+                  setBranches(brs);
+                  const defBranch = brs.find((b) => b.is_default) || brs[0];
+                  if (defBranch) setSelectedBranchId(defBranch.id);
+                })
+                .catch(() => {});
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }, 3000);
+      return () => clearInterval(interval);
     }
-  }, [isOpen]);
+  }, [isOpen, isEditing, isBranchFormOpen, selectedCompanyId]);
 
   const handleGstinChange = (val: string) => {
     const gstin = val.toUpperCase();

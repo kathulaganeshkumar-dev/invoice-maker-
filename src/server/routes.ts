@@ -1028,16 +1028,14 @@ export function createApiRouter(db: Knex): Router {
       if (!template) {
         template = await letterheadService.getDefaultTemplate(companyId);
       }
-      if (!template || !template.file_path || !fs.existsSync(template.file_path)) {
-        return res.status(400).json({
-          error: 'No print template uploaded. Please upload a PDF, PNG, or JPG template in Print Templates first.',
-        });
+      if (template && (!template.file_path || !fs.existsSync(template.file_path))) {
+        template = undefined;
       }
 
       const mode = (req.query.mode as any) || 'DIGITAL_LETTERHEAD';
       const pdfBytes = await PdfEngine.generateInvoicePdf(invoice, {
         mode,
-        template,
+        template: template || undefined,
         company: company!,
         branch,
       });
@@ -1151,16 +1149,14 @@ export function createApiRouter(db: Knex): Router {
       if (!template) {
         template = await letterheadService.getDefaultTemplate(companyId);
       }
-      if (!template || !template.file_path || !fs.existsSync(template.file_path)) {
-        return res.status(400).json({
-          error: 'No print template uploaded. Please upload a PDF, PNG, or JPG template in Print Templates first.',
-        });
+      if (template && (!template.file_path || !fs.existsSync(template.file_path))) {
+        template = undefined;
       }
 
       const mode = (req.query.mode as any) || 'DIGITAL_LETTERHEAD';
       const pdfBytes = await PdfEngine.generateQuotationPdf(quotation, {
         mode,
-        template,
+        template: template || undefined,
         company: company!,
         branch,
       });

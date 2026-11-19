@@ -23,8 +23,18 @@ import {
   AppSettings,
 } from '../../shared/types';
 
-const getBaseUrl = (): string => {
+export const getBaseUrl = (): string => {
   if (typeof window === 'undefined') return 'http://127.0.0.1:4200/api';
+  try {
+    const lanRole = localStorage.getItem('eim_lan_role');
+    const customHost = localStorage.getItem('eim_lan_host_ip');
+    const customPort = localStorage.getItem('eim_lan_host_port') || '4200';
+    if (lanRole === 'LAN_CLIENT' && customHost && customHost.trim()) {
+      return `http://${customHost.trim()}:${customPort}/api`;
+    }
+  } catch {
+    // ignore
+  }
   if (window.location.protocol === 'file:') return 'http://127.0.0.1:4200/api';
   if (window.location.origin && window.location.origin.startsWith('http')) {
     if (window.location.port === '5173') return 'http://127.0.0.1:4200/api';
@@ -119,7 +129,7 @@ function getIdentityHeaders(): Record<string, string> {
 }
 
 async function requestFormData<T>(endpoint: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+  const res = await fetch(`${getBaseUrl()}${endpoint}`, {
     method: 'POST',
     headers: getIdentityHeaders(),
     body: formData,
@@ -138,7 +148,7 @@ async function requestFormData<T>(endpoint: string, formData: FormData): Promise
 }
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+  const res = await fetch(`${getBaseUrl()}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -365,7 +375,7 @@ export const api = {
   deleteInvoice: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/invoices/${id}`, { method: 'DELETE' }),
   getInvoicePdfUrl: (companyId: string, id: string, mode = 'DIGITAL_LETTERHEAD', templateId?: string) =>
-    `${BASE_URL}/companies/${companyId}/invoices/${id}/pdf?mode=${mode}${templateId ? `&template_id=${encodeURIComponent(templateId)}` : ''}`,
+    `${getBaseUrl()}/companies/${companyId}/invoices/${id}/pdf?mode=${mode}${templateId ? `&template_id=${encodeURIComponent(templateId)}` : ''}`,
 
   // Quotations
   getQuotations: (companyId: string, search?: string) =>
@@ -379,7 +389,7 @@ export const api = {
   deleteQuotation: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/quotations/${id}`, { method: 'DELETE' }),
   getQuotationPdfUrl: (companyId: string, id: string, mode = 'DIGITAL_LETTERHEAD', templateId?: string) =>
-    `${BASE_URL}/companies/${companyId}/quotations/${id}/pdf?mode=${mode}${templateId ? `&template_id=${encodeURIComponent(templateId)}` : ''}`,
+    `${getBaseUrl()}/companies/${companyId}/quotations/${id}/pdf?mode=${mode}${templateId ? `&template_id=${encodeURIComponent(templateId)}` : ''}`,
 
   // Purchases
   getPurchaseOrders: (companyId: string) => request<PurchaseOrder[]>(`/companies/${companyId}/purchases/orders`),
@@ -464,18 +474,18 @@ export const api = {
       formData
     ),
   getLetterheadFileUrl: (companyId: string, templateId: string) =>
-    `${BASE_URL}/companies/${companyId}/letterheads/${templateId}/file`,
+    `${getBaseUrl()}/companies/${companyId}/letterheads/${templateId}/file`,
 
   // Export & Import URLs
-  getCustomersExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/customers`,
-  getProductsExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/products`,
-  getSuppliersExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/suppliers`,
-  getPurchasesExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/purchases`,
-  getInventoryExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/inventory`,
-  getPaymentsReceivableExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/payments-receivable`,
-  getPaymentsToSuppliersExportUrl: (companyId: string) => `${BASE_URL}/companies/${companyId}/export/payments-suppliers`,
-  getCustomerImportTemplateUrl: () => `${BASE_URL}/export/template/customers`,
-  getImportTemplateUrl: (category: string) => `${BASE_URL}/export/template/${category}`,
+  getCustomersExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/customers`,
+  getProductsExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/products`,
+  getSuppliersExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/suppliers`,
+  getPurchasesExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/purchases`,
+  getInventoryExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/inventory`,
+  getPaymentsReceivableExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/payments-receivable`,
+  getPaymentsToSuppliersExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/payments-suppliers`,
+  getCustomerImportTemplateUrl: () => `${getBaseUrl()}/export/template/customers`,
+  getImportTemplateUrl: (category: string) => `${getBaseUrl()}/export/template/${category}`,
   importExcelData: (companyId: string, category: string, formData: FormData) =>
     requestFormData<{
       category: string;
@@ -509,6 +519,6 @@ export const api = {
       body: JSON.stringify({ filename, ...options }),
     }),
   getBackupDownloadUrl: (filename: string, companyId?: string) =>
-    `${BASE_URL}/backups/${encodeURIComponent(filename)}/download${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`,
+    `${getBaseUrl()}/backups/${encodeURIComponent(filename)}/download${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`,
   uploadRestoreBackup: (formData: FormData) => requestFormData<any>('/backups/upload-restore', formData),
 };

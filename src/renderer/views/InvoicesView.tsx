@@ -31,6 +31,8 @@ import {
   CheckCheck,
   Lock,
   StickyNote,
+  Users,
+  Shield,
 } from 'lucide-react';
 
 const SALES_DOC_TYPES: { value: DocumentType; label: string }[] = [
@@ -96,6 +98,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   const [products, setProducts] = useState<Product[]>([]);
   const [templates, setTemplates] = useState<LetterheadTemplate[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterAuthor, setFilterAuthor] = useState<'ALL' | 'STAFF' | 'HOST'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(!modalOnly);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(Boolean(modalOnly));
@@ -213,14 +216,48 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
     }
   }, [companyId, filterStatus, modalOnly]);
 
+  const loadInvoicesSilently = async () => {
+    try {
+      const filters: any = {};
+      if (
+        filterStatus === 'PAID' ||
+        filterStatus === 'PARTIAL PAY' ||
+        filterStatus === 'UNPAID' ||
+        filterStatus === 'FINALIZED'
+      ) {
+        filters.status = 'FINALIZED';
+      } else if (filterStatus === 'DRAFT') {
+        filters.status = 'DRAFT';
+      }
+      const data = await api.getInvoices(companyId, filters);
+      setInvoices(data);
+    } catch {
+      // ignore silent polling errors
+    }
+  };
+
   useEffect(() => {
     if (modalOnly || !companyId) return;
     const onDataChanged = () => {
-      loadInvoices();
+      loadInvoicesSilently();
       loadMasterData();
     };
+
+    // Live silent auto-sync every 3.5 seconds so newly created invoices from staff show up automatically!
+    const syncTimer = setInterval(() => {
+      loadInvoicesSilently();
+    }, 3500);
+
     window.addEventListener('eim-data-changed', onDataChanged);
-    return () => window.removeEventListener('eim-data-changed', onDataChanged);
+    window.addEventListener('eim-data-sync', onDataChanged);
+    window.addEventListener('focus', onDataChanged);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', onDataChanged);
+      window.removeEventListener('eim-data-sync', onDataChanged);
+      window.removeEventListener('focus', onDataChanged);
+    };
   }, [companyId, filterStatus, modalOnly]);
 
   // Automatically calculate Due Date from Invoice Date + Customer's Payment Reminder Days
@@ -633,12 +670,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   };
 
   const handlePrintPdf = (invoiceId: string, mode: 'DIGITAL_LETTERHEAD' | 'PREPRINTED_STATIONERY' = 'DIGITAL_LETTERHEAD') => {
-    const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id;
-    if (!templateId) {
-      alert('No print template uploaded yet. Please upload your invoice template in Print Templates first.');
-      return;
-    }
-    const url = api.getInvoicePdfUrl(companyId, invoiceId, mode, templateId);
+    const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id || '';
+    const url = api.getInvoicePdfUrl(companyId, invoiceId, mode, templateId || undefined);
     window.open(url, '_blank');
   };
 
@@ -679,11 +712,68 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   );
   const previewDocTotals = calculateDocumentTotals({ items: previewCalculatedLines });
 
-  const filteredInvoices = invoices.filter((inv) => {
-    // Partition invoices cleanly between Invoices (Sales) and Invoices (Other)
-    const isSalesInvoice = SALES_DOC_TYPE_SET.has(inv.document_type);
-    if (isOtherMode && isSalesInvoice) return false;
-    if (!isOtherMode && !isSalesInvoice) return false;
+  const isStaffInvoice = (inv: Invoice) => {
+    const devName = (inv.created_by_device_name || '').trim();
+    const devId = (inv.created_by_device_id || '').trim();
+    if (!devName && !devId) return false;
+    if (devName === 'Main Office PC' || devId === 'local-host-pc') return false;
+    return true;
+  };
+
+  const modeInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      const isSalesInvoice = SALES_DOC_TYPE_SET.has(inv.document_type);
+      return isOtherMode ? !isSalesInvoice : isSalesInvoice;
+    });
+  }, [invoices, isOtherMode]);
+
+  const staffInvoices = useMemo(() => {
+    return modeInvoices.filter(isStaffInvoice);
+  }, [modeInvoices]);
+
+  const hostInvoices = useMemo(() => {
+    return modeInvoices.filter((inv) => !isStaffInvoice(inv));
+  }, [modeInvoices]);
+
+  const staffContributors = useMemo(() => {
+    const names = new Set<string>();
+    for (const inv of staffInvoices) {
+      if (inv.created_by_device_name) names.add(inv.created_by_device_name);
+    }
+    return Array.from(names);
+  }, [staffInvoices]);
+
+  const staffTotalAmount = useMemo(() => {
+    let tot = new Decimal(0);
+    for (const inv of staffInvoices) {
+      if (inv.status !== 'CANCELLED') {
+        tot = tot.plus(new Decimal(inv.grand_total || '0'));
+      }
+    }
+    return tot.toFixed(2);
+  }, [staffInvoices]);
+
+  const invoiceStats = useMemo(() => {
+    let totRev = new Decimal(0);
+    let totBal = new Decimal(0);
+    let finalizedCount = 0;
+    for (const inv of modeInvoices) {
+      if (inv.status !== 'CANCELLED') {
+        totRev = totRev.plus(new Decimal(inv.grand_total || '0'));
+        totBal = totBal.plus(new Decimal(inv.balance_amount || '0'));
+        if (inv.status === 'FINALIZED') finalizedCount++;
+      }
+    }
+    return {
+      revenue: totRev.toFixed(2),
+      balance: totBal.toFixed(2),
+      finalizedCount,
+    };
+  }, [modeInvoices]);
+
+  const filteredInvoices = modeInvoices.filter((inv) => {
+    if (filterAuthor === 'STAFF' && !isStaffInvoice(inv)) return false;
+    if (filterAuthor === 'HOST' && isStaffInvoice(inv)) return false;
 
     if (filterStatus === 'PAID') {
       const isPaid = inv.status === 'FINALIZED' && new Decimal(inv.balance_amount || 0).lte(0);
@@ -749,9 +839,97 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
         </button>
       </div>
 
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="text-slate-500 dark:text-slate-400 font-medium">Total Documents</div>
+          <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
+            {modeInvoices.length}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">
+            Rs. {formatIndianCurrency(invoiceStats.revenue)}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="text-slate-500 dark:text-slate-400 font-medium">Finalized</div>
+          <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+            {invoiceStats.finalizedCount}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Ready & Active</div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="text-slate-500 dark:text-slate-400 font-medium">Pending Balance</div>
+          <div className="text-lg font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">
+            Rs. {formatIndianCurrency(invoiceStats.balance)}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5">To be collected</div>
+        </div>
+
+        {/* Staff Created Files Card */}
+        <div
+          onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
+          className={`p-3.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
+            filterAuthor === 'STAFF'
+              ? 'bg-purple-100 dark:bg-purple-900/50 border-purple-400 dark:border-purple-600'
+              : 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/60 hover:border-purple-300'
+          }`}
+          title="Click to filter invoices created by staff"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-purple-800 dark:text-purple-300 font-bold flex items-center space-x-1">
+              <Users className="w-3.5 h-3.5 text-purple-600" />
+              <span>Created by Staff</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200/80 text-purple-900 dark:bg-purple-800 dark:text-purple-100">
+              {staffInvoices.length} Files
+            </span>
+          </div>
+          <div className="text-lg font-extrabold text-purple-950 dark:text-purple-100 mt-0.5">
+            Rs. {formatIndianCurrency(staffTotalAmount)}
+          </div>
+          <div className="text-[10px] text-purple-700 dark:text-purple-300 truncate mt-0.5">
+            {staffContributors.length > 0 ? staffContributors.join(', ') : 'No staff files yet'}
+          </div>
+        </div>
+      </div>
+
+      {/* Staff Activity Alert Banner */}
+      {staffInvoices.length > 0 && (
+        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
+          <div className="flex items-center space-x-2.5">
+            <div className="p-1.5 bg-purple-600 text-white rounded-lg">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-purple-950 dark:text-purple-200">
+                Staff Activity: {staffInvoices.length} file{staffInvoices.length > 1 ? 's' : ''} created by office staff ({staffContributors.join(', ') || 'Staff Workstations'})
+              </span>
+              <span className="text-purple-700 dark:text-purple-300 ml-2">
+                Total value: Rs. {formatIndianCurrency(staffTotalAmount)}. All records synced live over office LAN.
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
+              filterAuthor === 'STAFF'
+                ? 'bg-purple-700 text-white'
+                : 'bg-white dark:bg-slate-800 text-purple-800 dark:text-purple-200 border border-purple-300 hover:bg-purple-100'
+            }`}
+          >
+            {filterAuthor === 'STAFF' ? 'Showing Staff Invoices (Show All)' : `View Only Staff Invoices (${staffInvoices.length})`}
+          </button>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
+          {/* Status Filters */}
           {['ALL', 'FINALIZED', 'PAID', 'PARTIAL PAY', 'UNPAID', 'DRAFT'].map((st) => (
             <button
               key={st}
@@ -765,6 +943,45 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               {st === 'ALL' ? 'All Invoices' : st}
             </button>
           ))}
+
+          <div className="h-4 w-px bg-slate-300 dark:bg-slate-600 mx-1 hidden sm:block" />
+
+          {/* Author Filters */}
+          <button
+            type="button"
+            onClick={() => setFilterAuthor('ALL')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+              filterAuthor === 'ALL'
+                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            All Authors ({modeInvoices.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterAuthor('STAFF')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+              filterAuthor === 'STAFF'
+                ? 'bg-purple-700 text-white'
+                : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+            }`}
+          >
+            <Users className="w-3 h-3 mr-1" />
+            <span>Staff ({staffInvoices.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterAuthor('HOST')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+              filterAuthor === 'HOST'
+                ? 'bg-slate-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            <Shield className="w-3 h-3 mr-1" />
+            <span>Host / MD ({hostInvoices.length})</span>
+          </button>
         </div>
 
         <div className="relative w-full sm:w-72">
@@ -788,6 +1005,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               <th className="py-3 px-4">Type</th>
               <th className="py-3 px-4">Date</th>
               <th className="py-3 px-4">Customer</th>
+              <th className="py-3 px-4">Created By</th>
               <th className="py-3 px-4 text-right">Grand Total</th>
               <th className="py-3 px-4 text-right">Paid</th>
               <th className="py-3 px-4 text-right">Balance</th>
@@ -798,8 +1016,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredInvoices.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400">
-                  No invoices found. Click "+ New Invoice" to create one.
+                <td colSpan={10} className="py-8 text-center text-slate-400">
+                  No invoices found matching current filter.
                 </td>
               </tr>
             ) : (
@@ -829,6 +1047,25 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">
                       {inv.customer_name}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isStaffInvoice(inv) ? (
+                        <span
+                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                          title={`Created on staff workstation: ${inv.created_by_device_name || 'Staff'}`}
+                        >
+                          <Users className="w-3 h-3 text-purple-600" />
+                          <span>Staff: {inv.created_by_device_name || 'Staff PC'}</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                          title="Created on Host PC / MD Workstation"
+                        >
+                          <Shield className="w-3 h-3 text-slate-500" />
+                          <span>Main PC / MD</span>
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                       {formatIndianCurrency(inv.grand_total)}
@@ -928,6 +1165,19 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                             <span>{Number(inv.paid_amount) > 0 ? 'Pay / Partial' : 'Record Pay'}</span>
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePrintPdf(inv.id, 'DIGITAL_LETTERHEAD');
+                          }}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60 rounded text-xs font-bold border border-brand-200 dark:border-brand-800 transition-colors shadow-xs"
+                          title="Open Invoice PDF immediately (Browser / PDF viewer)"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                          <span>PDF</span>
+                        </button>
 
                         <button
                           type="button"

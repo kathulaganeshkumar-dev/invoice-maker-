@@ -75,13 +75,65 @@ export const App: React.FC = () => {
       if (ws) {
         const menus = ws.is_admin ? null : ws.allowed_menus;
         setAllowedMenus(menus);
-        setCanOpenSettings(ws.is_admin ? true : Boolean(ws.can_open_settings));
+        // Staff always allowed to open Settings to disconnect or switch to Standalone mode
+        setCanOpenSettings(true);
         if (menus && menus.length > 0) {
           setActiveTab((prev) => (menus.includes(prev) ? prev : menus[0]));
         }
       }
     } catch {
       // keep existing permissions on transient error
+    }
+  };
+
+  // LAN Real-Time Synchronization Engine (3.5s interval + focus + eim-data-sync event)
+  // Ensures Staff PC automatically receives newly created companies, updated company details,
+  // and permissions from the Host PC without requiring manual restarts or reloads.
+  const syncLiveLanData = async () => {
+    try {
+      const freshCompanies = await api.getCompanies();
+      if (!Array.isArray(freshCompanies)) return;
+
+      setActiveCompany((current) => {
+        // Case 1: Staff PC had NO active company (e.g. host created first company)
+        if (!current && freshCompanies.length > 0) {
+          const target = freshCompanies.find((c) => c.is_default) || freshCompanies[0];
+          setIsCompanyModalOpen(false);
+          api
+            .getBranches(target.id)
+            .then((branches) => {
+              const b = branches.find((item) => item.is_default) || branches[0] || null;
+              setActiveBranch(b);
+            })
+            .catch(() => {});
+          return target;
+        }
+
+        // Case 2: Active company exists, check if details were updated on Host
+        if (current) {
+          const updated = freshCompanies.find((c) => c.id === current.id);
+          if (updated) {
+            if (
+              updated.name !== current.name ||
+              updated.gstin !== current.gstin ||
+              updated.registered_address !== current.registered_address ||
+              updated.phone !== current.phone ||
+              updated.email !== current.email ||
+              updated.logo_url !== current.logo_url ||
+              updated.state !== current.state
+            ) {
+              return updated;
+            }
+          } else if (freshCompanies.length > 0) {
+            // Current company was deleted, switch to first available
+            const fallback = freshCompanies.find((c) => c.is_default) || freshCompanies[0];
+            return fallback;
+          }
+        }
+        return current;
+      });
+    } catch {
+      // transient LAN disconnection, ignore
     }
   };
 
@@ -92,6 +144,7 @@ export const App: React.FC = () => {
     };
     const onPermissionsChanged = () => {
       loadMyPermissions();
+      syncLiveLanData();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       // Hidden MD / Admin shortcut (Ctrl+Shift+A) to open Configuration even on locked staff PCs
@@ -100,14 +153,25 @@ export const App: React.FC = () => {
         setIsConfigModalOpen(true);
       }
     };
+
+    // Auto-sync timer every 3.5 seconds
+    const syncTimer = setInterval(() => {
+      syncLiveLanData();
+      loadMyPermissions();
+    }, 3500);
+
     window.addEventListener('eim-software-icon-changed', onIconChanged);
     window.addEventListener('eim-permissions-changed', onPermissionsChanged);
+    window.addEventListener('eim-data-sync', onPermissionsChanged);
     window.addEventListener('focus', onPermissionsChanged);
     window.addEventListener('keydown', onKeyDown);
     bootstrap();
+
     return () => {
+      clearInterval(syncTimer);
       window.removeEventListener('eim-software-icon-changed', onIconChanged);
       window.removeEventListener('eim-permissions-changed', onPermissionsChanged);
+      window.removeEventListener('eim-data-sync', onPermissionsChanged);
       window.removeEventListener('focus', onPermissionsChanged);
       window.removeEventListener('keydown', onKeyDown);
     };
