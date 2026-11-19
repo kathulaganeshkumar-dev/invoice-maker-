@@ -366,8 +366,16 @@ export class WorkstationService {
         created_at: now,
         updated_at: now,
       };
-      await this.db('workstation_permissions').insert(newStaffRow);
-      return this.hydrate(newStaffRow);
+      try {
+        await this.db('workstation_permissions').insert(newStaffRow);
+        return this.hydrate(newStaffRow);
+      } catch (insertErr: any) {
+        const raceExisting = await this.db('workstation_permissions').where({ device_id: newStaffRow.device_id }).first();
+        if (raceExisting) {
+          return this.hydrate(raceExisting);
+        }
+        throw insertErr;
+      }
     }
 
     // 2. Otherwise match by device_id
@@ -409,8 +417,16 @@ export class WorkstationService {
       updated_at: now,
     };
 
-    await this.db('workstation_permissions').insert(row);
-    return this.hydrate(row);
+    try {
+      await this.db('workstation_permissions').insert(row);
+      return this.hydrate(row);
+    } catch (insertErr: any) {
+      const raceExisting = await this.db('workstation_permissions').where({ device_id: deviceId }).first();
+      if (raceExisting) {
+        return this.hydrate(raceExisting);
+      }
+      throw insertErr;
+    }
   }
 
   async getWorkstationPermission(deviceId: string): Promise<WorkstationPermission | null> {

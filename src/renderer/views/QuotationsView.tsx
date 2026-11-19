@@ -7,6 +7,7 @@ import { formatIndianCurrency, calculateLineItem, calculateDocumentTotals } from
 import { GST_RATES } from '../../shared/constants';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ModalPortal } from '../components/ModalPortal';
+import { QuickAddCustomerModal } from '../components/QuickAddCustomerModal';
 import { DateInput, isoToDisplayDate } from '../components/DateInput';
 import {
   FileSpreadsheet,
@@ -88,10 +89,17 @@ export const QuotationsView: React.FC<Props> = ({
 
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
+  const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState<boolean>(false);
 
   const customerOptions = useMemo(() => {
     return [
       { value: '', label: '-- Select Customer --' },
+      {
+        value: '__ADD_NEW_CUSTOMER__',
+        label: '+ Add New Customer...',
+        badge: 'New',
+        isAction: true,
+      },
       ...customers.map((c) => ({
         value: c.id,
         label: c.name,
@@ -1081,8 +1089,8 @@ export const QuotationsView: React.FC<Props> = ({
       {isCreateModalOpen && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <FileSpreadsheet className="w-4 h-4 text-brand-600" />
                 <span>Create Commercial Quotation</span>
@@ -1095,40 +1103,62 @@ export const QuotationsView: React.FC<Props> = ({
             <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Customer *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Customer *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickAddCustomerOpen(true)}
+                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ New Customer</span>
+                    </button>
+                  </div>
                   <SearchableSelect
                     options={customerOptions}
                     value={selectedCustomerId}
-                    onChange={(val) => setSelectedCustomerId(val)}
+                    onChange={(val) => {
+                      if (val === '__ADD_NEW_CUSTOMER__') {
+                        setIsQuickAddCustomerOpen(true);
+                      } else {
+                        setSelectedCustomerId(val);
+                      }
+                    }}
                     placeholder="Search customer by name or GSTIN..."
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Quote Date</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Quote Date</label>
+                  </div>
                   <DateInput
                     value={quoteDate}
                     onChange={(val) => setQuoteDate(val)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Valid Until Date</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Valid Until Date</label>
+                  </div>
                   <DateInput
                     value={validUntil}
                     onChange={(val) => setValidUntil(val)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
               </div>
 
               {/* Print Template Selection for new quotation */}
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                  <FileText className="w-3.5 h-3.5 text-brand-600" />
-                  <span>Print Template</span>
-                </label>
+                <div className="flex items-center justify-between h-6 mb-1.5">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                    <FileText className="w-3.5 h-3.5 text-brand-600" />
+                    <span>Print Template</span>
+                  </label>
+                </div>
                 <SearchableSelect
                   options={templateOptions}
                   value={selectedTemplateId}
@@ -1582,6 +1612,20 @@ export const QuotationsView: React.FC<Props> = ({
           </div>
         </div>
         </ModalPortal>
+      )}
+
+      {/* Quick Add Customer Modal */}
+      {isQuickAddCustomerOpen && (
+        <QuickAddCustomerModal
+          isOpen={isQuickAddCustomerOpen}
+          onClose={() => setIsQuickAddCustomerOpen(false)}
+          companyId={companyId}
+          onCustomerCreated={(newCust) => {
+            setCustomers((prev) => [newCust, ...prev]);
+            setSelectedCustomerId(newCust.id);
+            setIsQuickAddCustomerOpen(false);
+          }}
+        />
       )}
     </>
   );

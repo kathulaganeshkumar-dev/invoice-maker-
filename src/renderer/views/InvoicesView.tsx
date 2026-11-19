@@ -7,6 +7,7 @@ import { formatIndianCurrency, calculateLineItem, calculateDocumentTotals } from
 import { GST_RATES } from '../../shared/constants';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ModalPortal } from '../components/ModalPortal';
+import { QuickAddCustomerModal } from '../components/QuickAddCustomerModal';
 import { DateInput, isoToDisplayDate } from '../components/DateInput';
 import {
   Receipt,
@@ -155,10 +156,17 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
+  const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState<boolean>(false);
 
   const customerOptions = useMemo(() => {
     return [
       { value: '', label: '-- Select Customer --' },
+      {
+        value: '__ADD_NEW_CUSTOMER__',
+        label: '+ Add New Customer...',
+        badge: 'New',
+        isAction: true,
+      },
       ...customers.map((c) => ({
         value: c.id,
         label: c.name,
@@ -540,7 +548,24 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
         await loadInvoices();
       }
     } catch (err: any) {
-      alert(err.message || 'Error creating invoice');
+      const msg = err.message || 'Error creating invoice';
+      if (msg.includes('Insufficient stock') || msg.includes('Allow Negative Stock')) {
+        const enableAndRetry = window.confirm(
+          `${msg}\n\nWould you like to automatically enable "Allow Negative Stock" and proceed with creating this invoice now?`
+        );
+        if (enableAndRetry) {
+          try {
+            await api.updateCompanySettings(companyId, { allow_negative_stock: true });
+            await handleCreateInvoice();
+            return;
+          } catch (retryErr: any) {
+            alert(retryErr.message || 'Error updating settings');
+            return;
+          }
+        }
+      } else {
+        alert(msg);
+      }
     }
   };
 
@@ -632,7 +657,24 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
       await loadInvoices();
       alert(`Invoice finalized as ${fin.invoice_number}!`);
     } catch (err: any) {
-      alert(err.message || 'Error finalizing invoice');
+      const msg = err.message || 'Error finalizing invoice';
+      if (msg.includes('Insufficient stock') || msg.includes('Allow Negative Stock')) {
+        const enableAndRetry = window.confirm(
+          `${msg}\n\nWould you like to automatically enable "Allow Negative Stock" and finalize this invoice now?`
+        );
+        if (enableAndRetry) {
+          try {
+            await api.updateCompanySettings(companyId, { allow_negative_stock: true });
+            await handleFinalize(invoiceId);
+            return;
+          } catch (retryErr: any) {
+            alert(retryErr.message || 'Error updating settings');
+            return;
+          }
+        }
+      } else {
+        alert(msg);
+      }
     }
   };
 
@@ -1486,11 +1528,13 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
             <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
               <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Document Type *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Document Type *</label>
+                  </div>
                   <select
                     value={docType}
                     onChange={(e) => setDocType(e.target.value as DocumentType)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-medium"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-medium outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     {allowedDocTypes.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -1501,30 +1545,50 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Customer *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Customer *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickAddCustomerOpen(true)}
+                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ New Customer</span>
+                    </button>
+                  </div>
                   <SearchableSelect
                     options={customerOptions}
                     value={selectedCustomerId}
-                    onChange={(val) => setSelectedCustomerId(val)}
+                    onChange={(val) => {
+                      if (val === '__ADD_NEW_CUSTOMER__') {
+                        setIsQuickAddCustomerOpen(true);
+                      } else {
+                        setSelectedCustomerId(val);
+                      }
+                    }}
                     placeholder="Search customer by name or GSTIN..."
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Invoice Date</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Invoice Date</label>
+                  </div>
                   <DateInput
                     value={invoiceDate}
                     onChange={(val) => setInvoiceDate(val)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Due Date</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Due Date</label>
+                  </div>
                   <DateInput
                     value={dueDate}
                     onChange={(val) => setDueDate(val)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                   {(() => {
                     const cust = customers.find((c) => c.id === selectedCustomerId);
@@ -1544,10 +1608,12 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               <div className="grid grid-cols-2 gap-4">
                 {/* Print Template Selector */}
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                    <FileText className="w-3.5 h-3.5 text-brand-600" />
-                    <span>Print Template</span>
-                  </label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <FileText className="w-3.5 h-3.5 text-brand-600" />
+                      <span>Print Template</span>
+                    </label>
+                  </div>
                   <SearchableSelect
                     options={templateOptions}
                     value={selectedTemplateId}
@@ -1558,14 +1624,16 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
                 {/* Payment Status Selection on Create */}
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Invoice Status & Payment Collection</span>
-                  </label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Invoice Status & Payment Collection</span>
+                    </label>
+                  </div>
                   <select
                     value={invoicePaymentStatus}
                     onChange={(e) => setInvoicePaymentStatus(e.target.value as any)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-semibold"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-semibold outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="UNPAID">Finalize (Unpaid / Full Credit)</option>
                     <option value="PARTIAL">Partial Pay (Finalize & Record Partial Payment Now)</option>
@@ -2373,6 +2441,20 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           </div>
         </div>
         </ModalPortal>
+      )}
+
+      {/* Quick Add Customer Modal */}
+      {isQuickAddCustomerOpen && (
+        <QuickAddCustomerModal
+          isOpen={isQuickAddCustomerOpen}
+          onClose={() => setIsQuickAddCustomerOpen(false)}
+          companyId={companyId}
+          onCustomerCreated={(newCust) => {
+            setCustomers((prev) => [newCust, ...prev]);
+            setSelectedCustomerId(newCust.id);
+            setIsQuickAddCustomerOpen(false);
+          }}
+        />
       )}
     </>
   );

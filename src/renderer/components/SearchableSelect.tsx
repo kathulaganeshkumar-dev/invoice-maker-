@@ -320,7 +320,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
       {/* Input container */}
       <div
-        className={`relative flex items-center bg-white dark:bg-slate-700 border rounded-lg transition-all shadow-sm ${
+        className={`relative flex items-center ${size === 'sm' ? 'h-8' : size === 'lg' ? 'h-10' : 'h-9'} bg-white dark:bg-slate-700 border rounded-lg transition-all shadow-sm ${
           isOpen
             ? 'border-brand-500 ring-2 ring-brand-500/20 dark:border-brand-400'
             : 'border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500'
@@ -346,7 +346,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           placeholder={placeholder}
           autoComplete="off"
           spellCheck={false}
-          className={`w-full bg-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 outline-none ${rightPadding} ${sizeClasses[size]}`}
+          className={`w-full h-full bg-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 outline-none ${rightPadding} ${sizeClasses[size]}`}
         />
 
         {/* Right side / other side: Code badge and action icons */}

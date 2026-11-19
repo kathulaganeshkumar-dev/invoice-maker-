@@ -70,6 +70,18 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
     }
   }, [companyId, itemTypeFilter, categoryFilter]);
 
+  useEffect(() => {
+    const handleSync = () => {
+      if (companyId) loadProducts();
+    };
+    window.addEventListener('eim-data-changed', handleSync);
+    window.addEventListener('eim-data-sync', handleSync);
+    return () => {
+      window.removeEventListener('eim-data-changed', handleSync);
+      window.removeEventListener('eim-data-sync', handleSync);
+    };
+  }, [companyId]);
+
   const loadProducts = async () => {
     setLoading(true);
     try {
@@ -205,6 +217,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
       max_selling_price: maxPriceStr || null,
       purchase_price: editingProduct.purchase_price?.toString().trim() || '0.00',
       minimum_stock: editingProduct.minimum_stock?.toString().trim() || '0.00',
+      current_stock: editingProduct.current_stock?.toString().trim() || '0.00',
       custom_notes: cleanedNotes,
     };
 
@@ -558,8 +571,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
       {isModalOpen && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <Package className="w-4 h-4 text-brand-600" />
                 <span>{editingProduct.id ? 'Edit Item' : 'New Product / Service'}</span>
@@ -570,25 +583,27 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Item Type *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Item Type *</label>
+                  </div>
                   <select
                     value={editingProduct.item_type || 'PRODUCT'}
                     onChange={(e) => setEditingProduct({ ...editingProduct, item_type: e.target.value as any })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="PRODUCT">Physical Product (Track Stock)</option>
                     <option value="SERVICE">Professional Service (No Stock)</option>
                   </select>
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Item Name *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Item Name *</label>
                     <button
                       type="button"
                       onClick={handleToggleNotesSection}
-                      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-colors ${
                         showNotesSection
                           ? 'bg-brand-600 text-white border-brand-700 hover:bg-brand-700'
                           : 'text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 border-brand-200 dark:border-brand-700'
@@ -612,7 +627,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                     placeholder="Product or Service Name"
                     value={editingProduct.name || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 
@@ -640,7 +655,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                             placeholder="Qty"
                             value={noteCountInput}
                             onChange={(e) => handleNoteCountInputChange(e.target.value)}
-                            className="w-16 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-center font-mono bg-white dark:bg-slate-800"
+                            className="w-16 h-8 border border-slate-300 dark:border-slate-600 rounded px-2 text-center font-mono bg-white dark:bg-slate-800"
                           />
                         </label>
                         <button
@@ -678,7 +693,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                               placeholder={`Note #${idx + 1} (e.g. Warranty: 3 Years, Hard Disk No: SN-00${idx + 1})`}
                               value={note}
                               onChange={(e) => handleUpdateNote(idx, e.target.value)}
-                              className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                              className="flex-1 h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-xs outline-none focus:ring-1 focus:ring-brand-500"
                             />
                             <button
                               type="button"
@@ -695,18 +710,20 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   </div>
                 )}
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">HSN or SAC Code *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">HSN or SAC Code *</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. 8517 or 9983"
                     value={editingProduct.hsn_or_sac || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, hsn_or_sac: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Category</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Category</label>
                     <button
                       type="button"
                       onClick={() => {
@@ -717,7 +734,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                           setIsInlineCatOpen(true);
                         }
                       }}
-                      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-colors ${
                         isInlineCatOpen
                           ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
                           : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700'
@@ -751,7 +768,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                             setInlineCatName('');
                           }
                         }}
-                        className="flex-1 min-w-0 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 outline-none focus:ring-1 focus:ring-emerald-500"
+                        className="flex-1 min-w-0 h-8 border border-slate-300 dark:border-slate-600 rounded px-2 text-xs bg-white dark:bg-slate-800 outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                       <button
                         type="button"
@@ -776,53 +793,57 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   )}
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Selling Price (₹) *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Selling Price (₹) *</label>
+                    <span className="text-[10px] text-slate-400 font-normal">Min / Max Range</span>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="relative">
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        placeholder="Min Price"
-                        value={editingProduct.min_selling_price ?? ''}
-                        onChange={(e) =>
-                          setEditingProduct({ ...editingProduct, min_selling_price: e.target.value })
-                        }
-                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
-                      />
-                    </div>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        placeholder="Max Price"
-                        value={editingProduct.max_selling_price ?? ''}
-                        onChange={(e) =>
-                          setEditingProduct({ ...editingProduct, max_selling_price: e.target.value })
-                        }
-                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
-                      />
-                    </div>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="Min Price"
+                      value={editingProduct.min_selling_price ?? ''}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, min_selling_price: e.target.value })
+                      }
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="Max Price"
+                      value={editingProduct.max_selling_price ?? ''}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, max_selling_price: e.target.value })
+                      }
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    />
                   </div>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Price (₹)</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Purchase Price (₹)</label>
+                    <span className="text-[10px] text-slate-400 font-normal">Cost of acquisition</span>
+                  </div>
                   <input
                     type="number"
                     step="any"
                     placeholder="0.00"
                     value={editingProduct.purchase_price ?? ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, purchase_price: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">GST Tax Rate (%)</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">GST Tax Rate (%)</label>
+                  </div>
                   <select
                     value={editingProduct.gst_rate || '18.00'}
                     onChange={(e) => setEditingProduct({ ...editingProduct, gst_rate: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     {GST_RATES.map((rate) => (
                       <option key={rate} value={rate}>{rate}%</option>
@@ -830,7 +851,9 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Unit of Measure</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Unit of Measure</label>
+                  </div>
                   <SearchableSelect
                     options={unitOptions}
                     value={editingProduct.unit || 'NOS'}
@@ -838,27 +861,68 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                     placeholder="Search unit (e.g. NOS, PCS, KG)..."
                   />
                 </div>
-                {editingProduct.item_type === 'PRODUCT' && (
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Minimum Stock Alert</label>
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Opening Stock</label>
+                    <span className="text-[10px] text-slate-400 font-normal">Initial quantity</span>
+                  </div>
+                  {editingProduct.item_type === 'PRODUCT' ? (
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0"
+                      value={editingProduct.current_stock ?? ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, current_stock: e.target.value })}
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    />
+                  ) : (
+                    <div className="w-full h-9 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg px-3 flex items-center text-slate-400 text-xs italic bg-slate-50/50 dark:bg-slate-800/50">
+                      Not applicable for services
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Minimum Stock Alert</label>
+                  </div>
+                  {editingProduct.item_type === 'PRODUCT' ? (
                     <input
                       type="number"
                       step="any"
                       placeholder="5"
                       value={editingProduct.minimum_stock ?? ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, minimum_stock: e.target.value })}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     />
-                  </div>
-                )}
+                  ) : (
+                    <div className="w-full h-9 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg px-3 flex items-center text-slate-400 text-xs italic bg-slate-50/50 dark:bg-slate-800/50">
+                      Not applicable for services
+                    </div>
+                  )}
+                </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">SKU / Code</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">SKU / Code</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. PRD-1001"
                     value={editingProduct.sku || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Barcode / EAN</label>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. 8901234567890"
+                    value={editingProduct.barcode || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, barcode: e.target.value })}
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
               </div>

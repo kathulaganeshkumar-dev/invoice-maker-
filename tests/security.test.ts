@@ -232,6 +232,7 @@ describe('Security Hardening Test Suite', () => {
       ).rejects.toThrow(/greater than zero/i);
 
       // 4. Negative stock prevented when allow_negative_stock is false
+      await secDb('company_settings').where({ company_id: compA.id }).update({ allow_negative_stock: false });
       const oversizedDraft = await invoiceService.createInvoice(compA.id, {
         branch_id: branchA.id,
         customer_id: cust.id,

@@ -957,8 +957,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
       {isModalOpen && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 {activeTab === 'customer' ? (
                   <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
@@ -1138,11 +1138,13 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 );
               })()}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {activeTab === 'customer' ? 'Received From Customer *' : 'Paid To Supplier *'}
-                  </label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                      {activeTab === 'customer' ? 'Received From Customer *' : 'Paid To Supplier *'}
+                    </label>
+                  </div>
                   <SearchableSelect
                     options={partyOptions}
                     value={selectedPartyId}
@@ -1152,8 +1154,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">
                       {activeTab === 'customer' ? 'Invoice Number' : 'Purchase Bill #'}
                     </label>
                     {selectedPartyId && (() => {
@@ -1190,8 +1192,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">
                       {activeTab === 'customer' ? 'Amount Received (₹) *' : 'Amount Paid to Supplier (₹) *'}
                     </label>
                     <div className="inline-flex rounded-md border border-slate-200 dark:border-slate-600 overflow-hidden text-[10px] font-bold">
@@ -1226,25 +1228,29 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                     placeholder={paymentType === 'PARTIAL' ? 'Enter partial amount...' : '0.00'}
                     value={paymentAmount}
                     onChange={(e) => handlePaymentAmountChange(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-bold"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Date</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Payment Date</label>
+                  </div>
                   <DateInput
                     value={paymentDate}
                     onChange={(val) => setPaymentDate(val)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Mode</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Payment Mode</label>
+                  </div>
                   <select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="BANK_TRANSFER">Bank Transfer (NEFT / RTGS / IMPS)</option>
                     <option value="CHEQUE">Cheque</option>
@@ -1255,12 +1261,14 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
 
                 {paymentMethod !== 'CASH' ? (
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                      <Landmark className="w-3.5 h-3.5 text-brand-600" />
-                      <span>
-                        {activeTab === 'customer' ? 'Company Bank Account (Received In)' : 'Company Bank Account (Paid From)'}
-                      </span>
-                    </label>
+                    <div className="flex items-center justify-between h-6 mb-1.5">
+                      <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                        <Landmark className="w-3.5 h-3.5 text-brand-600" />
+                        <span>
+                          {activeTab === 'customer' ? 'Company Bank Account (Received In)' : 'Company Bank Account (Paid From)'}
+                        </span>
+                      </label>
+                    </div>
                     {companyBankOptions.length > 0 ? (
                       <SearchableSelect
                         options={companyBankOptions}
@@ -1276,9 +1284,11 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                   </div>
                 ) : (
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      {activeTab === 'customer' ? 'Cash Note (Received By / Details)' : 'Cash Note (Paid By / Details)'}
-                    </label>
+                    <div className="flex items-center justify-between h-6 mb-1.5">
+                      <label className="font-semibold text-slate-700 dark:text-slate-300">
+                        {activeTab === 'customer' ? 'Cash Note (Received By / Details)' : 'Cash Note (Paid By / Details)'}
+                      </label>
+                    </div>
                     <input
                       type="text"
                       placeholder={
@@ -1288,17 +1298,19 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                       }
                       value={cashNote}
                       onChange={(e) => setCashNote(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     />
                   </div>
                 )}
 
                 {activeTab === 'supplier' && paymentMethod !== 'CASH' && (
                   <div className="col-span-2">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                      <Landmark className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Select Vendor Bank Account (Paid To)</span>
-                    </label>
+                    <div className="flex items-center justify-between h-6 mb-1.5">
+                      <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                        <Landmark className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Select Vendor Bank Account (Paid To)</span>
+                      </label>
+                    </div>
                     {!selectedPartyId ? (
                       <div className="px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-slate-400 text-[11px]">
                         Select a vendor first to choose their bank account
@@ -1319,20 +1331,24 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 )}
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Reference / UTR / Cheque #
-                  </label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                      Reference / UTR / Cheque #
+                    </label>
+                  </div>
                   <input
                     type="text"
                     placeholder="Enter UTR / Cheque / Ref #"
                     value={referenceNumber}
                     onChange={(e) => setReferenceNumber(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes / Remarks</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Notes / Remarks</label>
+                  </div>
                   <input
                     type="text"
                     placeholder={
@@ -1342,7 +1358,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                     }
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
               </div>

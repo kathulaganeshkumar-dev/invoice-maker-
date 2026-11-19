@@ -142,16 +142,34 @@ export class InvoiceService {
           isInterState,
         });
 
+        const itemId = item.item_id || item.product_id || undefined;
+        let itemName = item.item_name || item.name || item.description || 'Line Item';
+        let hsnCode = item.hsn_or_sac || item.hsn || '';
+        let itemType = item.item_type || 'PRODUCT';
+        let itemUnit = item.unit || 'NOS';
+
+        if (itemId) {
+          const prod = await trx('products').where({ id: itemId, company_id: companyId }).first();
+          if (prod) {
+            itemName = item.item_name || item.name || prod.name || itemName;
+            hsnCode = hsnCode || prod.hsn_or_sac || '';
+            itemType = prod.item_type || itemType;
+            if (!item.unit && prod.unit) {
+              itemUnit = prod.unit;
+            }
+          }
+        }
+
         calculatedItems.push({
           id: uuidv4(),
           invoice_id: invoiceId,
-          item_id: item.item_id || undefined,
-          item_type: item.item_type || 'PRODUCT',
-          item_name: item.item_name || 'Line Item',
+          item_id: itemId,
+          item_type: itemType,
+          item_name: itemName,
           description: item.description || undefined,
-          hsn_or_sac: item.hsn_or_sac || '',
+          hsn_or_sac: hsnCode,
           quantity: lineCalc.quantity,
-          unit: item.unit || 'NOS',
+          unit: itemUnit,
           rate: lineCalc.rate,
           discount_percentage: item.discount_percentage ? new Decimal(item.discount_percentage).toFixed(2) : '0.00',
           discount_amount: lineCalc.discountAmount,
@@ -184,6 +202,33 @@ export class InvoiceService {
       // Temporary draft number or preview
       const invoiceNumber = input.invoice_number || `DRAFT-${Date.now()}`;
 
+      let customerName = input.customer_name;
+      let customerGstin = input.customer_gstin;
+      let customerPan = input.customer_pan;
+      let billingAddress = input.billing_address;
+      let shippingAddress = input.shipping_address;
+      let posState = input.place_of_supply_state;
+      let posCodeToUse = posCode;
+
+      if (input.customer_id) {
+        const custRec = await trx('customers').where({ id: input.customer_id, company_id: companyId }).first();
+        if (custRec) {
+          customerName = customerName || custRec.name;
+          customerGstin = customerGstin || custRec.gstin;
+          customerPan = customerPan || custRec.pan;
+          billingAddress = billingAddress || custRec.billing_address || custRec.address || '';
+          shippingAddress = shippingAddress || custRec.shipping_address || billingAddress || '';
+          posState = posState || custRec.state;
+          if (!input.place_of_supply_code && custRec.state_code) {
+            posCodeToUse = custRec.state_code;
+          }
+        }
+      }
+
+      if (!customerName) {
+        customerName = 'Walk-in Customer';
+      }
+
       const newInvoice: Invoice = {
         id: invoiceId,
         company_id: companyId,
@@ -193,13 +238,13 @@ export class InvoiceService {
         invoice_date: input.invoice_date || now.split('T')[0],
         due_date: input.due_date || input.invoice_date || now.split('T')[0],
         customer_id: input.customer_id,
-        customer_name: input.customer_name,
-        customer_gstin: input.customer_gstin || undefined,
-        customer_pan: input.customer_pan || undefined,
-        billing_address: input.billing_address || '',
-        shipping_address: input.shipping_address || input.billing_address || '',
-        place_of_supply_state: input.place_of_supply_state || branch?.state || 'Madhya Pradesh',
-        place_of_supply_code: posCode,
+        customer_name: customerName,
+        customer_gstin: customerGstin || undefined,
+        customer_pan: customerPan || undefined,
+        billing_address: billingAddress || '',
+        shipping_address: shippingAddress || billingAddress || '',
+        place_of_supply_state: posState || branch?.state || 'Madhya Pradesh',
+        place_of_supply_code: posCodeToUse,
         is_inter_state: isInterState,
         is_reverse_charge: Boolean(input.is_reverse_charge),
         reference_number: input.reference_number || undefined,

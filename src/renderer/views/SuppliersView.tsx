@@ -395,8 +395,8 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
       {isModalOpen && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <Truck className="w-4 h-4 text-brand-600" />
                 <span>{editingSupplier.id ? 'Edit Supplier' : 'Add New Supplier'}</span>
@@ -407,69 +407,83 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div className="col-span-2">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Company Name *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Company Name *</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="Company Name"
                     value={editingSupplier.name || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, name: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mobile Phone *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Mobile Phone *</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="Mobile"
                     value={editingSupplier.mobile || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, mobile: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Email</label>
+                  </div>
                   <input
                     type="email"
                     placeholder="orders@vendor.com"
                     value={editingSupplier.email || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, email: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">GSTIN</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">GSTIN</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="15-character GSTIN"
                     value={editingSupplier.gstin || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, gstin: e.target.value.toUpperCase() })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono uppercase bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">PAN</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">PAN</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="10-digit PAN"
                     value={editingSupplier.pan || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, pan: e.target.value.toUpperCase() })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono uppercase bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Address</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Address</label>
+                  </div>
                   <textarea
                     rows={2}
                     placeholder="Street Address, Area, City"
                     value={editingSupplier.address || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, address: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">State & Code *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">State & Code *</label>
+                  </div>
                   <SearchableSelect
                     options={stateOptions}
                     value={editingSupplier.state_code || editingSupplier.state || '27'}
@@ -485,7 +499,9 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">PIN Code</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">PIN Code</label>
+                  </div>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -498,14 +514,16 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                         pin_code: e.target.value.replace(/[^0-9]/g, '').slice(0, 6),
                       })
                     }
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1.5">
-                    <Clock className="w-3.5 h-3.5 text-brand-600" />
-                    <span>Payment Reminder (Days to Pay Vendor)</span>
-                  </label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+                      <Clock className="w-3.5 h-3.5 text-brand-600" />
+                      <span>Payment Reminder (Days to Pay Vendor)</span>
+                    </label>
+                  </div>
                   <div className="flex items-center space-x-3">
                     <input
                       type="number"
@@ -521,7 +539,7 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                           setReminderDaysInput(String(Math.min(365, parseInt(raw, 10))));
                         }
                       }}
-                      className="w-36 border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-36 h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     />
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">
                       Days remaining countdown starts automatically whenever you create a purchase bill from this vendor.
@@ -543,7 +561,7 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                   <button
                     type="button"
                     onClick={handleAddBankAccount}
-                    className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-700 rounded-md text-[11px] font-semibold transition-colors whitespace-nowrap"
+                    className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-700 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Another Bank Account</span>
@@ -551,43 +569,51 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Name</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Bank Name</label>
+                  </div>
                   <input
                     type="text"
                     value={editingSupplier.bank_name || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, bank_name: e.target.value })}
                     placeholder="State Bank of India"
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Account Number</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Bank Account Number</label>
+                  </div>
                   <input
                     type="text"
                     value={editingSupplier.bank_account_no || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, bank_account_no: e.target.value })}
                     placeholder="Account Number"
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">IFSC Code</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">IFSC Code</label>
+                  </div>
                   <input
                     type="text"
                     value={editingSupplier.bank_ifsc || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, bank_ifsc: e.target.value.toUpperCase() })}
                     placeholder="e.g. SBIN0001234"
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono uppercase bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Details</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Branch Details</label>
+                  </div>
                   <input
                     type="text"
                     value={editingSupplier.bank_branch || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, bank_branch: e.target.value })}
                     placeholder="e.g. Main Branch, MG Road"
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
 

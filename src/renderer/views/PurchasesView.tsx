@@ -896,7 +896,9 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
             <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Supplier *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Supplier *</label>
+                  </div>
                   <SearchableSelect
                     options={supplierOptions}
                     value={selectedSupplierId}
@@ -905,7 +907,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   />
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between h-6 mb-1.5">
                     <label className="font-semibold text-slate-700 dark:text-slate-300">Receiving Warehouse *</label>
                     <button
                       type="button"
@@ -913,15 +915,15 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                         setWhForm({ name: '', code: `WH${String(warehouses.length + 1).padStart(2, '0')}`, address: '', is_default: warehouses.length === 0 });
                         setIsWarehouseManagerOpen(true);
                       }}
-                      className="text-[10px] font-bold text-brand-600 hover:underline"
+                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
                     >
-                      + Manage / New
+                      <span>+ Manage / New</span>
                     </button>
                   </div>
                   <select
                     value={selectedWarehouseId}
                     onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     {warehouses.length === 0 && <option value="">-- Create Warehouse First --</option>}
                     {warehouses.map((w) => (
@@ -930,21 +932,25 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vendor Bill # *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Vendor Bill # *</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="Enter vendor bill number"
                     value={billNumber}
                     onChange={(e) => setBillNumber(e.target.value)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 font-mono"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-mono text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bill Date</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Bill Date</label>
+                  </div>
                   <DateInput
                     value={billDate}
                     onChange={(val) => setBillDate(val)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                   {(() => {
                     const sup = suppliers.find((s) => s.id === selectedSupplierId);
@@ -1276,7 +1282,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       {isQuickProductOpen && (
         <ModalPortal>
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <Package className="w-4 h-4 text-emerald-600" />
@@ -1291,39 +1297,43 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div className="col-span-2">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Product Name *</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Product Name *</label>
+                  </div>
                   <input
                     type="text"
                     autoFocus
                     placeholder="e.g. Seagate 1TB Hard Disk"
                     value={quickProduct.name}
                     onChange={(e) => setQuickProduct({ ...quickProduct, name: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">HSN Code</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">HSN Code</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. 8471"
                     value={quickProduct.hsn_or_sac}
                     onChange={(e) => setQuickProduct({ ...quickProduct, hsn_or_sac: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Category</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Category</label>
                     <button
                       type="button"
                       onClick={() => {
                         setIsQuickInlineCatOpen((prev) => !prev);
                         setQuickInlineCatName('');
                       }}
-                      className="inline-flex items-center space-x-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                      className="inline-flex items-center space-x-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
                     >
                       <Tags className="w-3 h-3" />
                       <span>{isQuickInlineCatOpen ? 'Close' : '+ New'}</span>
@@ -1334,7 +1344,6 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     value={quickProduct.category_id}
                     onChange={(val) => setQuickProduct({ ...quickProduct, category_id: val })}
                     placeholder="-- No Category --"
-                    size="sm"
                   />
                   {isQuickInlineCatOpen && (
                     <div className="mt-1.5 flex items-center space-x-1">
@@ -1362,7 +1371,9 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   )}
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Price (₹)</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Purchase Price (₹)</label>
+                  </div>
                   <input
                     type="number"
                     step="any"
@@ -1370,12 +1381,14 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     placeholder="0.00"
                     value={quickProduct.purchase_price}
                     onChange={(e) => setQuickProduct({ ...quickProduct, purchase_price: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Selling Price (₹)</label>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Selling Price (₹)</label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
                     <input
                       type="number"
                       step="any"
@@ -1383,7 +1396,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       placeholder="Min Price"
                       value={quickProduct.min_selling_price}
                       onChange={(e) => setQuickProduct({ ...quickProduct, min_selling_price: e.target.value })}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 bg-white dark:bg-slate-700"
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     />
                     <input
                       type="number"
@@ -1392,16 +1405,18 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       placeholder="Max Price"
                       value={quickProduct.max_selling_price}
                       onChange={(e) => setQuickProduct({ ...quickProduct, max_selling_price: e.target.value })}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 bg-white dark:bg-slate-700"
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">GST Rate (%)</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">GST Rate (%)</label>
+                  </div>
                   <select
                     value={quickProduct.gst_rate}
                     onChange={(e) => setQuickProduct({ ...quickProduct, gst_rate: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     {GST_RATES.map((rate) => (
                       <option key={rate} value={rate}>{rate}%</option>
@@ -1409,17 +1424,20 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Unit of Measure</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Unit of Measure</label>
+                  </div>
                   <SearchableSelect
                     options={unitOptions}
                     value={quickProduct.unit}
                     onChange={(val) => setQuickProduct({ ...quickProduct, unit: val })}
                     placeholder="NOS"
-                    size="sm"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Minimum Stock Alert</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Minimum Stock Alert</label>
+                  </div>
                   <input
                     type="number"
                     step="any"
@@ -1427,17 +1445,19 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     placeholder="5"
                     value={quickProduct.minimum_stock}
                     onChange={(e) => setQuickProduct({ ...quickProduct, minimum_stock: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">SKU / Code</label>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">SKU / Code</label>
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. PRD-1001"
                     value={quickProduct.sku}
                     onChange={(e) => setQuickProduct({ ...quickProduct, sku: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono bg-white dark:bg-slate-700"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   />
                 </div>
               </div>

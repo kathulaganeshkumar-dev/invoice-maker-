@@ -32,7 +32,7 @@ export class PaymentService {
     input: {
       branchId?: string;
       customerId: string;
-      customerName: string;
+      customerName?: string;
       amount: string | number;
       paymentMethod: PaymentMethod;
       bankAccount?: string;
@@ -129,7 +129,7 @@ export class PaymentService {
         payment_number: payNum,
         payment_date: input.paymentDate || now.split('T')[0],
         customer_id: input.customerId,
-        customer_name: input.customerName,
+        customer_name: input.customerName || custRecord?.name || 'Walk-in Customer',
         amount: totalPaymentAmount.toFixed(2),
         payment_method: input.paymentMethod || 'BANK_TRANSFER',
         bank_account: input.bankAccount || undefined,

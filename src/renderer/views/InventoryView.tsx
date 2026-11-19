@@ -17,6 +17,8 @@ import {
   Edit2,
   Trash2,
   CheckCircle2,
+  Pencil,
+  Check,
 } from 'lucide-react';
 
 interface Props {
@@ -51,11 +53,30 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
   // Warehouse CRUD Modal state
   const [editingWarehouse, setEditingWarehouse] = useState<Partial<Warehouse>>({});
 
+  // Quick Stock Edit Modal state (for the pen symbol on stock balances)
+  const [editingStockBalance, setEditingStockBalance] = useState<any | null>(null);
+  const [newStockQty, setNewStockQty] = useState<string>('');
+  const [stockEditUnitCost, setStockEditUnitCost] = useState<string>('');
+  const [stockEditNotes, setStockEditNotes] = useState<string>('Physical stock audit count correction');
+  const [stockEditLoading, setStockEditLoading] = useState<boolean>(false);
+
   useEffect(() => {
     if (companyId) {
       loadData();
     }
   }, [companyId, selectedWarehouseId]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      if (companyId) loadData();
+    };
+    window.addEventListener('eim-data-changed', handleSync);
+    window.addEventListener('eim-data-sync', handleSync);
+    return () => {
+      window.removeEventListener('eim-data-changed', handleSync);
+      window.removeEventListener('eim-data-sync', handleSync);
+    };
+  }, [companyId]);
 
   const loadData = async () => {
     setLoading(true);
@@ -115,6 +136,58 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
       await loadData();
     } catch (err: any) {
       alert(err.message || 'Error recording adjustment');
+    }
+  };
+
+  const handleOpenStockEdit = (balance: any) => {
+    setEditingStockBalance(balance);
+    setNewStockQty(String(balance.quantity_on_hand || '0'));
+    setStockEditUnitCost(String(balance.average_unit_cost || '0.00'));
+    setStockEditNotes('Physical stock audit count correction');
+  };
+
+  const handleSaveStockEdit = async () => {
+    if (!editingStockBalance) return;
+    const targetQtyDec = new Decimal(newStockQty.trim() || '0');
+    if (!targetQtyDec.isFinite() || targetQtyDec.lt(0)) {
+      alert('Please enter a valid stock quantity (0 or greater).');
+      return;
+    }
+    const currentQtyDec = new Decimal(editingStockBalance.quantity_on_hand || '0');
+    const diff = targetQtyDec.sub(currentQtyDec);
+    const unitCostDec = new Decimal(stockEditUnitCost.trim() || '0');
+
+    setStockEditLoading(true);
+    try {
+      if (!diff.isZero()) {
+        const isAdd = diff.gt(0);
+        await api.recordStockAdjustment(companyId, {
+          warehouseId: editingStockBalance.warehouse_id,
+          productId: editingStockBalance.product_id,
+          movementType: isAdd ? 'ADJUSTMENT_ADD' : 'ADJUSTMENT_REDUCE',
+          quantity: diff.abs().toFixed(2),
+          unitCost: unitCostDec.isFinite() && unitCostDec.gt(0) ? unitCostDec.toFixed(2) : undefined,
+          notes: stockEditNotes.trim() || 'Quick stock update via pen action',
+        });
+      }
+
+      // Auto update everywhere: broadcast event so Products, Invoices, Quotations, and Dashboard sync immediately
+      window.dispatchEvent(
+        new CustomEvent('eim-data-changed', {
+          detail: {
+            type: 'inventory',
+            productId: editingStockBalance.product_id,
+            newQuantity: targetQtyDec.toFixed(2),
+          },
+        })
+      );
+
+      setEditingStockBalance(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error updating stock on hand');
+    } finally {
+      setStockEditLoading(false);
     }
   };
 
@@ -328,12 +401,13 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                 <th className="py-3 px-4 text-right">Avg Unit Cost</th>
                 <th className="py-3 px-4 text-right">Total Valuation</th>
                 <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {balances.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     No stock balances found. Items will appear once opening balance or purchases are committed.
                   </td>
                 </tr>
@@ -349,7 +423,17 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                         {b.warehouse_name}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
-                        {b.quantity_on_hand} {b.product_unit}
+                        <div className="inline-flex items-center justify-end space-x-1.5">
+                          <span>{b.quantity_on_hand} {b.product_unit}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStockEdit(b)}
+                            className="p-1 rounded-md text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-slate-700 dark:hover:text-brand-400 transition-colors"
+                            title="Quick Edit Stock on Hand"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-400">
                         {formatIndianCurrency(b.average_unit_cost)}
@@ -368,6 +452,17 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                             Adequate
                           </span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenStockEdit(b)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-brand-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50/50 dark:hover:bg-slate-700 transition-all shadow-2xs"
+                          title="Update Stock in Hand"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                          <span>Update</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -796,6 +891,180 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
             </div>
           </div>
         </div>
+        </ModalPortal>
+      )}
+
+      {/* Quick Stock Edit Modal (Pen Symbol on Stock on Hand) */}
+      {editingStockBalance && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-950/60 flex items-center justify-center text-brand-600 dark:text-brand-400">
+                    <Pencil className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                      Update Stock on Hand
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Syncs immediately across inventory, catalog &amp; billing
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingStockBalance(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Product and Current Balance Summary Banner */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 font-semibold block text-[10px] uppercase tracking-wider">Product Name</span>
+                  <span className="font-bold text-slate-900 dark:text-white text-sm truncate block mt-0.5" title={editingStockBalance.product_name}>
+                    {editingStockBalance.product_name}
+                  </span>
+                  {editingStockBalance.product_sku && (
+                    <span className="text-[10px] font-mono text-slate-500">SKU: {editingStockBalance.product_sku}</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-400 font-semibold block text-[10px] uppercase tracking-wider">Warehouse</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5 truncate">
+                    {editingStockBalance.warehouse_name}
+                  </span>
+                  <span className="text-[11px] text-brand-600 dark:text-brand-400 font-bold">
+                    Current: {editingStockBalance.quantity_on_hand} {editingStockBalance.product_unit}
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Fields */}
+              <div className="space-y-3.5 text-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="font-bold text-slate-800 dark:text-slate-200">
+                      New Stock on Hand ({editingStockBalance.product_unit}) *
+                    </label>
+                    {/* Live diff indicator */}
+                    {(() => {
+                      const cur = Number(editingStockBalance.quantity_on_hand || 0);
+                      const nxt = Number(newStockQty || 0);
+                      const diff = nxt - cur;
+                      if (diff > 0) {
+                        return (
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                            + {diff.toFixed(2)} {editingStockBalance.product_unit} (Inward Stock)
+                          </span>
+                        );
+                      }
+                      if (diff < 0) {
+                        return (
+                          <span className="text-[11px] font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
+                            {diff.toFixed(2)} {editingStockBalance.product_unit} (Outward Stock)
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="text-[11px] font-medium text-slate-400">No change</span>
+                      );
+                    })()}
+                  </div>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    autoFocus
+                    placeholder="Enter new physical count"
+                    value={newStockQty}
+                    onChange={(e) => setNewStockQty(e.target.value)}
+                    className="w-full h-10 border border-slate-300 dark:border-slate-600 rounded-xl px-3 text-sm font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Avg Unit Cost (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={stockEditUnitCost}
+                      onChange={(e) => setStockEditUnitCost(e.target.value)}
+                      className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Updated Valuation (₹)
+                    </label>
+                    <div className="w-full h-9 bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-lg px-3 flex items-center font-bold text-slate-800 dark:text-slate-200">
+                      {formatIndianCurrency(
+                        new Decimal(newStockQty || 0).mul(new Decimal(stockEditUnitCost || 0)).toFixed(2)
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Adjustment Reason / Audit Note
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Physical inventory count / audit correction"
+                    value={stockEditNotes}
+                    onChange={(e) => setStockEditNotes(e.target.value)}
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {[
+                      'Physical count correction',
+                      'Opening stock correction',
+                      'Damaged / expired write-off',
+                      'Audit reconciliation',
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setStockEditNotes(preset)}
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setEditingStockBalance(null)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={stockEditLoading}
+                  onClick={handleSaveStockEdit}
+                  className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 disabled:opacity-50 inline-flex items-center space-x-1.5 transition-colors cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{stockEditLoading ? 'Updating Stock...' : 'Save & Update Everywhere'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </ModalPortal>
       )}
     </div>

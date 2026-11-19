@@ -218,6 +218,19 @@ export class PurchaseService {
           || await trx('branches').where({ company_id: companyId }).first();
       }
 
+      let supplierName = input.supplier_name;
+      let supplierGstin = input.supplier_gstin;
+      if (input.supplier_id) {
+        const supRec = await trx('suppliers').where({ id: input.supplier_id, company_id: companyId }).first();
+        if (supRec) {
+          supplierName = supplierName || supRec.name;
+          supplierGstin = supplierGstin || supRec.gstin;
+        }
+      }
+      if (!supplierName) {
+        supplierName = 'Vendor / Supplier';
+      }
+
       const bill: PurchaseInvoice = {
         id: billId,
         company_id: companyId,
@@ -227,8 +240,8 @@ export class PurchaseService {
         bill_date: input.bill_date || now.split('T')[0],
         due_date: input.due_date || input.bill_date || now.split('T')[0],
         supplier_id: input.supplier_id,
-        supplier_name: input.supplier_name,
-        supplier_gstin: input.supplier_gstin || undefined,
+        supplier_name: supplierName,
+        supplier_gstin: supplierGstin || undefined,
         warehouse_id: input.warehouse_id,
         items,
         subtotal: subtotal.toFixed(2),

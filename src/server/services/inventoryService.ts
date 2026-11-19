@@ -182,7 +182,7 @@ export class InventoryService {
   async recordStockAdjustment(
     companyId: string,
     input: {
-      branchId: string;
+      branchId?: string;
       warehouseId: string;
       productId: string;
       movementType: 'ADJUSTMENT_ADD' | 'ADJUSTMENT_REDUCE';
@@ -219,11 +219,15 @@ export class InventoryService {
         throw new Error('Unit cost cannot be negative.');
       }
 
+      const wh = await trx('warehouses').where({ id: input.warehouseId, company_id: companyId }).first();
+      const defaultBranch = await trx('branches').where({ company_id: companyId }).first();
+      const branchId = input.branchId || wh?.branch_id || defaultBranch?.id || 'DEFAULT_BRANCH';
+
       // Record transaction
       await trx('inventory_transactions').insert({
         id: uuidv4(),
         company_id: companyId,
-        branch_id: input.branchId,
+        branch_id: branchId,
         warehouse_id: input.warehouseId,
         product_id: input.productId,
         movement_type: input.movementType,

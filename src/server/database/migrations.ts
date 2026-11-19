@@ -102,7 +102,7 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('currency_symbol').defaultTo('₹');
       table.string('decimal_name').defaultTo('Paise');
       table.string('printed_date_format').defaultTo('DD/MM/YYYY');
-      table.boolean('allow_negative_stock').defaultTo(false);
+      table.boolean('allow_negative_stock').defaultTo(true);
       table.string('inventory_valuation_method').defaultTo('FIFO');
       table.boolean('enable_reverse_charge_by_default').defaultTo(false);
       table.string('created_at').notNullable();
