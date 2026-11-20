@@ -373,12 +373,16 @@ export interface QuotationItem {
   item_name: string;
   description?: string;
   hsn_or_sac: string;
+  hsn_sac?: string;
   quantity: string;
   unit: string;
+  units?: string; // e.g. "01" or "1 Nos"
   rate: string;
+  base_rate?: string;
   discount_percentage: string;
   discount_amount: string;
   taxable_value: string;
+  taxable_amount?: string;
   gst_rate: string;
   cgst_rate: string;
   cgst_amount: string;
@@ -386,35 +390,54 @@ export interface QuotationItem {
   sgst_amount: string;
   igst_rate: string;
   igst_amount: string;
+  utgst_rate?: string;
+  utgst_amount?: string;
   total_tax: string;
+  gst_amount?: string;
   line_total: string;
+  total_amount?: string;
   sort_order: number;
 }
 
 export interface Quotation {
   id: string;
   company_id: string;
-  branch_id: string;
+  branch_id?: string;
   quotation_number: string;
   revision_number: number;
   quotation_date: string;
   valid_until_date: string;
-  customer_id: string;
+  customer_id?: string;
   customer_name: string;
   customer_gstin?: string;
   billing_address: string;
-  shipping_address: string;
-  place_of_supply_state: string;
-  place_of_supply_code: string;
+  shipping_address?: string;
+  customer_state?: string;
+  customer_state_code?: string;
+  place_of_supply?: string;
+  place_of_supply_state?: string;
+  place_of_supply_code?: string;
+  contact_person?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  reverse_charge?: boolean;
   items: QuotationItem[];
   subtotal: string;
-  overall_discount_amount: string;
+  overall_discount_amount?: string;
+  discount_total?: string;
   total_taxable_value: string;
+  taxable_total?: string;
   total_cgst: string;
+  cgst_total?: string;
   total_sgst: string;
+  sgst_total?: string;
   total_igst: string;
+  igst_total?: string;
+  total_utgst?: string;
+  utgst_total?: string;
   total_tax: string;
-  additional_charges: string;
+  gst_total?: string;
+  additional_charges?: string;
   round_off: string;
   grand_total: string;
   amount_in_words: string;
@@ -422,10 +445,32 @@ export interface Quotation {
   converted_invoice_id?: string;
   converted_at?: string;
   letterhead_template_id?: string;
+  salutation?: string; // default "Dear Sir,"
+  opening_text?: string; // default "With the reference to your enquiry, we are herewith quoting our lowest and best possible prices of the following."
+  closing_text?: string; // default "Thanking you and assuring of our best services and attention at all times."
+  sign_off_company?: string; // default "For VARUN SYSTEMS."
   notes?: string;
   terms_conditions?: string;
+  terms_and_conditions?: string;
+  top_margin_mm?: number;
+  bottom_margin_mm?: number;
+  left_margin_mm?: number;
+  right_margin_mm?: number;
+  print_letterhead_overlay?: boolean;
+  is_gst?: boolean;
   created_by_device_id?: string;
   created_by_device_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotationSequence {
+  id: string;
+  company_id: string;
+  prefix: string;
+  current_number: number;
+  financial_year: string;
+  padding: number;
   created_at: string;
   updated_at: string;
 }

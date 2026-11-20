@@ -33,6 +33,7 @@ export const App: React.FC = () => {
   const [canOpenSettings, setCanOpenSettings] = useState<boolean>(true);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
+  const [dbMode, setDbMode] = useState<any>(null);
   const [softwareIcon, setSoftwareIcon] = useState<string | null>(() => {
     try {
       return localStorage.getItem('eim_software_icon') || null;
@@ -83,6 +84,15 @@ export const App: React.FC = () => {
       }
     } catch {
       // keep existing permissions on transient error
+    }
+  };
+
+  const checkSystemStatus = async () => {
+    try {
+      const db = await api.getDatabaseMode().catch(() => null);
+      if (db) setDbMode(db);
+    } catch {
+      // ignore
     }
   };
 
@@ -158,6 +168,7 @@ export const App: React.FC = () => {
     const syncTimer = setInterval(() => {
       syncLiveLanData();
       loadMyPermissions();
+      checkSystemStatus();
     }, 3500);
 
     window.addEventListener('eim-software-icon-changed', onIconChanged);
@@ -184,6 +195,7 @@ export const App: React.FC = () => {
         api.getCompanies(),
         api.getAppSettings().catch(() => null),
         loadMyPermissions(),
+        checkSystemStatus(),
       ]);
 
       if (appSettings && Object.prototype.hasOwnProperty.call(appSettings, 'software_icon')) {
@@ -284,6 +296,22 @@ export const App: React.FC = () => {
         allowedMenus={allowedMenus}
         canOpenSettings={canOpenSettings}
       />
+
+      {/* Top Critical Status Banners */}
+      {dbMode?.type === 'postgres' && !dbMode?.connected && (
+        <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm z-50">
+          <div className="flex items-center space-x-2">
+            <span className="text-base">⚠️</span>
+            <span>Local LAN PostgreSQL Server Unreachable. The software can automatically fall back to SQLite WAL mode to continue working offline.</span>
+          </div>
+          <button
+            onClick={() => api.autoSyncDatabaseMode('STANDALONE').then(checkSystemStatus)}
+            className="bg-slate-900 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-black ml-4"
+          >
+            Auto-Switch to SQLite
+          </button>
+        </div>
+      )}
 
       {/* Main Container: Sidebar + View Content */}
       <div className="flex flex-1 overflow-hidden">

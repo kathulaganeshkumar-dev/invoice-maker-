@@ -20,4 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('app:set-lan-config', config),
   testLanHost: (hostIp: string, port?: number) => ipcRenderer.invoke('app:test-lan-host', hostIp, port),
   relaunchApp: () => ipcRenderer.invoke('app:relaunch'),
+  getAppVersion: () => ipcRenderer.invoke('app:get-app-version'),
+  installOfflineUpdate: (opts?: { filePath?: string }) => ipcRenderer.invoke('app:install-offline-update', opts),
+  exportUpdatePackage: () => ipcRenderer.invoke('app:export-update-package'),
+  updateFromLan: () => ipcRenderer.invoke('app:update-from-lan'),
 });

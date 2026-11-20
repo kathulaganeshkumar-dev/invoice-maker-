@@ -35,6 +35,11 @@ import {
   createSimpleRateLimiter,
 } from './services/pathSecurity';
 
+import { DiagnosticsService } from './services/diagnosticsService';
+import { getActiveDbConfig, switchDatabase, getDefaultDataDir, getDefaultSqlitePath } from './database/connection';
+import { assertDiskSpace } from './services/diskSpaceGuard';
+import { runMigrations } from './database/migrations';
+
 export function createApiRouter(db: Knex): Router {
   const router = Router();
 
@@ -50,6 +55,7 @@ export function createApiRouter(db: Knex): Router {
   const importExportService = new ImportExportService(db, masterDataService, purchaseService, paymentService);
   const backupRestoreService = new BackupRestoreService(db);
   const workstationService = new WorkstationService(db);
+  const diagnosticsService = new DiagnosticsService(db);
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 25 * 1024 * 1024 },
@@ -395,6 +401,233 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
+  // ===================== SYSTEM DIAGNOSTICS & TELEMETRY =====================
+  router.get('/system/diagnostics', async (_req: Request, res: Response) => {
+    try {
+      const zipBuffer = await diagnosticsService.createDiagnosticsZipBuffer();
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="diagnostics_${Date.now()}.zip"`);
+      res.send(zipBuffer);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to generate diagnostics bundle: ' + err.message });
+    }
+  });
+
+  // ===================== OFFLINE SOFTWARE UPDATE & LAN SYNC =====================
+  const updateUpload = multer({
+    dest: path.join(getDefaultDataDir(), 'temp'),
+    limits: { fileSize: 500 * 1024 * 1024 }, // Up to 500MB
+  });
+
+  router.get('/system/version', async (_req: Request, res: Response) => {
+    try {
+      let version = '2.0.0';
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+        if (pkg.version) version = pkg.version;
+      } catch {}
+
+      const candidatePaths = [
+        path.join(process.cwd(), 'release', 'Enterprise-Invoice-Update', 'app.asar'),
+        path.join(process.cwd(), 'version 2.0', 'win-unpacked', 'resources', 'app.asar'),
+        (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'app.asar') : '',
+      ].filter(Boolean);
+
+      const hasUpdateBundle = candidatePaths.some((p) => fs.existsSync(p));
+
+      res.json({
+        success: true,
+        version,
+        appName: 'Enterprise Invoice Manager',
+        hasUpdateBundle,
+        dataDir: getDefaultDataDir(),
+        serverHost: process.env.SERVER_HOST || '0.0.0.0',
+        serverPort: process.env.ACTUAL_SERVER_PORT || 4200,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/system/update-bundle', async (_req: Request, res: Response) => {
+    try {
+      const candidatePaths = [
+        path.join(process.cwd(), 'release', 'Enterprise-Invoice-Update', 'app.asar'),
+        path.join(process.cwd(), 'version 2.0', 'win-unpacked', 'resources', 'app.asar'),
+        (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'app.asar') : '',
+      ].filter(Boolean);
+
+      const found = candidatePaths.find((p) => fs.existsSync(p));
+      if (!found) {
+        return res.status(404).json({
+          error: 'Update bundle not found on this host. Run npm run package:update to generate it.',
+        });
+      }
+
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment; filename="app.asar"');
+      const stream = fs.createReadStream(found);
+      stream.pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to stream update package: ' + err.message });
+    }
+  });
+
+  router.post('/system/install-offline-update', updateUpload.single('updateFile'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Please select an update file (.asar).' });
+      }
+
+      const uploadedPath = req.file.path;
+      const stat = fs.statSync(uploadedPath);
+      if (stat.size < 1024 * 1024) {
+        try { fs.unlinkSync(uploadedPath); } catch {}
+        return res.status(400).json({ error: 'Uploaded file is too small or invalid.' });
+      }
+
+      // 1. Immediate Safety Backup of SQLite database
+      const dbPath = getDefaultSqlitePath();
+      let backupPath = null;
+      if (fs.existsSync(dbPath)) {
+        const backupDir = path.join(getDefaultDataDir(), 'backups');
+        if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        backupPath = path.join(backupDir, `pre_update_safety_backup_${stamp}.sqlite3`);
+        fs.copyFileSync(dbPath, backupPath);
+      }
+
+      // 2. Identify target asar
+      const candidateTargets = [
+        (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'app.asar') : '',
+        path.join(process.cwd(), 'version 2.0', 'win-unpacked', 'resources', 'app.asar'),
+      ].filter(Boolean);
+
+      const targetAsar = candidateTargets.find((p) => fs.existsSync(p)) || candidateTargets[0];
+
+      if (targetAsar) {
+        const targetDir = path.dirname(targetAsar);
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+        const stagedPath = targetAsar + '.staged';
+        fs.copyFileSync(uploadedPath, stagedPath);
+        const oldPath = targetAsar + '.old';
+        if (fs.existsSync(oldPath)) {
+          try { fs.unlinkSync(oldPath); } catch {}
+        }
+        if (fs.existsSync(targetAsar)) {
+          try {
+            fs.renameSync(targetAsar, oldPath);
+          } catch {
+            fs.copyFileSync(stagedPath, targetAsar);
+            try { fs.unlinkSync(stagedPath); } catch {}
+          }
+        }
+        if (fs.existsSync(stagedPath)) {
+          fs.renameSync(stagedPath, targetAsar);
+        }
+        try { fs.unlinkSync(oldPath); } catch {}
+      }
+      try { fs.unlinkSync(uploadedPath); } catch {}
+
+      res.json({
+        success: true,
+        message: 'Update installed successfully! All invoices, data, and network connection are 100% preserved. Please restart the software.',
+        backupPath,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to install update: ' + err.message });
+    }
+  });
+
+  // ===================== DATABASE MODE & FIRST-RUN LAN SETUP =====================
+  router.get('/database/mode', async (_req: Request, res: Response) => {
+    try {
+      const activeConfig = getActiveDbConfig();
+      let connected = false;
+      try {
+        await db.raw('SELECT 1');
+        connected = true;
+      } catch {
+        connected = false;
+      }
+      res.json({
+        type: activeConfig?.type || 'sqlite',
+        connected,
+        config: activeConfig
+          ? {
+              type: activeConfig.type,
+              pgHost: activeConfig.pgHost,
+              pgPort: activeConfig.pgPort,
+              pgDatabase: activeConfig.pgDatabase,
+              pgUser: activeConfig.pgUser,
+            }
+          : { type: 'sqlite' },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/database/auto-sync', adminRateLimiter, async (req: Request, res: Response) => {
+    if (!isLoopbackRequest(req)) {
+      return res.status(403).json({ error: 'Database mode synchronization is only allowed directly from the host computer.' });
+    }
+    const { role } = req.body || {};
+    try {
+      if (role === 'STANDALONE' || role === 'LAN_CLIENT') {
+        await switchDatabase({ type: 'sqlite' });
+        return res.json({ success: true, type: 'sqlite', message: 'Automatically synchronized to SQLite WAL Mode.' });
+      } else if (role === 'LAN_HOST') {
+        await switchDatabase({ type: 'auto' });
+        const activeConfig = getActiveDbConfig();
+        return res.json({
+          success: true,
+          type: activeConfig?.type || 'sqlite',
+          message: `Automatically synchronized to ${activeConfig?.type === 'postgres' ? 'PostgreSQL' : 'SQLite WAL'} Mode.`,
+        });
+      }
+      return res.json({ success: true, type: getActiveDbConfig()?.type || 'sqlite' });
+    } catch {
+      await switchDatabase({ type: 'sqlite' });
+      return res.json({ success: true, type: 'sqlite', message: 'Fallback to SQLite WAL Mode.' });
+    }
+  });
+
+  router.post('/database/switch', adminRateLimiter, async (req: Request, res: Response) => {
+    if (!isLoopbackRequest(req)) {
+      return res.status(403).json({ error: 'Database mode switching is only allowed directly from the host computer.' });
+    }
+    const { type, pg_host, pg_port, pg_database, pg_user, pg_password } = req.body || {};
+    try {
+      if (type === 'postgres') {
+        const { host, port } = validateSafeDatabaseHost(pg_host, pg_port);
+        await switchDatabase({
+          type: 'postgres',
+          pgHost: host,
+          pgPort: port,
+          pgDatabase: String(pg_database).trim(),
+          pgUser: String(pg_user).trim(),
+          pgPassword: pg_password ? String(pg_password) : undefined,
+        });
+      } else {
+        await switchDatabase({ type: 'sqlite' });
+      }
+      res.json({ success: true, message: `Database successfully switched to ${type === 'postgres' ? 'PostgreSQL LAN Mode' : 'Standalone SQLite Mode'}!` });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post('/backups/rolling', async (_req: Request, res: Response) => {
+    try {
+      const result = await backupRestoreService.runDailyRollingBackup();
+      res.json({ success: true, created: Boolean(result), backup: result });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.post('/settings/test-db', dbTestRateLimiter, async (req: Request, res: Response) => {
     if (!isLoopbackRequest(req)) {
       return res.status(403).json({ success: false, error: 'Database connection testing is only allowed from the host machine.' });
@@ -423,14 +656,16 @@ export function createApiRouter(db: Knex): Router {
         },
       });
       await testKnex.raw('SELECT 1');
+      // Validate schema migration readiness
+      await runMigrations(testKnex);
       await testKnex.destroy();
-      res.json({ success: true, message: `Successfully connected to PostgreSQL server at ${host}:${port}!` });
+      res.json({ success: true, message: `Successfully connected to PostgreSQL server at ${host}:${port} and validated schema migrations!` });
     } catch (err: any) {
       console.warn('[Settings] PostgreSQL connection test failed:', err?.message || err);
       const safeErr =
-        err?.message && /Invalid database host|not permitted|Database port/.test(err.message)
+        err?.message && /Invalid database host|not permitted|Database port|Tier Restriction/.test(err.message)
           ? err.message
-          : 'Unable to connect to PostgreSQL host. Please verify host, port, database name, and credentials.';
+          : 'Unable to connect to PostgreSQL host. Please verify host, port, database name, credentials, and network connectivity.';
       res.status(400).json({ success: false, error: safeErr });
     }
   });
@@ -1062,6 +1297,39 @@ export function createApiRouter(db: Knex): Router {
   });
 
   // ===================== QUOTATIONS =====================
+  // 1-Page Letterhead Ruler Calibration PDF
+  router.get('/quotations/calibration-pdf', async (_req: Request, res: Response) => {
+    try {
+      const pdfBytes = await PdfEngine.generateLetterheadCalibrationPdf();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="Varun_Systems_Letterhead_Ruler_Calibration.pdf"');
+      res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to generate calibration PDF.');
+    }
+  });
+
+  router.get('/companies/:companyId/quotations/calibration-pdf', async (_req: Request, res: Response) => {
+    try {
+      const pdfBytes = await PdfEngine.generateLetterheadCalibrationPdf();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="Varun_Systems_Letterhead_Ruler_Calibration.pdf"');
+      res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to generate calibration PDF.');
+    }
+  });
+
+  router.get('/companies/:companyId/quotations/preview-number', async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getParams(req);
+      const nextNumber = await quotationService.previewNextNumber(companyId, req.query.date as string);
+      res.json({ quotation_number: nextNumber });
+    } catch (err: any) {
+      sendInternalError(res, err);
+    }
+  });
+
   router.get('/companies/:companyId/quotations', async (req: Request, res: Response) => {
     try {
       const { companyId } = getParams(req);
@@ -1097,6 +1365,16 @@ export function createApiRouter(db: Knex): Router {
         created_by_device_name: meta.deviceName || undefined,
       });
       res.status(201).json(q);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.put('/companies/:companyId/quotations/:quotationId', async (req: Request, res: Response) => {
+    try {
+      const { companyId, quotationId } = getParams(req);
+      const q = await quotationService.updateQuotation(companyId, quotationId, req.body);
+      res.json(q);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1153,13 +1431,23 @@ export function createApiRouter(db: Knex): Router {
         template = undefined;
       }
 
+      // Check for margin query overrides
+      if (req.query.top_margin_mm) {
+        quotation.top_margin_mm = Number(req.query.top_margin_mm);
+      }
+      if (req.query.bottom_margin_mm) {
+        quotation.bottom_margin_mm = Number(req.query.bottom_margin_mm);
+      }
+      const showOverlay = req.query.overlay === 'true' || Boolean(quotation.print_letterhead_overlay);
+
       const mode = (req.query.mode as any) || 'DIGITAL_LETTERHEAD';
       const pdfBytes = await PdfEngine.generateQuotationPdf(quotation, {
         mode,
         template: template || undefined,
         company: company!,
         branch,
-      });
+        showOverlay,
+      } as any);
 
       // Optional: Securely save to validated local folder if configured in company_settings or app_settings
       try {
@@ -1461,7 +1749,8 @@ export function createApiRouter(db: Knex): Router {
   router.get('/companies/:companyId/letterheads', async (req: Request, res: Response) => {
     try {
       const { companyId } = getParams(req);
-      const templates = await letterheadService.getTemplates(companyId);
+      const includeSystem = req.query.include_system !== 'false';
+      const templates = await letterheadService.getTemplates(companyId, includeSystem);
       res.json(templates);
     } catch (err: any) {
       sendInternalError(res, err);

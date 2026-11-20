@@ -194,6 +194,7 @@ export class InvoiceService {
         overallDiscountPercentage: input.overallDiscountPercentage,
         overallDiscountAmount: input.overallDiscountAmount,
         additionalCharges: input.additional_charges,
+        customRoundOff: input.round_off,
       });
 
       // Amount in words

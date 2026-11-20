@@ -31,6 +31,11 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  KeyRound,
+  Activity,
+  HardDrive,
+  Download,
+  Copy,
 } from 'lucide-react';
 
 interface Props {
@@ -129,6 +134,116 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [pinPromptError, setPinPromptError] = useState<string>('');
   const [pinPromptLoading, setPinPromptLoading] = useState<boolean>(false);
 
+  // System Diagnostics state
+  const [diagnosticsDownloading, setDiagnosticsDownloading] = useState<boolean>(false);
+
+  // Offline Software Updater & Multi-PC Synchronization state
+  const [updateInstalling, setUpdateInstalling] = useState<boolean>(false);
+  const [updateStatus, setUpdateStatus] = useState<{ success: boolean; message: string; backupPath?: string } | null>(null);
+  const [lanUpdating, setLanUpdating] = useState<boolean>(false);
+  const [exportingPackage, setExportingPackage] = useState<boolean>(false);
+  const updateFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Database persistence info for diagnostics
+  const [dbModeInfo, setDbModeInfo] = useState<any>(null);
+
+  const loadDiagnosticsData = async () => {
+    try {
+      const dbMode = await api.getDatabaseMode().catch(() => null);
+      if (dbMode) setDbModeInfo(dbMode);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleExportDiagnostics = () => {
+    setDiagnosticsDownloading(true);
+    try {
+      const url = api.getDiagnosticsDownloadUrl();
+      window.open(url, '_blank');
+    } catch (err: any) {
+      alert('Could not download diagnostics: ' + err.message);
+    } finally {
+      setTimeout(() => setDiagnosticsDownloading(false), 1500);
+    }
+  };
+
+  const handleInstallOfflineUpdate = async (file?: File) => {
+    setUpdateInstalling(true);
+    setUpdateStatus(null);
+    try {
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.installOfflineUpdate && !file) {
+        const res = await electronAPI.installOfflineUpdate();
+        if (res?.cancelled) {
+          setUpdateInstalling(false);
+          return;
+        }
+        if (res?.success) {
+          setUpdateStatus({ success: true, message: res.message, backupPath: res.backupPath });
+        } else {
+          setUpdateStatus({ success: false, message: res?.error || 'Failed to install update.' });
+        }
+      } else if (file) {
+        const fd = new FormData();
+        fd.append('updateFile', file);
+        const res = await api.installOfflineUpdateWeb(fd);
+        if (res.success) {
+          setUpdateStatus({ success: true, message: res.message, backupPath: res.backupPath });
+        } else {
+          setUpdateStatus({ success: false, message: 'Failed to install update.' });
+        }
+      }
+    } catch (err: any) {
+      setUpdateStatus({ success: false, message: err?.message || 'Error applying update.' });
+    } finally {
+      setUpdateInstalling(false);
+    }
+  };
+
+  const handleUpdateFromLan = async () => {
+    setLanUpdating(true);
+    setUpdateStatus(null);
+    try {
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.updateFromLan) {
+        const res = await electronAPI.updateFromLan();
+        if (res?.success) {
+          setUpdateStatus({ success: true, message: res.message, backupPath: res.backupPath });
+        } else {
+          setUpdateStatus({ success: false, message: res?.error || 'Failed to update from Main Office PC.' });
+        }
+      } else {
+        alert('Direct LAN update is supported in desktop mode.');
+      }
+    } catch (err: any) {
+      setUpdateStatus({ success: false, message: err?.message || 'Error updating from Main PC.' });
+    } finally {
+      setLanUpdating(false);
+    }
+  };
+
+  const handleExportUpdatePackage = async () => {
+    setExportingPackage(true);
+    try {
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.exportUpdatePackage) {
+        const res = await electronAPI.exportUpdatePackage();
+        if (res?.success) {
+          alert('Update package folder exported and opened in Windows Explorer: ' + res.path);
+        } else {
+          alert('Could not export update package: ' + (res?.error || 'Unknown error'));
+        }
+      } else {
+        window.open(api.getUpdateBundleDownloadUrl(), '_blank');
+      }
+    } catch (err: any) {
+      alert('Error exporting update package: ' + err.message);
+    } finally {
+      setExportingPackage(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       if (
@@ -148,6 +263,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     setLoading(true);
     setError('');
     try {
+      loadDiagnosticsData();
       try {
         const as = await api.getAppSettings();
         setAppSettings(as);
@@ -619,6 +735,9 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         window.dispatchEvent(new Event('eim-data-sync'));
       }
 
+      // Automatically synchronize database persistence without requiring manual user action
+      api.autoSyncDatabaseMode(roleToSave).then(loadDiagnosticsData).catch(() => {});
+
       if (relaunchAfterSave && electronAPI.relaunchApp) {
         await electronAPI.relaunchApp();
         return;
@@ -647,6 +766,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
       localStorage.setItem('eim_lan_role', 'STANDALONE');
       localStorage.removeItem('eim_lan_host_ip');
       setLanRole('STANDALONE');
+      api.autoSyncDatabaseMode('STANDALONE').then(loadDiagnosticsData).catch(() => {});
       const electronAPI = (window as any)?.electronAPI;
       if (electronAPI?.setLanConfig) {
         await electronAPI.setLanConfig({
@@ -802,7 +922,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
       try {
         const listRes = await api.getWorkstations();
-        setPermWorkstations(listRes.workstations || []);
+        const staffOnly = (listRes.workstations || []).filter((w: any) => !w.is_admin && w.role !== 'ADMIN');
+        setPermWorkstations(staffOnly);
         setPermDefaultStaffMenus(listRes.default_staff_menus || []);
         setPermHasCustomPin(Boolean(listRes.has_custom_pin ?? me.has_custom_pin));
         setPermUnlocked(true);
@@ -1084,6 +1205,24 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   }`}
                 >
                   Standalone / LAN Setup
+                </button>
+              </div>
+            </div>
+
+            {/* System Diagnostics & Logs */}
+            <div>
+              <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
+                <Activity className="w-3.5 h-3.5 text-slate-400" />
+                <span>Diagnostics &amp; Logs</span>
+              </div>
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => setActiveCategory('System_Diagnostics')}
+                  className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
+                    activeCategory === 'System_Diagnostics' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                  }`}
+                >
+                  System Diagnostics &amp; Logs
                 </button>
               </div>
             </div>
@@ -1700,12 +1839,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Default Invoice Terms & Conditions (Prints on every invoice):</label>
                     <textarea
-                      rows={4}
+                      rows={6}
                       value={company.default_invoice_terms || ''}
                       onChange={(e) => updateCompanyField('default_invoice_terms', e.target.value)}
                       placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. charged after due date.&#10;3. Subject to local jurisdiction."
-                      className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      All points entered here will automatically be pre-filled on every new invoice. You can add, edit, or renumber points anytime.
+                    </p>
                   </div>
 
                   <div>
@@ -1760,14 +1902,26 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Default Quotation Terms & Conditions:</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Default Quotation Terms & Conditions (Varun Systems):</label>
                     <textarea
-                      rows={4}
-                      value={company.default_quotation_terms || ''}
+                      rows={8}
+                      value={
+                        company.default_quotation_terms !== undefined && company.default_quotation_terms !== null && company.default_quotation_terms !== ''
+                          ? company.default_quotation_terms
+                          : `Terms &Conditions: No warranty for burn / Physical Damage.
+1. Taxes: Inclusive of GST
+2. Payment: 100% Advance along with PO
+3. Validity: 7 Days
+4. Delivery: 1 week form the date of PO
+5. Installation and transport Included.`
+                      }
                       onChange={(e) => updateCompanyField('default_quotation_terms', e.target.value)}
-                      placeholder="1. Quotation valid for 30 days from date of issue.&#10;2. Taxes extra as applicable.&#10;3. Delivery within 7 business days from PO."
-                      className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      placeholder="Terms &Conditions: No warranty for burn / Physical Damage.&#10;1. Taxes: Inclusive of GST&#10;2. Payment: 100% Advance along with PO&#10;3. Validity: 7 Days&#10;4. Delivery: 1 week form the date of PO&#10;5. Installation and transport Included."
+                      className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      All points entered here will automatically be pre-filled on every new quotation. You can add, edit, or renumber points anytime. You can also edit them per quotation while preparing it.
+                    </p>
                   </div>
 
                   <div>
@@ -2468,7 +2622,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               <div>
                                 <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
                                   <Users className="w-4 h-4 text-brand-600" />
-                                  <span>Configured Office Staff Members ({permWorkstations.length})</span>
+                                  <span>Configured Office Staff Members ({permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').length})</span>
                                 </h4>
                                 <p className="text-xs text-slate-500 mt-0.5">
                                   Staff will automatically receive these permissions when they enter their name on their computer.
@@ -2484,13 +2638,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               </button>
                             </div>
 
-                            {permWorkstations.length === 0 ? (
+                            {permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').length === 0 ? (
                               <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
                                 No staff members created yet. Use the form above to add your office staff members by name.
                               </div>
                             ) : (
                               <div className="space-y-3">
-                                {permWorkstations.map((ws) => {
+                                {permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').map((ws) => {
                                   const isExpanded = expandedStaffId === ws.device_id;
                                   return (
                                     <div
@@ -2730,6 +2884,234 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+
+
+            {/* ================= SYSTEM DIAGNOSTICS & LOGS ================= */}
+            {activeCategory === 'System_Diagnostics' && (
+              <div className="space-y-5">
+                <div className="border-b border-slate-200 pb-3">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                    <Activity className="w-4 h-4 text-brand-600" />
+                    <span>System Diagnostics, Health &amp; Rotating Local Logs</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    View local application telemetry and download diagnostic packages for technical support.
+                  </p>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
+                  <div className="font-bold text-sm text-slate-800">Local Telemetry Overview:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div>
+                      <span className="text-slate-400 font-medium block">Application Version</span>
+                      <span className="font-bold text-slate-800">Enterprise Invoice Manager v2.0.0</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium block">Database Persistence Engine</span>
+                      <span className="font-bold text-slate-800 flex items-center space-x-1.5">
+                        <span>{dbModeInfo?.type === 'postgres' ? 'PostgreSQL Local LAN' : 'SQLite WAL (Zero-Setup)'}</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                          Automatic
+                        </span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium block">Operating Mode</span>
+                      <span className="font-bold text-slate-800">{lanRole || 'STANDALONE'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium block">Rotating Local Logs</span>
+                      <span className="font-bold text-slate-800">Active (Max 5 MB / 7-Day History)</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-xs text-slate-800">Export Diagnostics Package</div>
+                      <div className="text-[11px] text-slate-500">
+                        Generates a secure, sanitized ZIP containing system health data and recent application logs for customer support.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={diagnosticsDownloading}
+                      onClick={handleExportDiagnostics}
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {diagnosticsDownloading ? <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" /> : <Download className="w-4 h-4 text-emerald-400" />}
+                      <span>{diagnosticsDownloading ? 'Exporting...' : 'Export Diagnostics (.zip)'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* OFFLINE SOFTWARE UPDATER & MULTI-PC SYNCHRONIZATION */}
+                <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                      <RefreshCw className="w-4 h-4 text-brand-600" />
+                      <span>Offline Software Updates &amp; Client Sync (Zero Reinstall)</span>
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Install updated features without uninstalling. Invoices, customers, stock, and network connections are 100% preserved.
+                    </p>
+                  </div>
+
+                  {/* Data Safety Assurance Banner */}
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start space-x-2.5 text-xs text-emerald-900">
+                    <Shield className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-bold">Permanent Data &amp; Network Protection:</span>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        Updating the software updates only application features and options. Your database (invoices, customers, numbering sequences) and office LAN settings will <strong>never</strong> be deleted or reset. A safety backup of your database is created automatically prior to applying any update.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status Banner */}
+                  {updateStatus && (
+                    <div
+                      className={`p-3 rounded-lg border text-xs flex items-start space-x-2 ${
+                        updateStatus.success
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                          : 'bg-red-50 border-red-200 text-red-900'
+                      }`}
+                    >
+                      {updateStatus.success ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <div className="font-bold">{updateStatus.message}</div>
+                        {updateStatus.backupPath && (
+                          <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                            Safety Backup saved: {updateStatus.backupPath}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Hidden File Input for Browser / Fallback Mode */}
+                  <input
+                    type="file"
+                    ref={updateFileInputRef}
+                    accept=".asar,.zip"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleInstallOfflineUpdate(file);
+                      if (e.target) e.target.value = '';
+                    }}
+                  />
+
+                  {/* Actions Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    {/* Action 1: Install Update File */}
+                    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+                          <Upload className="w-3.5 h-3.5 text-brand-600" />
+                          <span>Install Update Package (.asar)</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                          Select the updated <code className="bg-slate-200 px-1 rounded text-slate-700">app.asar</code> file from your pendrive or computer to upgrade this machine in 3 seconds.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={updateInstalling || lanUpdating}
+                        onClick={() => {
+                          const electronAPI = (window as any)?.electronAPI;
+                          if (electronAPI?.installOfflineUpdate) {
+                            handleInstallOfflineUpdate();
+                          } else if (updateFileInputRef.current) {
+                            updateFileInputRef.current.click();
+                          }
+                        }}
+                        className="w-full inline-flex items-center justify-center space-x-2 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        {updateInstalling ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                            <span>Installing Update &amp; Backing Up...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Select &amp; Install Update File</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Action 2: LAN Direct Update or Export Package */}
+                    {lanRole === 'LAN_CLIENT' ? (
+                      <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between space-y-3">
+                        <div>
+                          <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+                            <Server className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Update Directly from Main PC</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Connected to Main PC at <code className="bg-emerald-100 text-emerald-800 px-1 rounded font-bold">{lanHostIp || 'Office Host'}:{lanPort}</code>. Pull the newest version directly over your office network.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={lanUpdating || updateInstalling}
+                          onClick={handleUpdateFromLan}
+                          className="w-full inline-flex items-center justify-center space-x-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          {lanUpdating ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                              <span>Downloading from Main PC...</span>
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Update from Main Office PC</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between space-y-3">
+                        <div>
+                          <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+                            <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Export Client Update Package</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                            Generate a 1-click update folder containing <code className="bg-slate-200 px-1 rounded text-slate-700">1-Click-Update.bat</code> and <code className="bg-slate-200 px-1 rounded text-slate-700">app.asar</code> to copy to your other computer.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={exportingPackage}
+                          onClick={handleExportUpdatePackage}
+                          className="w-full inline-flex items-center justify-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          {exportingPackage ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                              <span>Exporting Package...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Export Client Update Folder</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -36,6 +36,7 @@ export interface DocumentTotalsInput {
   overallDiscountPercentage?: string | number;
   overallDiscountAmount?: string | number;
   additionalCharges?: string | number;
+  customRoundOff?: string | number;
 }
 
 export interface DocumentTotalsResult {
@@ -49,6 +50,7 @@ export interface DocumentTotalsResult {
   additionalCharges: string;
   roundOff: string;
   grandTotal: string;
+  totalProductsAmount: string;
 }
 
 /**
@@ -177,9 +179,32 @@ export function calculateDocumentTotals(input: DocumentTotalsInput): DocumentTot
   // Raw Total = Taxable Value - Overall Discount + Total Tax + Additional Charges
   const rawTotal = Decimal.max(0, totalTaxableValue.sub(overallDiscount)).add(totalTax).add(additionalCharges);
 
-  // Round off to nearest integer
-  const roundedGrandTotal = rawTotal.round();
-  const roundOff = roundedGrandTotal.sub(rawTotal);
+  let roundedGrandTotal: Decimal;
+  let roundOff: Decimal;
+
+  // Custom round-off override: if specified (including "0" or 0 to disable rounding)
+  if (
+    input.customRoundOff !== undefined &&
+    input.customRoundOff !== null &&
+    String(input.customRoundOff).trim() !== ''
+  ) {
+    const trimmed = String(input.customRoundOff).trim();
+    let customVal: Decimal;
+    try {
+      customVal = new Decimal(trimmed);
+      if (!customVal.isFinite()) {
+        customVal = new Decimal(0);
+      }
+    } catch {
+      customVal = new Decimal(0);
+    }
+    roundOff = customVal;
+    roundedGrandTotal = rawTotal.add(roundOff);
+  } else {
+    // Default: Round off to nearest integer
+    roundedGrandTotal = rawTotal.round();
+    roundOff = roundedGrandTotal.sub(rawTotal);
+  }
 
   return {
     subtotal: subtotal.toFixed(2),
@@ -192,6 +217,7 @@ export function calculateDocumentTotals(input: DocumentTotalsInput): DocumentTot
     additionalCharges: additionalCharges.toFixed(2),
     roundOff: roundOff.toFixed(2),
     grandTotal: roundedGrandTotal.toFixed(2),
+    totalProductsAmount: rawTotal.toFixed(2),
   };
 }
 

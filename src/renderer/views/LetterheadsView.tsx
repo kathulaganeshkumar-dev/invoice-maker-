@@ -74,7 +74,7 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
   const handleUploadTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateFile) {
-      setErrorMsg('Please select a PDF, PNG, or JPG print template file to upload.');
+      setErrorMsg('Please select a PDF, Word (.docx), PNG, or JPG print template file to upload.');
       return;
     }
 
@@ -149,7 +149,7 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
             <span>Print Templates (Invoices &amp; Quotations)</span>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Upload your custom PDF, PNG, or JPG templates to control how invoices and quotations are printed.
+            Upload your custom PDF, Word (.docx), PNG, or JPG templates to control how invoices and quotations are printed.
           </p>
         </div>
 
@@ -213,12 +213,12 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
 
           <div>
             <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Template File (PDF / PNG / JPG) *
+              Template File (PDF / DOCX / PNG / JPG) *
             </label>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+              accept=".pdf,.png,.jpg,.jpeg,.docx,.doc,application/pdf,image/png,image/jpeg,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(e) => {
                 const f = e.target.files?.[0] || null;
                 setTemplateFile(f);
@@ -305,12 +305,19 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
                     <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
                       {tpl.name}
                     </span>
-                    {tpl.is_default && (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-full inline-flex items-center space-x-1 shrink-0">
-                        <CheckCircle className="w-3 h-3" />
-                        <span>Default</span>
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      {tpl.id.startsWith('builtin-') && (
+                        <span className="text-[10px] bg-brand-100 text-brand-800 dark:bg-brand-950/60 dark:text-brand-300 font-bold px-2 py-0.5 rounded-full">
+                          Built-in Format
+                        </span>
+                      )}
+                      {tpl.is_default && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-full inline-flex items-center space-x-1">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Default</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {viewingCompany && (
@@ -364,14 +371,18 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(tpl)}
-                    className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
-                    title="Delete Print Template"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {tpl.id.startsWith('builtin-') ? (
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">Built-in Format</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(tpl)}
+                      className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                      title="Delete Print Template"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))

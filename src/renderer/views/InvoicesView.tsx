@@ -141,6 +141,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
     },
   ]);
   const [notes, setNotes] = useState<string>('');
+  const [companyDefaultTerms, setCompanyDefaultTerms] = useState<string>('');
   const [savingToCatalogIdx, setSavingToCatalogIdx] = useState<number | null>(null);
 
   // Mark-Paid modal state for existing invoices
@@ -179,7 +180,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   const templateOptions = useMemo(() => {
     return templates.map((tpl) => ({
       value: tpl.id,
-      label: tpl.name,
+      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
       sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
     }));
   }, [templates]);
@@ -187,7 +188,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   const printTemplateOptions = useMemo(() => {
     return templates.map((tpl) => ({
       value: tpl.id,
-      label: tpl.name,
+      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
       sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
     }));
   }, [templates]);
@@ -303,10 +304,11 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
   const loadMasterData = async () => {
     try {
-      const [cList, pList, tList] = await Promise.all([
+      const [cList, pList, tList, comp] = await Promise.all([
         api.getCustomers(companyId),
         api.getProducts(companyId),
         api.getLetterheads(companyId),
+        api.getCompany(companyId).catch(() => null),
       ]);
       setCustomers(cList);
       setProducts(pList);
@@ -316,6 +318,9 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
         setSelectedTemplateId(defTemplate.id);
         setActivePrintTemplateId(defTemplate.id);
       }
+      const loadedTerms = comp?.default_invoice_terms || '';
+      setCompanyDefaultTerms(loadedTerms);
+      setNotes((prev) => (!prev ? loadedTerms : prev));
     } catch (err) {
       console.error(err);
     }
@@ -739,7 +744,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
         is_custom: false,
       },
     ]);
-    setNotes('');
+    setNotes(companyDefaultTerms || '');
   };
 
   // Compute live preview totals for Create Invoice modal using Decimal precision
@@ -2067,35 +2072,58 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
                   <button
                     type="button"
                     onClick={() => handleAddItem(false)}
-                    className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 border border-brand-200 dark:border-brand-800 rounded-lg text-xs font-bold transition-all shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Item Row</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddItem(true)}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold transition-all shadow-sm"
+                    title="Add custom or not-in-stock item"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Add Custom Item</span>
                   </button>
                 </div>
 
                 <div className="flex items-center space-x-4 text-xs bg-slate-50 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <span className="text-slate-500">Taxable: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTaxableValue)}</strong></span>
                   <span className="text-slate-500">Tax: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTax)}</strong></span>
-                  <span className="text-slate-500">Grand Total: <strong className="text-brand-600 text-sm">{formatIndianCurrency(previewDocTotals.grandTotal)}</strong></span>
+                  <span className="text-slate-500">Grand Total: <strong className="text-brand-600 text-sm font-bold">{formatIndianCurrency(previewDocTotals.grandTotal)}</strong></span>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Invoice Notes & Terms
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Invoice Notes &amp; Terms
+                  </label>
+                  {companyDefaultTerms && (
+                    <button
+                      type="button"
+                      onClick={() => setNotes(companyDefaultTerms)}
+                      className="text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
+                    >
+                      Reset to Settings Default
+                    </button>
+                  )}
+                </div>
                 <textarea
-                  rows={2}
+                  rows={4}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Subject to local jurisdiction. Payment due within specified period."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2"
+                  placeholder="Payment instructions, bank transfer details, delivery terms..."
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs font-mono leading-relaxed"
                 />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Pre-filled from Settings. You can edit, add, or delete terms for this invoice.
+                </p>
               </div>
             </div>
 

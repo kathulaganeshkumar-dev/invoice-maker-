@@ -72,7 +72,7 @@ export class NumberingService {
       });
     }
 
-    let seq = await query.orderBy('branch_id', 'desc').first();
+    let seq = await query.orderBy('branch_id', 'desc').forUpdate().first();
 
     if (!seq) {
       // Create default sequence on the fly if not yet created

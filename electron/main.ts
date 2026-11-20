@@ -12,13 +12,20 @@ import {
 
 // Dynamically load the bundled standalone server or local development server
 let startServer: (port?: number) => Promise<any>;
+let stopServer: (() => Promise<void>) | null = null;
 try {
-  startServer = require('../dist-server/index').startServer;
+  const s = require('../dist-server/index');
+  startServer = s.startServer;
+  stopServer = s.stopServer || null;
 } catch {
   try {
-    startServer = require('../../dist-server/index').startServer;
+    const s = require('../../dist-server/index');
+    startServer = s.startServer;
+    stopServer = s.stopServer || null;
   } catch {
-    startServer = require('../src/server/index').startServer;
+    const s = require('../src/server/index');
+    startServer = s.startServer;
+    stopServer = s.stopServer || null;
   }
 }
 
@@ -506,6 +513,217 @@ ipcMain.handle('app:test-lan-host', async (_event, hostIp: string, port?: number
   return testLanHostConnection(hostIp, port || 4200);
 });
 
+function createPreUpdateSafetyBackup(dataDir: string): string | null {
+  try {
+    const dbFile = path.join(dataDir, 'invoice_manager.sqlite3');
+    if (fs.existsSync(dbFile)) {
+      const backupDir = path.join(dataDir, 'backups');
+      if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const dest = path.join(backupDir, `pre_update_safety_backup_${stamp}.sqlite3`);
+      fs.copyFileSync(dbFile, dest);
+      console.log('[Electron Updater] Created pre-update database backup:', dest);
+      return dest;
+    }
+  } catch (err) {
+    console.warn('[Electron Updater] Warning creating safety backup:', err);
+  }
+  return null;
+}
+
+function findTargetAsarPath(): string {
+  if (app.isPackaged && process.resourcesPath) {
+    return path.join(process.resourcesPath, 'app.asar');
+  }
+  const candidate = path.join(process.cwd(), 'version 2.0', 'win-unpacked', 'resources', 'app.asar');
+  if (fs.existsSync(candidate)) return candidate;
+  return path.join(process.resourcesPath || path.join(process.cwd(), 'resources'), 'app.asar');
+}
+
+function downloadFile(fileUrl: string, destPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    const parsed = new URL(fileUrl);
+    const client = parsed.protocol === 'https:' ? require('https') : require('http');
+    client.get(fileUrl, (response: any) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        file.close();
+        return downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+      }
+      if (response.statusCode !== 200) {
+        file.close();
+        try { fs.unlinkSync(destPath); } catch {}
+        return reject(new Error(`Server returned HTTP ${response.statusCode}`));
+      }
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve();
+      });
+    }).on('error', (err: any) => {
+      file.close();
+      try { fs.unlinkSync(destPath); } catch {}
+      reject(err);
+    });
+  });
+}
+
+function replaceAsarFile(sourceAsar: string, targetAsar: string): void {
+  const targetDir = path.dirname(targetAsar);
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+  const stagedPath = targetAsar + '.staged';
+  fs.copyFileSync(sourceAsar, stagedPath);
+
+  const oldPath = targetAsar + '.old';
+  if (fs.existsSync(oldPath)) {
+    try { fs.unlinkSync(oldPath); } catch {}
+  }
+
+  if (fs.existsSync(targetAsar)) {
+    try {
+      fs.renameSync(targetAsar, oldPath);
+    } catch {
+      // If rename fails because file is locked, copy directly
+      fs.copyFileSync(stagedPath, targetAsar);
+      try { fs.unlinkSync(stagedPath); } catch {}
+      return;
+    }
+  }
+  fs.renameSync(stagedPath, targetAsar);
+  try { fs.unlinkSync(oldPath); } catch {}
+}
+
+ipcMain.handle('app:get-app-version', async () => {
+  return {
+    version: app.getVersion() || '2.0.0',
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    dataDir: resolvedDataDir,
+  };
+});
+
+ipcMain.handle('app:install-offline-update', async (_event, opts?: { filePath?: string }) => {
+  try {
+    let chosenPath = opts?.filePath;
+    if (!chosenPath) {
+      const res = await dialog.showOpenDialog({
+        title: 'Select Enterprise Invoice Manager Update Package',
+        filters: [
+          { name: 'Update Package (*.asar, *.zip)', extensions: ['asar', 'zip'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      });
+      if (res.canceled || !res.filePaths || res.filePaths.length === 0) {
+        return { cancelled: true };
+      }
+      chosenPath = res.filePaths[0];
+    }
+
+    if (!fs.existsSync(chosenPath)) {
+      return { success: false, error: 'Selected update file does not exist.' };
+    }
+
+    const stat = fs.statSync(chosenPath);
+    if (stat.size < 1024 * 1024) {
+      return { success: false, error: 'Update file is too small or invalid (must be a valid .asar package).' };
+    }
+
+    // 1. Safety backup of existing SQLite database
+    const backupPath = createPreUpdateSafetyBackup(resolvedDataDir);
+    console.log('[Electron Updater] Pre-update safety backup completed:', backupPath);
+
+    // 2. Find target app.asar location
+    const targetAsar = findTargetAsarPath();
+    console.log('[Electron Updater] Target ASAR path:', targetAsar);
+
+    // 3. Replace app.asar
+    replaceAsarFile(chosenPath, targetAsar);
+    console.log('[Electron Updater] ASAR replacement successful.');
+
+    // 4. Schedule relaunch
+    setTimeout(() => {
+      isQuitting = true;
+      app.relaunch();
+      app.exit(0);
+    }, 1500);
+
+    return {
+      success: true,
+      message: 'Update installed successfully! Relaunching Enterprise Invoice Manager in 2 seconds...',
+      backupPath,
+    };
+  } catch (err: any) {
+    console.error('[Electron Updater] Failed to install update:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('app:export-update-package', async () => {
+  try {
+    const releaseUpdateDir = path.join(process.cwd(), 'release', 'Enterprise-Invoice-Update');
+    const targetAsar = findTargetAsarPath();
+
+    if (!fs.existsSync(releaseUpdateDir)) {
+      fs.mkdirSync(releaseUpdateDir, { recursive: true });
+    }
+
+    if (fs.existsSync(targetAsar)) {
+      fs.copyFileSync(targetAsar, path.join(releaseUpdateDir, 'app.asar'));
+    }
+
+    await shell.openPath(releaseUpdateDir);
+    return { success: true, path: releaseUpdateDir };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('app:update-from-lan', async () => {
+  try {
+    if (!activeLanConfig.hostIp) {
+      return { success: false, error: 'Main Office PC IP address is not configured. Please check LAN settings.' };
+    }
+    const updateUrl = `http://${activeLanConfig.hostIp}:${activeLanConfig.port}/api/system/update-bundle`;
+    const tempDir = path.join(resolvedDataDir, 'temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    const tempFile = path.join(tempDir, `lan_update_${Date.now()}.asar`);
+
+    console.log(`[Electron Updater] Downloading update from LAN: ${updateUrl}`);
+    await downloadFile(updateUrl, tempFile);
+
+    const stat = fs.statSync(tempFile);
+    if (stat.size < 5 * 1024 * 1024) {
+      try { fs.unlinkSync(tempFile); } catch {}
+      return { success: false, error: 'Downloaded update package from Main PC is invalid or incomplete.' };
+    }
+
+    // Safety backup of database
+    const backupPath = createPreUpdateSafetyBackup(resolvedDataDir);
+
+    // Target asar
+    const targetAsar = findTargetAsarPath();
+    replaceAsarFile(tempFile, targetAsar);
+    try { fs.unlinkSync(tempFile); } catch {}
+
+    setTimeout(() => {
+      isQuitting = true;
+      app.relaunch();
+      app.exit(0);
+    }, 1500);
+
+    return {
+      success: true,
+      message: 'Update downloaded from Main Office PC and installed successfully! Relaunching in 2 seconds...',
+      backupPath,
+    };
+  } catch (err: any) {
+    return { success: false, error: 'Failed to update from Main Office PC: ' + err.message };
+  }
+});
+
 ipcMain.handle('app:relaunch', async () => {
   isQuitting = true;
   app.relaunch();
@@ -513,15 +731,32 @@ ipcMain.handle('app:relaunch', async () => {
   return true;
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', async (event) => {
+  if (isQuitting) return;
   isQuitting = true;
+  if (stopServer) {
+    try {
+      console.log('[Electron] Shutting down embedded Express server...');
+      await stopServer();
+      console.log('[Electron] Server stopped cleanly.');
+    } catch (err) {
+      console.warn('[Electron] Error during server shutdown:', err);
+    }
+  }
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   if (activeLanConfig.role === 'LAN_HOST' && activeLanConfig.minimizeToTray && !isQuitting) {
     return; // Keep running silently in system tray for office staff PCs
   }
   if (process.platform !== 'darwin') {
+    if (stopServer) {
+      try {
+        await stopServer();
+      } catch {
+        // ignore
+      }
+    }
     app.quit();
   }
 });

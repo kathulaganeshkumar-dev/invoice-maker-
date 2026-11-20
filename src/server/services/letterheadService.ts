@@ -47,25 +47,71 @@ export function getDefaultLayoutConfig(templateId: string): LayoutConfiguration 
   };
 }
 
+function getSystemTemplatePath(filename: string): string {
+  const resourcesPath = (process as any).resourcesPath || '';
+  const candidates = [
+    path.join(process.cwd(), 'assets', 'templates', filename),
+    path.join(resourcesPath, 'assets', 'templates', filename),
+    path.join(__dirname, '..', '..', '..', 'assets', 'templates', filename),
+    path.join(__dirname, '..', '..', 'assets', 'templates', filename),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
+}
+
+export function getSystemQuotationTemplates(): LetterheadTemplate[] {
+  return [
+    {
+      id: 'builtin-varun-gst',
+      company_id: '',
+      name: 'Varun Systems — GST Quotation Format',
+      file_path: getSystemTemplatePath('VARUN_SYSTEMS_QUOTATIO_GST_FORMAT.pdf'),
+      file_type: 'PDF',
+      page_size: 'A4',
+      orientation: 'PORTRAIT',
+      is_default: true,
+      layout_config: getDefaultLayoutConfig('builtin-varun-gst'),
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'builtin-varun-nogst',
+      company_id: '',
+      name: 'Varun Systems — Without GST Format',
+      file_path: getSystemTemplatePath('VARUN_SYSTEMS_QUOTATIO_WITHOUT_GST_FORMAT.pdf'),
+      file_type: 'PDF',
+      page_size: 'A4',
+      orientation: 'PORTRAIT',
+      is_default: false,
+      layout_config: getDefaultLayoutConfig('builtin-varun-nogst'),
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    },
+  ];
+}
+
 export class LetterheadService {
   constructor(private db: Knex) {}
 
-  async getTemplates(companyId: string): Promise<LetterheadTemplate[]> {
+  async getTemplates(companyId: string, includeSystem: boolean = false): Promise<LetterheadTemplate[]> {
+    const sysTemplates = includeSystem ? getSystemQuotationTemplates() : [];
     const records = await this.db('letterhead_templates')
       .where({ company_id: companyId })
       .whereNotNull('file_path')
       .whereRaw("TRIM(file_path) != ''")
       .orderBy('name', 'asc');
-    return records
+    const custom = records
       .filter((r) => r.file_path && fs.existsSync(r.file_path))
       .map((r) => ({
         ...r,
         is_default: Boolean(r.is_default),
         layout_config: JSON.parse(r.layout_config_json),
       }));
+    return [...sysTemplates, ...custom];
   }
 
   async getTemplateById(companyId: string, templateId: string): Promise<LetterheadTemplate | null> {
+    const sys = getSystemQuotationTemplates().find((t) => t.id === templateId);
+    if (sys) return sys;
     const r = await this.db('letterhead_templates').where({ company_id: companyId, id: templateId }).first();
     if (!r || !r.file_path || !fs.existsSync(r.file_path)) return null;
     return {
@@ -76,9 +122,9 @@ export class LetterheadService {
   }
 
   async getDefaultTemplate(companyId: string): Promise<LetterheadTemplate | null> {
-    const uploaded = await this.getTemplates(companyId);
-    if (uploaded.length === 0) return null;
-    return uploaded.find((t) => t.is_default) || uploaded[0];
+    const all = await this.getTemplates(companyId, true);
+    if (all.length === 0) return null;
+    return all.find((t) => t.is_default) || all[0];
   }
 
   validateFilePathInsideUploadDir(companyId: string, targetPath?: string): string {
@@ -162,6 +208,7 @@ export class LetterheadService {
   }
 
   async deleteTemplate(companyId: string, templateId: string): Promise<void> {
+    if (templateId.startsWith('builtin-')) return;
     const existing = await this.getTemplateById(companyId, templateId);
     await this.db('letterhead_templates').where({ company_id: companyId, id: templateId }).delete();
 
@@ -190,7 +237,7 @@ export class LetterheadService {
     return dir;
   }
 
-  detectFileTypeFromBuffer(buffer: Buffer, fileNameOrPath?: string, strictMagicOnly = false): 'PDF' | 'PNG' | 'JPG' | null {
+  detectFileTypeFromBuffer(buffer: Buffer, fileNameOrPath?: string, strictMagicOnly = false): 'PDF' | 'PNG' | 'JPG' | 'DOCX' | null {
     if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === '%PDF') {
       return 'PDF';
     }
@@ -206,6 +253,15 @@ export class LetterheadService {
     if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
       return 'JPG';
     }
+    if (
+      buffer.length >= 4 &&
+      buffer[0] === 0x50 &&
+      buffer[1] === 0x4b &&
+      buffer[2] === 0x03 &&
+      buffer[3] === 0x04
+    ) {
+      return 'DOCX';
+    }
 
     if (strictMagicOnly) {
       return null;
@@ -215,6 +271,7 @@ export class LetterheadService {
     if (ext === '.pdf') return 'PDF';
     if (ext === '.png') return 'PNG';
     if (ext === '.jpg' || ext === '.jpeg') return 'JPG';
+    if (ext === '.docx' || ext === '.doc') return 'DOCX';
     return null;
   }
 
@@ -222,7 +279,7 @@ export class LetterheadService {
     companyId: string,
     originalName: string,
     buffer: Buffer
-  ): { storedPath: string; fileType: 'PDF' | 'PNG' | 'JPG'; cleanTitle: string } {
+  ): { storedPath: string; fileType: 'PDF' | 'PNG' | 'JPG' | 'DOCX'; cleanTitle: string } {
     if (!buffer || buffer.length === 0) {
       throw new Error('Uploaded template file is empty.');
     }
@@ -230,10 +287,10 @@ export class LetterheadService {
     // Strictly verify binary file magic signature (prevent spoofed extensions serving arbitrary files)
     const fileType = this.detectFileTypeFromBuffer(buffer, originalName, true);
     if (!fileType) {
-      throw new Error('Unsupported or invalid template binary. Only valid PDF, PNG, and JPG/JPEG files are supported.');
+      throw new Error('Unsupported or invalid template binary. Only valid PDF, PNG, JPG/JPEG, and Word (.docx) files are supported.');
     }
 
-    const ext = fileType === 'PDF' ? '.pdf' : fileType === 'PNG' ? '.png' : '.jpg';
+    const ext = fileType === 'PDF' ? '.pdf' : fileType === 'PNG' ? '.png' : fileType === 'DOCX' ? '.docx' : '.jpg';
     const rawBase = path.basename(originalName || 'letterhead', path.extname(originalName || ''));
     const safeBase = rawBase.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'letterhead';
     const cleanTitle =
@@ -250,6 +307,30 @@ export class LetterheadService {
     return { storedPath, fileType, cleanTitle };
   }
 
+  extractDocxText(buffer: Buffer): string {
+    try {
+      const idx = buffer.indexOf(Buffer.from('word/document.xml'));
+      if (idx > 0) {
+        const headIdx = buffer.lastIndexOf(Buffer.from([0x50, 0x4B, 0x03, 0x04]), idx);
+        if (headIdx >= 0 && headIdx + 30 <= buffer.length) {
+          const compMethod = buffer.readUInt16LE(headIdx + 8);
+          const compSize = buffer.readUInt32LE(headIdx + 18);
+          const nameLen = buffer.readUInt16LE(headIdx + 26);
+          const extraLen = buffer.readUInt16LE(headIdx + 28);
+          const dataStart = headIdx + 30 + nameLen + extraLen;
+          if (dataStart + compSize <= buffer.length) {
+            const compData = buffer.subarray(dataStart, dataStart + compSize);
+            const inflated = compMethod === 8 ? zlib.inflateRawSync(compData) : compData;
+            return inflated.toString('utf-8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
+  }
+
   async getTemplateFile(
     companyId: string,
     templateId: string
@@ -262,6 +343,23 @@ export class LetterheadService {
       throw new Error('Template binary file not found on disk');
     }
 
+    if (tpl.id.startsWith('builtin-')) {
+      const ext = path.extname(tpl.file_path).toLowerCase();
+      const contentType =
+        tpl.file_type === 'PNG' || ext === '.png'
+          ? 'image/png'
+          : tpl.file_type === 'JPG' || ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : tpl.file_type === 'DOCX' || ext === '.docx'
+          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          : 'application/pdf';
+      return {
+        filePath: tpl.file_path,
+        contentType,
+        fileName: path.basename(tpl.file_path),
+      };
+    }
+
     const resolved = this.validateFilePathInsideUploadDir(companyId, tpl.file_path);
     const ext = path.extname(resolved).toLowerCase();
     const contentType =
@@ -269,6 +367,8 @@ export class LetterheadService {
         ? 'image/png'
         : tpl.file_type === 'JPG' || ext === '.jpg' || ext === '.jpeg'
         ? 'image/jpeg'
+        : tpl.file_type === 'DOCX' || ext === '.docx'
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         : 'application/pdf';
 
     return {
@@ -645,10 +745,14 @@ export class LetterheadService {
 
   private async runLocalTesseractIfBundled(buffer: Buffer): Promise<string> {
     // Strictly offline check: only invoke tesseract.js when local eng.traineddata exists on disk
+    const resourcesPath = (process as any).resourcesPath || '';
     const candidates = [
+      path.join(process.cwd(), 'assets', 'tesseract', 'eng.traineddata'),
+      path.join(process.cwd(), 'assets', 'tesseract', 'eng.traineddata.gz'),
+      path.join(resourcesPath, 'assets', 'tesseract', 'eng.traineddata'),
+      path.join(resourcesPath, 'assets', 'tesseract', 'eng.traineddata.gz'),
+      path.join(getDefaultDataDir(), 'tesseract', 'eng.traineddata'),
       path.join(process.cwd(), 'eng.traineddata'),
-      path.join(process.cwd(), 'assets', 'eng.traineddata'),
-      path.join(getDefaultDataDir(), 'eng.traineddata'),
     ];
     const foundLangPath = candidates.find((p) => fs.existsSync(p));
     if (!foundLangPath) {
@@ -657,9 +761,13 @@ export class LetterheadService {
 
     try {
       const Tesseract = await import('tesseract.js');
+      const langDir = path.dirname(foundLangPath);
+      const isGz = foundLangPath.endsWith('.gz');
+
       const worker = await Tesseract.createWorker('eng', 1, {
-        langPath: path.dirname(foundLangPath),
+        langPath: langDir,
         cacheMethod: 'none',
+        gzip: isGz,
       } as any);
       const result = await worker.recognize(buffer);
       await worker.terminate();
@@ -682,7 +790,7 @@ export class LetterheadService {
     let pageWidth = 595.28;
     let pageHeight = 841.89;
     let pageCount = 1;
-    let detectedFileType: 'PDF' | 'PNG' | 'JPG' | undefined;
+    let detectedFileType: 'PDF' | 'PNG' | 'JPG' | 'DOCX' | undefined;
     let pdfTokens: Array<{ text: string; x: number; topY: number }> = [];
 
     const detected = this.detectFileTypeFromBuffer(buffer, fileNameOrPath);
@@ -711,6 +819,16 @@ export class LetterheadService {
         const ocrText = await this.runLocalTesseractIfBundled(buffer);
         extractedText = [ocrText, imgInfo.metadataText].filter(Boolean).join('\n').trim();
         confidence = ocrText.trim().length > 10 ? 0.93 : 0.85;
+      } catch {
+        extractedText = '';
+      }
+    } else if (detectedFileType === 'DOCX') {
+      try {
+        extractedText = this.extractDocxText(buffer);
+        confidence = extractedText.trim().length > 10 ? 0.94 : 0.88;
+        pageWidth = 595.28;
+        pageHeight = 841.89;
+        pageCount = 1;
       } catch {
         extractedText = '';
       }

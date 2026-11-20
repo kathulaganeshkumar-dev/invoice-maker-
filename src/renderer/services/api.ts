@@ -187,6 +187,32 @@ export const api = {
     }>('/settings/software-icon', { method: 'POST', body: JSON.stringify({ software_icon }) }),
   testDatabaseConnection: (data: any) =>
     request<{ success: boolean; message?: string }>('/settings/test-db', { method: 'POST', body: JSON.stringify(data) }),
+  getDatabaseMode: () =>
+    request<{ type: 'sqlite' | 'postgres'; connected: boolean; config?: any }>('/database/mode'),
+  autoSyncDatabaseMode: (role: string) =>
+    request<{ success: boolean; type: string; message: string }>('/database/auto-sync', {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
+  switchDatabaseMode: (data: any) =>
+    request<{ success: boolean; message: string }>('/database/switch', { method: 'POST', body: JSON.stringify(data) }),
+  getDiagnosticsDownloadUrl: () => `${getBaseUrl()}/system/diagnostics`,
+  getSystemVersion: () =>
+    request<{
+      success: boolean;
+      version: string;
+      appName: string;
+      hasUpdateBundle: boolean;
+      dataDir: string;
+      serverHost: string;
+      serverPort: number;
+    }>('/system/version'),
+  installOfflineUpdateWeb: (formData: FormData) =>
+    request<{ success: boolean; message: string; backupPath?: string }>('/system/install-offline-update', {
+      method: 'POST',
+      body: formData,
+    }),
+  getUpdateBundleDownloadUrl: () => `${getBaseUrl()}/system/update-bundle`,
   getNetworkInfo: () =>
     request<{ localIps: string[]; serverHost: string; serverPort: number }>('/network-info'),
 
@@ -382,14 +408,27 @@ export const api = {
     request<Quotation[]>(`/companies/${companyId}/quotations${search ? `?search=${encodeURIComponent(search)}` : ''}`),
   createQuotation: (companyId: string, data: any) =>
     request<Quotation>(`/companies/${companyId}/quotations`, { method: 'POST', body: JSON.stringify(data) }),
+  updateQuotation: (companyId: string, id: string, data: any) =>
+    request<Quotation>(`/companies/${companyId}/quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  previewQuotationNumber: (companyId: string, date?: string) =>
+    request<{ quotation_number: string }>(`/companies/${companyId}/quotations/preview-number${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   updateQuotationStatus: (companyId: string, id: string, status: string) =>
     request<Quotation>(`/companies/${companyId}/quotations/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
   convertQuotationToInvoice: (companyId: string, id: string) =>
     request<Invoice>(`/companies/${companyId}/quotations/${id}/convert-to-invoice`, { method: 'POST' }),
   deleteQuotation: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/quotations/${id}`, { method: 'DELETE' }),
-  getQuotationPdfUrl: (companyId: string, id: string, mode = 'DIGITAL_LETTERHEAD', templateId?: string) =>
-    `${getBaseUrl()}/companies/${companyId}/quotations/${id}/pdf?mode=${mode}${templateId ? `&template_id=${encodeURIComponent(templateId)}` : ''}`,
+  getQuotationPdfUrl: (companyId: string, id: string, options?: { mode?: string; templateId?: string; overlay?: boolean; top_margin_mm?: number; bottom_margin_mm?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.mode) params.append('mode', options.mode);
+    if (options?.templateId) params.append('template_id', options.templateId);
+    if (options?.overlay) params.append('overlay', 'true');
+    if (options?.top_margin_mm !== undefined) params.append('top_margin_mm', options.top_margin_mm.toString());
+    if (options?.bottom_margin_mm !== undefined) params.append('bottom_margin_mm', options.bottom_margin_mm.toString());
+    const qs = params.toString();
+    return `${getBaseUrl()}/companies/${companyId}/quotations/${id}/pdf${qs ? `?${qs}` : ''}`;
+  },
+  getQuotationCalibrationPdfUrl: () => `${getBaseUrl()}/quotations/calibration-pdf`,
 
   // Purchases
   getPurchaseOrders: (companyId: string) => request<PurchaseOrder[]>(`/companies/${companyId}/purchases/orders`),

@@ -25,7 +25,6 @@ import {
   Eye,
   FileText,
   BookmarkPlus,
-  Sparkles,
   Package,
   Users,
   Shield,
@@ -37,6 +36,13 @@ interface Props {
   modalOnly?: boolean;
   onCloseModal?: () => void;
 }
+
+export const DEFAULT_VARUN_TERMS = `Terms &Conditions: No warranty for burn / Physical Damage.
+1. Taxes: Inclusive of GST
+2. Payment: 100% Advance along with PO
+3. Validity: 7 Days
+4. Delivery: 1 week form the date of PO
+5. Installation and transport Included.`;
 
 export const QuotationsView: React.FC<Props> = ({
   companyId,
@@ -63,29 +69,25 @@ export const QuotationsView: React.FC<Props> = ({
 
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [customerNameInput, setCustomerNameInput] = useState<string>('');
+  const [billingAddressInput, setBillingAddressInput] = useState<string>('');
+  const [customerGstinInput, setCustomerGstinInput] = useState<string>('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [quoteDate, setQuoteDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [validUntil, setValidUntil] = useState<string>(
     new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
   );
+  const [topMarginMm, setTopMarginMm] = useState<number>(55);
+  const [bottomMarginMm, setBottomMarginMm] = useState<number>(32);
+  const [companyDefaultTerms, setCompanyDefaultTerms] = useState<string>(DEFAULT_VARUN_TERMS);
+  const [termsAndConditions, setTermsAndConditions] = useState<string>(DEFAULT_VARUN_TERMS);
+  const [customRoundOff, setCustomRoundOff] = useState<string>('0.00');
   const [items, setItems] = useState<any[]>([
-    { item_name: '', hsn_or_sac: '', quantity: '', rate: '', gst_rate: '18.00', unit: 'NOS' },
+    { item_name: '', description: '', hsn_or_sac: '', quantity: '1', units: '01', rate: '', gst_rate: '18.00', unit: 'NOS' },
   ]);
   const [notes, setNotes] = useState<string>('');
   const [autoSaveNewItems, setAutoSaveNewItems] = useState<boolean>(true);
-  const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState<boolean>(false);
-  const [targetItemRowIdx, setTargetItemRowIdx] = useState<number | null>(null);
   const [savingToCatalogIdx, setSavingToCatalogIdx] = useState<number | null>(null);
-
-  const [quickProduct, setQuickProduct] = useState({
-    name: '',
-    item_type: 'PRODUCT' as 'PRODUCT' | 'SERVICE',
-    unit: 'NOS',
-    hsn_or_sac: '',
-    selling_price: '',
-    gst_rate: '18.00',
-    description: '',
-  });
 
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
@@ -112,7 +114,7 @@ export const QuotationsView: React.FC<Props> = ({
   const templateOptions = useMemo(() => {
     return templates.map((tpl) => ({
       value: tpl.id,
-      label: tpl.name,
+      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
       sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
     }));
   }, [templates]);
@@ -120,32 +122,28 @@ export const QuotationsView: React.FC<Props> = ({
   const printTemplateOptions = useMemo(() => {
     return templates.map((tpl) => ({
       value: tpl.id,
-      label: tpl.name,
+      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
       sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
     }));
   }, [templates]);
 
   const catalogItemOptions = useMemo(() => {
-    return [
-      { value: '', label: '-- Manual / Custom Item --' },
-      { value: '__NEW__', label: '✨ + Add New Item (Not In Stock)...', isAction: true },
-      ...products.map((p) => {
-        const rangeParts: string[] = [];
-        if (p.min_selling_price) rangeParts.push(`Min ${formatIndianCurrency(p.min_selling_price)}`);
-        if (p.max_selling_price) rangeParts.push(`Max ${formatIndianCurrency(p.max_selling_price)}`);
-        const priceLabel =
-          rangeParts.length > 0
-            ? `${formatIndianCurrency(p.selling_price)} (${rangeParts.join(' – ')})`
-            : formatIndianCurrency(p.selling_price);
-        return {
-          value: p.id,
-          label: p.name,
-          sublabel: priceLabel,
-          badge: Number(p.current_stock) <= 0 ? 'Out of Stock' : `Stock: ${p.current_stock}`,
-          code: p.sku || p.hsn_or_sac || undefined,
-        };
-      }),
-    ];
+    return products.map((p) => {
+      const rangeParts: string[] = [];
+      if (p.min_selling_price) rangeParts.push(`Min ${formatIndianCurrency(p.min_selling_price)}`);
+      if (p.max_selling_price) rangeParts.push(`Max ${formatIndianCurrency(p.max_selling_price)}`);
+      const priceLabel =
+        rangeParts.length > 0
+          ? `${formatIndianCurrency(p.selling_price)} (${rangeParts.join(' – ')})`
+          : formatIndianCurrency(p.selling_price);
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: priceLabel,
+        badge: Number(p.current_stock) <= 0 ? 'Out of Stock' : `Stock: ${p.current_stock}`,
+        code: p.sku || p.hsn_or_sac || undefined,
+      };
+    });
   }, [products]);
 
   useEffect(() => {
@@ -204,10 +202,11 @@ export const QuotationsView: React.FC<Props> = ({
 
   const loadMaster = async () => {
     try {
-      const [cList, pList, tList] = await Promise.all([
+      const [cList, pList, tList, comp] = await Promise.all([
         api.getCustomers(companyId),
         api.getProducts(companyId),
         api.getLetterheads(companyId),
+        api.getCompany(companyId).catch(() => null),
       ]);
       setCustomers(cList);
       setProducts(pList);
@@ -217,6 +216,11 @@ export const QuotationsView: React.FC<Props> = ({
         setSelectedTemplateId(defTemplate.id);
         setActivePrintTemplateId(defTemplate.id);
       }
+      const loadedTerms =
+        (comp?.default_quotation_terms && comp.default_quotation_terms.trim()) ||
+        DEFAULT_VARUN_TERMS;
+      setCompanyDefaultTerms(loadedTerms);
+      setTermsAndConditions((prev) => (!prev || prev === DEFAULT_VARUN_TERMS ? loadedTerms : prev));
     } catch (err) {
       console.error(err);
     }
@@ -227,8 +231,10 @@ export const QuotationsView: React.FC<Props> = ({
       ...items,
       {
         item_name: '',
+        description: '',
         hsn_or_sac: '',
-        quantity: '',
+        quantity: '1',
+        units: '01',
         rate: '',
         gst_rate: '18.00',
         unit: 'NOS',
@@ -316,78 +322,13 @@ export const QuotationsView: React.FC<Props> = ({
     }
   };
 
-  const handleQuickProductSave = async () => {
-    if (!quickProduct.name.trim()) {
-      alert('Product name is required');
-      return;
-    }
-    try {
-      const created = await api.createProduct(companyId, {
-        name: quickProduct.name.trim(),
-        item_type: quickProduct.item_type,
-        unit: quickProduct.unit || 'NOS',
-        hsn_or_sac: quickProduct.hsn_or_sac || '9999',
-        selling_price: String(quickProduct.selling_price || '0.00'),
-        purchase_price: '0.00',
-        gst_rate: String(quickProduct.gst_rate || '18.00'),
-        description: quickProduct.description || undefined,
-        current_stock: '0.00',
-        is_active: true,
-      });
 
-      setProducts((prev) => [...prev, created]);
-
-      if (targetItemRowIdx !== null && items[targetItemRowIdx]) {
-        const copy = [...items];
-        copy[targetItemRowIdx] = {
-          ...copy[targetItemRowIdx],
-          item_id: created.id,
-          item_type: created.item_type,
-          item_name: created.name,
-          hsn_or_sac: created.hsn_or_sac,
-          rate: created.selling_price,
-          gst_rate: created.gst_rate,
-          unit: created.unit,
-          is_custom: false,
-        };
-        setItems(copy);
-      } else {
-        setItems([
-          ...items,
-          {
-            item_id: created.id,
-            item_type: created.item_type,
-            item_name: created.name,
-            hsn_or_sac: created.hsn_or_sac,
-            quantity: '',
-            rate: Number(created.selling_price) > 0 ? created.selling_price : '',
-            gst_rate: created.gst_rate,
-            unit: created.unit,
-            is_custom: false,
-          },
-        ]);
-      }
-
-      setIsQuickProductModalOpen(false);
-      setQuickProduct({
-        name: '',
-        item_type: 'PRODUCT',
-        unit: 'NOS',
-        hsn_or_sac: '',
-        selling_price: '',
-        gst_rate: '18.00',
-        description: '',
-      });
-      setTargetItemRowIdx(null);
-    } catch (err: any) {
-      alert(err.message || 'Error creating product');
-    }
-  };
 
   const handleCreateQuotation = async () => {
     const cust = customers.find((c) => c.id === selectedCustomerId);
-    if (!cust) {
-      alert('Please select a customer');
+    const finalCustName = cust ? cust.name : customerNameInput.trim();
+    if (!finalCustName) {
+      alert('Please select a customer or enter customer name');
       return;
     }
 
@@ -396,19 +337,23 @@ export const QuotationsView: React.FC<Props> = ({
       alert('Please add at least one item.');
       return;
     }
-    const invalidQty = validItems.find((it) => !it.quantity || Number(it.quantity) <= 0);
-    if (invalidQty) {
-      alert(`Please enter a valid quantity for "${invalidQty.item_name}".`);
-      return;
-    }
 
     try {
-      // Automatically save new non-catalog items to products list if enabled
-      let finalItems = validItems.map((it) => ({
-        ...it,
-        quantity: it.quantity || '1',
-        rate: it.rate || '0.00',
-      }));
+      let finalItems = validItems.map((it) => {
+        const qty = it.quantity || (it.units && !isNaN(Number(it.units)) ? it.units : '1');
+        return {
+          item_id: it.item_id || undefined,
+          item_name: it.item_name.trim(),
+          description: it.description || '',
+          hsn_or_sac: it.hsn_or_sac || '9999',
+          quantity: qty,
+          units: it.units || (qty ? String(qty).padStart(2, '0') : '01'),
+          rate: it.rate || '0.00',
+          base_rate: it.rate || '0.00',
+          gst_rate: it.gst_rate || '18.00',
+          unit: it.unit || 'NOS',
+        };
+      });
       if (autoSaveNewItems) {
         for (let i = 0; i < finalItems.length; i++) {
           const it = finalItems[i];
@@ -416,7 +361,7 @@ export const QuotationsView: React.FC<Props> = ({
             try {
               const created = await api.createProduct(companyId, {
                 name: it.item_name.trim(),
-                item_type: it.item_type || 'PRODUCT',
+                item_type: 'PRODUCT',
                 hsn_or_sac: it.hsn_or_sac || '9999',
                 unit: it.unit || 'NOS',
                 selling_price: String(it.rate || '0.00'),
@@ -439,15 +384,19 @@ export const QuotationsView: React.FC<Props> = ({
       }
 
       await api.createQuotation(companyId, {
-        customer_id: cust.id,
-        customer_name: cust.name,
-        customer_gstin: cust.gstin,
-        billing_address: cust.billing_address,
-        place_of_supply_state: cust.state,
-        place_of_supply_code: cust.state_code,
+        customer_id: cust ? cust.id : undefined,
+        customer_name: finalCustName,
+        customer_gstin: cust ? cust.gstin : customerGstinInput.trim() || undefined,
+        billing_address: cust ? cust.billing_address : billingAddressInput.trim() || undefined,
+        place_of_supply_state: cust ? cust.state : undefined,
+        place_of_supply_code: cust ? cust.state_code : undefined,
         quotation_date: quoteDate,
         valid_until_date: validUntil,
         letterhead_template_id: selectedTemplateId || undefined,
+        top_margin_mm: topMarginMm,
+        bottom_margin_mm: bottomMarginMm,
+        terms_and_conditions: termsAndConditions,
+        round_off: customRoundOff && customRoundOff.trim() !== '' ? customRoundOff.trim() : '0.00',
         items: finalItems,
         notes,
       });
@@ -510,30 +459,77 @@ export const QuotationsView: React.FC<Props> = ({
 
   const resetForm = () => {
     setSelectedCustomerId('');
-    setItems([{ item_name: '', hsn_or_sac: '', quantity: '', rate: '', gst_rate: '18.00', unit: 'NOS' }]);
+    setCustomerNameInput('');
+    setBillingAddressInput('');
+    setCustomerGstinInput('');
+    setItems([{ item_name: '', description: '', hsn_or_sac: '', quantity: '1', units: '01', rate: '', gst_rate: '18.00', unit: 'NOS' }]);
     setNotes('');
+    setTermsAndConditions(companyDefaultTerms || DEFAULT_VARUN_TERMS);
+    setCustomRoundOff('0.00');
     setAutoSaveNewItems(true);
   };
 
-  const previewDocTotals = calculateDocumentTotals({
-    items: items.map((it) => {
-      const line = calculateLineItem({
-        quantity: it.quantity || 0,
-        rate: it.rate || 0,
-        gstRate: it.gst_rate || 0,
+  const previewCalculatedLines = useMemo(() => {
+    return items.map((it) => {
+      const qty = it.quantity || (it.units && !isNaN(Number(it.units)) ? it.units : '1');
+      return calculateLineItem({
+        quantity: qty || '0',
+        rate: it.rate || '0.00',
+        gstRate: it.gst_rate || '18.00',
         isTaxInclusive: false,
         isInterState: false,
       });
-      return {
-        ...it,
-        quantity: line.quantity,
-        rate: line.rate,
-        taxable_value: line.taxableValue,
-        total_tax: line.totalTax,
-        line_total: line.lineTotal,
-      };
-    }) as any,
-  });
+    });
+  }, [items]);
+
+  const previewDocTotals = useMemo(() => {
+    const roundOffVal =
+      customRoundOff !== undefined && customRoundOff !== null && customRoundOff.trim() !== ''
+        ? customRoundOff.trim()
+        : '0.00';
+    return calculateDocumentTotals({
+      items: items.map((it, idx) => {
+        const line = previewCalculatedLines[idx];
+        return {
+          ...it,
+          quantity: line?.quantity || '0',
+          rate: line?.rate || '0.00',
+          taxable_value: line?.taxableValue || '0.00',
+          total_tax: line?.totalTax || '0.00',
+          line_total: line?.lineTotal || '0.00',
+        };
+      }) as any,
+      customRoundOff: roundOffVal,
+    });
+  }, [items, previewCalculatedLines, customRoundOff]);
+
+  const viewingTotalOfProducts = useMemo(() => {
+    if (!viewingQuotation) return '0.00';
+    let sum = new Decimal(0);
+    if (viewingQuotation.items && viewingQuotation.items.length > 0) {
+      for (const it of viewingQuotation.items) {
+        const itTot =
+          it.total_amount ||
+          it.line_total ||
+          new Decimal(it.taxable_amount || it.taxable_value || 0)
+            .add(new Decimal(it.gst_amount || it.total_tax || 0))
+            .toString();
+        sum = sum.add(new Decimal(itTot || 0));
+      }
+    } else {
+      sum = new Decimal(viewingQuotation.total_taxable_value || viewingQuotation.subtotal || 0).add(
+        new Decimal(viewingQuotation.total_tax || viewingQuotation.gst_total || 0)
+      );
+    }
+    return sum.toFixed(2);
+  }, [viewingQuotation]);
+
+  const viewingGrandTotal = useMemo(() => {
+    if (!viewingQuotation) return '0.00';
+    const prodTot = new Decimal(viewingTotalOfProducts);
+    const ro = new Decimal(viewingQuotation.round_off || 0);
+    return prodTot.add(ro).toFixed(2);
+  }, [viewingQuotation, viewingTotalOfProducts]);
 
   const isStaffQuotation = (q: Quotation) => {
     const devName = (q.created_by_device_name || '').trim();
@@ -925,108 +921,15 @@ export const QuotationsView: React.FC<Props> = ({
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
-              {/* Customer Information Box */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-4">
-                <div>
-                  <div className="font-semibold text-slate-400 uppercase text-[10px]">Client / Recipient</div>
-                  <div className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-0.5">{viewingQuotation.customer_name}</div>
-                  {viewingQuotation.billing_address && (
-                    <div className="text-slate-600 dark:text-slate-400 mt-1">{viewingQuotation.billing_address}</div>
-                  )}
-                  {viewingQuotation.customer_gstin && (
-                    <div className="font-mono text-slate-500 mt-1">GSTIN: {viewingQuotation.customer_gstin}</div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="font-semibold text-slate-400 uppercase text-[10px]">Tax & Place of Supply</div>
-                  <div className="font-medium text-slate-700 dark:text-slate-300 mt-0.5">
-                    {viewingQuotation.place_of_supply_state} (State Code: {viewingQuotation.place_of_supply_code})
-                  </div>
-                  {viewingQuotation.notes && (
-                    <div className="mt-2 text-slate-500 bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
-                      <span className="font-semibold text-slate-600 dark:text-slate-400">Notes: </span>
-                      {viewingQuotation.notes}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
-                    <tr>
-                      <th className="py-2.5 px-3">Item Description</th>
-                      <th className="py-2.5 px-2">HSN/SAC</th>
-                      <th className="py-2.5 px-2 text-right">Qty</th>
-                      <th className="py-2.5 px-2 text-right">Rate</th>
-                      <th className="py-2.5 px-2 text-right">GST %</th>
-                      <th className="py-2.5 px-3 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {viewingQuotation.items?.map((it, idx) => (
-                      <tr key={idx}>
-                        <td className="py-2.5 px-3">
-                          <div className="font-semibold text-slate-800 dark:text-slate-200">{it.item_name}</div>
-                          {it.description && <div className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-pre-line mt-0.5">{it.description}</div>}
-                        </td>
-                        <td className="py-2.5 px-2 font-mono text-slate-500">{it.hsn_or_sac || '-'}</td>
-                        <td className="py-2.5 px-2 text-right font-medium">{it.quantity} {it.unit}</td>
-                        <td className="py-2.5 px-2 text-right">{formatIndianCurrency(it.rate)}</td>
-                        <td className="py-2.5 px-2 text-right">{it.gst_rate}%</td>
-                        <td className="py-2.5 px-3 text-right font-bold">{formatIndianCurrency(it.line_total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Totals Breakdown */}
-              <div className="flex justify-end">
-                <div className="w-72 space-y-1.5 p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>Taxable Subtotal:</span>
-                    <span>{formatIndianCurrency(viewingQuotation.total_taxable_value || viewingQuotation.subtotal)}</span>
-                  </div>
-                  {Number(viewingQuotation.total_cgst) > 0 && (
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>CGST:</span>
-                      <span>{formatIndianCurrency(viewingQuotation.total_cgst)}</span>
-                    </div>
-                  )}
-                  {Number(viewingQuotation.total_sgst) > 0 && (
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>SGST:</span>
-                      <span>{formatIndianCurrency(viewingQuotation.total_sgst)}</span>
-                    </div>
-                  )}
-                  {Number(viewingQuotation.total_igst) > 0 && (
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>IGST:</span>
-                      <span>{formatIndianCurrency(viewingQuotation.total_igst)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-extrabold text-sm text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
-                    <span>Grand Total:</span>
-                    <span className="text-brand-600 dark:text-brand-400">{formatIndianCurrency(viewingQuotation.grand_total)}</span>
-                  </div>
-                  {viewingQuotation.amount_in_words && (
-                    <div className="text-[10px] text-slate-500 italic pt-1">{viewingQuotation.amount_in_words}</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Template Selection for Printing */}
-              <div className="p-4 bg-brand-50/50 dark:bg-slate-900 rounded-xl border border-brand-100 dark:border-slate-700 space-y-2">
-                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                  <FileText className="w-4 h-4 text-brand-600" />
-                  <span>Print Template</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="flex-1">
+            <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+              {/* Template Switcher & Print Toolbar */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center space-x-2 flex-1 min-w-[260px]">
+                  <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5 shrink-0">
+                    <FileText className="w-4 h-4 text-brand-600" />
+                    <span>Template:</span>
+                  </span>
+                  <div className="flex-1 max-w-sm">
                     <SearchableSelect
                       options={printTemplateOptions}
                       value={activePrintTemplateId}
@@ -1035,15 +938,193 @@ export const QuotationsView: React.FC<Props> = ({
                       size="sm"
                     />
                   </div>
+                </div>
 
+                <div className="flex items-center space-x-2">
                   <button
                     type="button"
                     onClick={() => handlePrintPdf(viewingQuotation.id, 'DIGITAL_LETTERHEAD')}
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print / Download PDF</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Exact Varun Systems Document Preview */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-md rounded-xl p-8 max-w-3xl mx-auto space-y-4 text-slate-900 dark:text-slate-100 font-serif">
+                {/* Centered Document Title */}
+                <div className="text-center">
+                  <h1 className="text-lg font-bold tracking-wider underline inline-block">QUOTATION</h1>
+                </div>
+
+                {/* Top Details: Recipient on left, Quote No & Date on right */}
+                <div className="flex justify-between items-start text-xs pt-2">
+                  <div className="space-y-0.5 max-w-[60%]">
+                    <div className="font-bold">To,</div>
+                    <div className="font-bold text-sm text-slate-950 dark:text-slate-50">{viewingQuotation.customer_name}</div>
+                    {viewingQuotation.billing_address && (
+                      <div className="text-slate-600 dark:text-slate-400 whitespace-pre-line leading-relaxed">{viewingQuotation.billing_address}</div>
+                    )}
+                    {viewingQuotation.customer_gstin && (
+                      <div className="font-bold pt-0.5">GSTIN: <span className="font-mono">{viewingQuotation.customer_gstin}</span></div>
+                    )}
+                    {viewingQuotation.place_of_supply_state && (
+                      <div className="text-slate-600 dark:text-slate-400">State: {viewingQuotation.place_of_supply_state} ({viewingQuotation.place_of_supply_code})</div>
+                    )}
+                  </div>
+
+                  <div className="text-right space-y-1 text-xs">
+                    <div><strong>Quotation No:</strong> <span className="font-mono font-bold">{viewingQuotation.quotation_number}</span></div>
+                    <div><strong>Date:</strong> <span>{isoToDisplayDate(viewingQuotation.quotation_date) || viewingQuotation.quotation_date}</span></div>
+                    {viewingQuotation.valid_until_date && (
+                      <div className="text-slate-500 text-[11px]">Valid Until: {isoToDisplayDate(viewingQuotation.valid_until_date) || viewingQuotation.valid_until_date}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Salutation & Opening Paragraph */}
+                <div className="space-y-1 pt-2 text-xs">
+                  <div className="font-bold">Dear Sir,</div>
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                    With the reference to your enquiry, we are herewith quoting our lowest and best possible prices of the following.
+                  </p>
+                </div>
+
+                {/* Document Table (GST or Non-GST format based on active template) */}
+                {activePrintTemplateId === 'builtin-varun-nogst' ? (
+                  /* WITHOUT GST TABLE */
+                  <div className="border border-slate-800 dark:border-slate-300 rounded overflow-hidden">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 dark:border-slate-300 bg-slate-100 dark:bg-slate-800 font-bold">
+                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center w-12">Sl.No</th>
+                          <th className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-left">Description of Goods</th>
+                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center w-16">Units</th>
+                          <th className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right w-24">Base rate</th>
+                          <th className="py-2 px-3 text-right w-28">Total Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
+                        {viewingQuotation.items?.map((it, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{idx + 1}</td>
+                            <td className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-left">
+                              <div className="font-bold text-slate-900 dark:text-slate-100">{it.item_name}</div>
+                              {it.description && <div className="text-[11px] text-slate-500 italic mt-0.5">{it.description}</div>}
+                            </td>
+                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{it.quantity} {it.unit || 'NOS'}</td>
+                            <td className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right font-mono">{formatIndianCurrency(it.rate)}</td>
+                            <td className="py-2 px-3 text-right font-bold font-mono">{formatIndianCurrency(it.line_total)}</td>
+                          </tr>
+                        ))}
+
+                        {/* TOTAL Row */}
+                        <tr className="border-t border-slate-800 dark:border-slate-300 bg-slate-50/70 dark:bg-slate-800/50 font-bold">
+                          <td colSpan={4} className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right">TOTAL</td>
+                          <td className="py-2 px-3 text-right font-mono">{formatIndianCurrency(viewingTotalOfProducts)}</td>
+                        </tr>
+                        {/* Round Off Row */}
+                        <tr className="border-t border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50">
+                          <td colSpan={4} className="py-1.5 px-3 border-r border-slate-800 dark:border-slate-300 text-right font-medium">Round Off</td>
+                          <td className="py-1.5 px-3 text-right font-mono">{formatIndianCurrency(viewingQuotation.round_off || '0.00')}</td>
+                        </tr>
+                        {/* Grand Total Row */}
+                        <tr className="border-t-2 border-slate-800 dark:border-slate-300 bg-slate-100 dark:bg-slate-800 font-extrabold text-sm">
+                          <td colSpan={4} className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right">Grand Total</td>
+                          <td className="py-2 px-3 text-right font-mono text-brand-600 dark:text-brand-400">{formatIndianCurrency(viewingGrandTotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  /* GST FORMAT TABLE (Default matching docx) */
+                  <div className="border border-slate-800 dark:border-slate-300 rounded overflow-hidden">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 dark:border-slate-300 bg-slate-100 dark:bg-slate-800 font-bold text-[11px]">
+                          <th className="py-2 px-1.5 border-r border-slate-800 dark:border-slate-300 text-center w-9">Sl.No</th>
+                          <th className="py-2 px-2.5 border-r border-slate-800 dark:border-slate-300 text-left">Description of Goods</th>
+                          <th className="py-2 px-1 border-r border-slate-800 dark:border-slate-300 text-center w-14">Units</th>
+                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right w-18">Base rate</th>
+                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right w-20">Taxable Amount</th>
+                          <th className="py-2 px-1 border-r border-slate-800 dark:border-slate-300 text-center w-12">GST %</th>
+                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right w-18">GST Amount</th>
+                          <th className="py-2 px-2.5 text-right w-22">Total Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
+                        {viewingQuotation.items?.map((it, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="py-2 px-1.5 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{idx + 1}</td>
+                            <td className="py-2 px-2.5 border-r border-slate-800 dark:border-slate-300 text-left">
+                              <div className="font-bold text-slate-900 dark:text-slate-100">{it.item_name}</div>
+                              {it.description && <div className="text-[11px] text-slate-500 italic mt-0.5">{it.description}</div>}
+                            </td>
+                            <td className="py-2 px-1 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{it.quantity} {it.unit || 'NOS'}</td>
+                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right font-mono">{formatIndianCurrency(it.rate)}</td>
+                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right font-mono">{formatIndianCurrency(it.taxable_value)}</td>
+                            <td className="py-2 px-1 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{it.gst_rate}%</td>
+                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right font-mono">{formatIndianCurrency(it.total_tax)}</td>
+                            <td className="py-2 px-2.5 text-right font-bold font-mono">{formatIndianCurrency(it.line_total)}</td>
+                          </tr>
+                        ))}
+
+                        {/* TOTAL Row */}
+                        <tr className="border-t border-slate-800 dark:border-slate-300 bg-slate-50/70 dark:bg-slate-800/50 font-bold">
+                          <td colSpan={7} className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right">TOTAL</td>
+                          <td className="py-2 px-2.5 text-right font-mono">{formatIndianCurrency(viewingTotalOfProducts)}</td>
+                        </tr>
+                        {/* Round Off Row */}
+                        <tr className="border-t border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50">
+                          <td colSpan={7} className="py-1.5 px-3 border-r border-slate-800 dark:border-slate-300 text-right font-medium">Round Off</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{formatIndianCurrency(viewingQuotation.round_off || '0.00')}</td>
+                        </tr>
+                        {/* Grand Total Row */}
+                        <tr className="border-t-2 border-slate-800 dark:border-slate-300 bg-slate-100 dark:bg-slate-800 font-extrabold text-sm">
+                          <td colSpan={7} className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right">Grand Total</td>
+                          <td className="py-2 px-2.5 text-right font-mono text-brand-600 dark:text-brand-400">{formatIndianCurrency(viewingGrandTotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Amount in Words */}
+                {viewingQuotation.amount_in_words && (
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 italic">
+                    Amount Chargeable (in words): <strong>{viewingQuotation.amount_in_words}</strong>
+                  </div>
+                )}
+
+                {/* Terms & Conditions */}
+                <div className="pt-2 text-xs space-y-1.5">
+                  <div className="font-bold underline text-slate-900 dark:text-slate-100">
+                    Terms &amp; Conditions:
+                  </div>
+                  <div className="pl-3 space-y-1 text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed font-sans">
+                    {viewingQuotation.terms_and_conditions || viewingQuotation.terms_conditions || 'No warranty for burn / Physical Damage.'}
+                  </div>
+                  {viewingQuotation.notes && (
+                    <div className="pt-1 text-[11px] text-slate-500 italic">
+                      Notes: {viewingQuotation.notes}
+                    </div>
+                  )}
+                  <div className="text-slate-600 dark:text-slate-400 pt-2 font-medium">
+                    {viewingQuotation.closing_text || 'Thanking you and assuring of our best services and attention at all times.'}
+                  </div>
+                </div>
+
+                {/* Sign-off */}
+                <div className="flex justify-end pt-4 pb-2 text-xs">
+                  <div className="text-right space-y-8 min-w-[200px]">
+                    <div>Yours truly,</div>
+                    <div>
+                      <div className="font-extrabold text-sm text-slate-900 dark:text-slate-100 tracking-wide">For VARUN SYSTEMS.</div>
+                      <div className="text-[10px] text-slate-400 font-sans">[ Authorized Signatory ]</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1167,86 +1248,85 @@ export const QuotationsView: React.FC<Props> = ({
                 />
               </div>
 
-              {/* Items Table */}
+              {/* 8-Column GST Quotation Table */}
               <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
-                <table className="w-full text-left">
+                <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
-                      <th className="p-2">Select Catalog Item</th>
-                      <th className="p-2">Custom Description</th>
-                      <th className="p-2 w-20">Qty</th>
-                      <th className="p-2 w-28">Rate (₹)</th>
-                      <th className="p-2 w-24">GST Rate</th>
-                      <th className="p-2 w-28 text-right">Amount (₹)</th>
-                      <th className="p-2 w-16 text-center">Actions</th>
+                      <th className="p-2 w-10 text-center">#</th>
+                      <th className="p-2">Description of Goods</th>
+                      <th className="p-2 w-16 text-center">Units</th>
+                      <th className="p-2 w-28 text-right">Base rate (₹)</th>
+                      <th className="p-2 w-28 text-right">Taxable (₹)</th>
+                      <th className="p-2 w-20 text-center">GST %</th>
+                      <th className="p-2 w-24 text-right">GST (₹)</th>
+                      <th className="p-2 w-28 text-right">Total (₹)</th>
+                      <th className="p-2 w-12 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {items.map((item, idx) => {
-                      const qty = Number(item.quantity) || 0;
-                      const rate = Number(item.rate) || 0;
-                      const gst = Number(item.gst_rate) || 0;
-                      const taxable = qty * rate;
-                      const totalTax = taxable * (gst / 100);
-                      const lineTotal = taxable + totalTax;
-                      const isUnsavedNonStock = !item.item_id && Boolean(item.item_name?.trim());
+                      const lineCalc = previewCalculatedLines[idx] || {
+                        taxableValue: '0.00',
+                        totalTax: '0.00',
+                        lineTotal: '0.00',
+                      };
+                      const isUnsavedCustom = !item.item_id && Boolean(item.item_name?.trim());
 
                       return (
                         <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
-                          <td className="p-2">
+                          <td className="p-2 text-center font-mono font-bold text-slate-400 text-xs align-top pt-3">
+                            {idx + 1}
+                          </td>
+                          <td className="p-2 align-top">
                             <SearchableSelect
                               options={catalogItemOptions}
                               value={item.item_id || ''}
-                              onChange={(val) => {
-                                if (val === '__NEW__') {
-                                  setTargetItemRowIdx(idx);
-                                  setQuickProduct({
-                                    name: item.item_name || '',
-                                    item_type: 'PRODUCT',
-                                    unit: item.unit || 'NOS',
-                                    hsn_or_sac: item.hsn_or_sac || '',
-                                    selling_price: item.rate || '0.00',
-                                    gst_rate: item.gst_rate || '18.00',
-                                    description: '',
-                                  });
-                                  setIsQuickProductModalOpen(true);
-                                } else {
-                                  handleProductSelect(idx, val);
-                                }
+                              freeTextValue={item.item_name || ''}
+                              hideSelectedMeta
+                              onChange={(val) => handleProductSelect(idx, val)}
+                              onFreeTextChange={(text) => {
+                                const copy = [...items];
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  item_id: undefined,
+                                  item_name: text,
+                                  is_custom: true,
+                                };
+                                setItems(copy);
                               }}
-                              placeholder="-- Manual / Catalog --"
+                              placeholder="Select product or enter description..."
                               size="sm"
                             />
+                            <textarea
+                              rows={2}
+                              placeholder="Specifications / warranty details (e.g. 1 Year Warranty, Intel i5, 16GB RAM...)"
+                              value={item.description || ''}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].description = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700/60 mt-1 font-sans"
+                            />
                           </td>
-                          <td className="p-2">
+                          <td className="p-2 align-top pt-2.5">
                             <input
                               type="text"
-                              placeholder="Item name / non-stock description"
-                              value={item.item_name}
+                              placeholder="01"
+                              value={item.units || item.quantity || '01'}
                               onChange={(e) => {
+                                const val = e.target.value;
                                 const copy = [...items];
-                                copy[idx].item_name = e.target.value;
+                                copy[idx].units = val;
+                                const num = parseFloat(val);
+                                copy[idx].quantity = !isNaN(num) && num > 0 ? String(num) : '1';
                                 setItems(copy);
                               }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-xs"
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-1.5 py-1 text-center text-xs font-mono"
                             />
                           </td>
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              placeholder="Qty"
-                              value={item.quantity ?? ''}
-                              onChange={(e) => {
-                                const copy = [...items];
-                                copy[idx].quantity = e.target.value;
-                                setItems(copy);
-                              }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-xs text-right font-mono"
-                            />
-                          </td>
-                          <td className="p-2 align-top">
+                          <td className="p-2 align-top pt-2.5">
                             {(() => {
                               let isBelowMin = false;
                               let isAboveMax = false;
@@ -1329,7 +1409,10 @@ export const QuotationsView: React.FC<Props> = ({
                               );
                             })()}
                           </td>
-                          <td className="p-2">
+                          <td className="p-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300 align-top pt-3">
+                            {formatIndianCurrency(lineCalc.taxableValue)}
+                          </td>
+                          <td className="p-2 align-top pt-2.5">
                             <select
                               value={item.gst_rate}
                               onChange={(e) => {
@@ -1337,7 +1420,7 @@ export const QuotationsView: React.FC<Props> = ({
                                 copy[idx].gst_rate = e.target.value;
                                 setItems(copy);
                               }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-xs"
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-1.5 py-1 bg-white dark:bg-slate-700 text-xs"
                             >
                               {GST_RATES.map((rate) => (
                                 <option key={rate} value={rate}>
@@ -1346,18 +1429,21 @@ export const QuotationsView: React.FC<Props> = ({
                               ))}
                             </select>
                           </td>
-                          <td className="p-2 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
-                            {formatIndianCurrency(lineTotal)}
+                          <td className="p-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300 align-top pt-3">
+                            {formatIndianCurrency(lineCalc.totalTax)}
                           </td>
-                          <td className="p-2 text-center">
+                          <td className="p-2 text-right font-mono font-bold text-xs text-slate-800 dark:text-slate-200 align-top pt-3">
+                            {formatIndianCurrency(lineCalc.lineTotal)}
+                          </td>
+                          <td className="p-2 text-center align-top pt-2.5">
                             <div className="flex items-center justify-center space-x-1">
-                              {isUnsavedNonStock && (
+                              {isUnsavedCustom && (
                                 <button
                                   type="button"
                                   disabled={savingToCatalogIdx === idx}
                                   onClick={() => handleSaveCustomItemToCatalog(idx)}
                                   className="text-brand-600 hover:text-brand-800 dark:text-brand-400 p-1 rounded hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
-                                  title="Save this new / non-stock item into Products Catalog"
+                                  title="Save item to Products Catalog"
                                 >
                                   <BookmarkPlus className="w-4 h-4" />
                                 </button>
@@ -1379,63 +1465,120 @@ export const QuotationsView: React.FC<Props> = ({
                 </table>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <div className="flex items-center space-x-2">
+              {/* Standard Add Row & Totals summary */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex items-center space-x-3">
                   <button
                     type="button"
                     onClick={() => handleAddItem(false)}
-                    className="inline-flex items-center space-x-1 text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-bold transition-all"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 border border-brand-200 dark:border-brand-800 rounded-lg text-xs font-bold transition-all shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>+ Add Item Row</span>
+                    <span>Add Item Row</span>
                   </button>
-
                   <button
                     type="button"
-                    onClick={() => {
-                      setTargetItemRowIdx(null);
-                      setQuickProduct({
-                        name: '',
-                        item_type: 'PRODUCT',
-                        unit: 'NOS',
-                        hsn_or_sac: '',
-                        selling_price: '',
-                        gst_rate: '18.00',
-                        description: '',
-                      });
-                      setIsQuickProductModalOpen(true);
-                    }}
-                    className="inline-flex items-center space-x-1.5 text-xs px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-lg font-bold transition-all shadow-sm"
+                    onClick={() => handleAddItem(true)}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold transition-all shadow-sm"
+                    title="Add custom or not-in-stock item"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    <span>+ Add New Item (Not In Stock)</span>
+                    <Plus className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Add Custom Item</span>
                   </button>
                 </div>
 
-                <div className="flex items-center space-x-4 text-xs bg-slate-50 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-wrap items-center gap-3 text-xs bg-slate-50 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-slate-500">Taxable: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTaxableValue)}</strong></span>
-                  <span className="text-slate-500">Tax: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTax)}</strong></span>
-                  <span className="text-slate-500">Grand Total: <strong className="text-brand-600 text-sm font-bold">{formatIndianCurrency(previewDocTotals.grandTotal)}</strong></span>
+                  <span className="text-slate-500">GST: <strong className="text-slate-800 dark:text-slate-200">{formatIndianCurrency(previewDocTotals.totalTax)}</strong></span>
+                  <span className="text-slate-700 dark:text-slate-200">TOTAL: <strong className="text-slate-900 dark:text-slate-100 font-bold font-mono">{formatIndianCurrency(previewDocTotals.totalProductsAmount)}</strong></span>
+                  
+                  {/* Custom Round Off */}
+                  <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <span className="text-slate-600 dark:text-slate-300 font-semibold text-[11px] whitespace-nowrap">
+                      Round Off:
+                    </span>
+                    <div className="flex items-center">
+                      <span className="text-slate-400 text-[11px] mr-1 font-mono">₹</span>
+                      <input
+                        type="text"
+                        value={customRoundOff}
+                        onChange={(e) => setCustomRoundOff(e.target.value)}
+                        placeholder="0.00"
+                        className="w-16 h-6 px-1.5 text-right font-mono text-xs border border-slate-300 dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500 font-semibold"
+                        title="Enter custom round off amount (e.g. +15, -0.50, or 0. Defaults to 0.00)"
+                      />
+                    </div>
+                  </div>
+
+                  <span className="text-slate-500">Grand Total: <strong className="text-brand-600 dark:text-brand-400 text-sm font-bold font-mono">{formatIndianCurrency(previewDocTotals.grandTotal)}</strong></span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-2.5 bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200/80 dark:border-amber-800/40 rounded-lg">
-                <label className="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={autoSaveNewItems}
-                    onChange={(e) => setAutoSaveNewItems(e.target.checked)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 w-4 h-4"
+              {/* Physical Letterhead Clearance & Terms */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Pre-Printed Letterhead Clearance (mm)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-500">Top Header Margin (mm):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="120"
+                        value={topMarginMm}
+                        onChange={(e) => setTopMarginMm(Number(e.target.value) || 55)}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500">Bottom Footer Margin (mm):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={bottomMarginMm}
+                        onChange={(e) => setBottomMarginMm(Number(e.target.value) || 32)}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    Default 55mm top / 32mm bottom leaves exact clearance for physical printed stationery.
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      Terms &amp; Conditions (Varun Systems)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTermsAndConditions(companyDefaultTerms || DEFAULT_VARUN_TERMS)}
+                      className="text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
+                      title="Reset terms to Settings defaults"
+                    >
+                      Reset to Settings Default
+                    </button>
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={termsAndConditions}
+                    onChange={(e) => setTermsAndConditions(e.target.value)}
+                    placeholder="Enter quotation terms and conditions..."
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs font-mono leading-relaxed"
                   />
-                  <span>
-                    <strong>Add new items to Products List automatically</strong> (Creates newly entered items in your catalog with initial stock of 0)
-                  </span>
-                </label>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Pre-filled from Settings. You can edit, add, or delete points for this quotation. All points print on the quotation.
+                  </p>
+                </div>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Quotation Notes & Scope of Work
+                  Quotation Notes &amp; Scope of Work
                 </label>
                 <textarea
                   rows={2}
@@ -1461,152 +1604,6 @@ export const QuotationsView: React.FC<Props> = ({
                 className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
               >
                 Create Quotation
-              </button>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {/* QUICK ADD PRODUCT (NOT IN STOCK) MODAL */}
-      {isQuickProductModalOpen && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden flex flex-col">
-            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
-              <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Add New Item (Not In Stock) to Products List</span>
-              </h2>
-              <button
-                onClick={() => setIsQuickProductModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3.5 text-xs">
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-amber-800 dark:text-amber-200 flex items-start space-x-2">
-                <Package className="w-4 h-4 mt-0.5 shrink-0" />
-                <p>
-                  This product will be saved to your <strong>Products & Services List</strong> with initial stock of <strong>0.00 (Not In Stock)</strong> and inserted into your current quotation.
-                </p>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Product / Item Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Industrial Control Valve 2-inch"
-                  value={quickProduct.name}
-                  onChange={(e) => setQuickProduct({ ...quickProduct, name: e.target.value })}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-medium"
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Item Type
-                  </label>
-                  <select
-                    value={quickProduct.item_type}
-                    onChange={(e) => setQuickProduct({ ...quickProduct, item_type: e.target.value as any })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    <option value="PRODUCT">Physical Product</option>
-                    <option value="SERVICE">Service / Labor</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Unit
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="NOS, PCS, MTR..."
-                    value={quickProduct.unit}
-                    onChange={(e) => setQuickProduct({ ...quickProduct, unit: e.target.value.toUpperCase() })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Selling Rate (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={quickProduct.selling_price}
-                    onChange={(e) => setQuickProduct({ ...quickProduct, selling_price: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    GST Rate
-                  </label>
-                  <select
-                    value={quickProduct.gst_rate}
-                    onChange={(e) => setQuickProduct({ ...quickProduct, gst_rate: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700"
-                  >
-                    {GST_RATES.map((r) => (
-                      <option key={r} value={r}>{r}%</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    HSN / SAC
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 8481"
-                    value={quickProduct.hsn_or_sac}
-                    onChange={(e) => setQuickProduct({ ...quickProduct, hsn_or_sac: e.target.value })}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-700 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Description / Specification
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Optional technical specifications or item notes..."
-                  value={quickProduct.description}
-                  onChange={(e) => setQuickProduct({ ...quickProduct, description: e.target.value })}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 bg-white dark:bg-slate-700"
-                />
-              </div>
-            </div>
-
-            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => setIsQuickProductModalOpen(false)}
-                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickProductSave}
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm flex items-center space-x-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Save to Products & Insert</span>
               </button>
             </div>
           </div>

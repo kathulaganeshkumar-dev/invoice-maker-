@@ -4,9 +4,47 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { initDatabase, getDatabase } from './database/connection';
+import { initDatabase, getDatabase, closeDatabase } from './database/connection';
 import { seedInitialData } from './database/seed';
 import { createApiRouter } from './routes';
+import { BackupRestoreService } from './services/backupRestoreService';
+import { logger } from './services/logger';
+
+let activeHttpServer: any = null;
+let activeWatchInterval: NodeJS.Timeout | null = null;
+const sseClients = new Set<express.Response>();
+
+export async function stopServer(): Promise<void> {
+  logger.info('[Server] Stopping embedded Express server...');
+  if (activeWatchInterval) {
+    clearInterval(activeWatchInterval);
+    activeWatchInterval = null;
+  }
+  for (const client of sseClients) {
+    try {
+      client.end();
+    } catch {
+      // ignore
+    }
+  }
+  sseClients.clear();
+
+  if (activeHttpServer) {
+    await new Promise<void>((resolve) => {
+      activeHttpServer.close(() => {
+        resolve();
+      });
+      if (typeof activeHttpServer.closeAllConnections === 'function') {
+        activeHttpServer.closeAllConnections();
+      }
+    });
+    activeHttpServer = null;
+    logger.info('[Server] HTTP listener closed cleanly.');
+  }
+
+  await closeDatabase();
+  logger.info('[Server] Database pool closed.');
+}
 
 export async function startServer(port = 4200): Promise<express.Express> {
   const app = express();
@@ -124,10 +162,18 @@ export async function startServer(port = 4200): Promise<express.Express> {
   });
 
   // Initialize DB and Run Migrations
-  console.log('[Database] Initializing Knex and executing schema migrations...');
-  const db = await initDatabase({ type: 'sqlite' });
+  logger.info('[Database] Initializing Knex and executing schema migrations...');
+  const db = await initDatabase();
   await seedInitialData(db);
-  console.log('[Database] Ready and verified!');
+  logger.info('[Database] Ready and verified!');
+
+  // Trigger automated daily rolling local backup (keeps last 7 copies)
+  try {
+    const backupRestoreService = new BackupRestoreService(db);
+    backupRestoreService.runDailyRollingBackup().catch((err) => logger.warn('[Server] Daily rolling backup error:', err));
+  } catch (err) {
+    logger.warn('[Server] Could not initialize daily rolling backup:', err);
+  }
 
   // Mount API router
   app.use('/api', createApiRouter(db));
@@ -171,11 +217,10 @@ export async function startServer(port = 4200): Promise<express.Express> {
     || candidatePaths.find((p) => fs.existsSync(p))
     || path.join(process.cwd(), 'dist');
 
-  console.log(`[Server] Serving static UI from ${distPath}`);
+  logger.info(`[Server] Serving static UI from ${distPath}`);
 
   // Local auto-reload SSE stream for port 4200 development (100% offline/local)
   const serverBootId = String(Date.now());
-  const sseClients = new Set<express.Response>();
   const indexHtmlPath = path.join(distPath, 'index.html');
   let lastIndexSignature = '';
   try {
@@ -186,14 +231,13 @@ export async function startServer(port = 4200): Promise<express.Express> {
     // ignore
   }
 
-  let watchInterval: NodeJS.Timeout | null = null;
   const ensureDistWatcher = () => {
-    if (watchInterval) return;
-    watchInterval = setInterval(() => {
+    if (activeWatchInterval) return;
+    activeWatchInterval = setInterval(() => {
       if (sseClients.size === 0) {
-        if (watchInterval) {
-          clearInterval(watchInterval);
-          watchInterval = null;
+        if (activeWatchInterval) {
+          clearInterval(activeWatchInterval);
+          activeWatchInterval = null;
         }
         return;
       }
@@ -264,13 +308,16 @@ export async function startServer(port = 4200): Promise<express.Express> {
   return new Promise((resolve, reject) => {
     function tryListen(p: number, maxAttempts = 10) {
       const server = app.listen(p, host, () => {
-        console.log(`[Server] Enterprise Invoice Backend running on http://127.0.0.1:${p} (host: ${host})`);
+        logger.info(`[Server] Enterprise Invoice Backend running on http://127.0.0.1:${p} (host: ${host})`);
         process.env.ACTUAL_SERVER_PORT = String(p);
+        activeHttpServer = server;
+        (app as any).httpServer = server;
+        (app as any).stopServer = stopServer;
         resolve(app);
       });
       server.on('error', (err: any) => {
         if (err.code === 'EADDRINUSE' && maxAttempts > 0) {
-          console.warn(`[Server] Port ${p} is in use, retrying on port ${p + 1}...`);
+          logger.warn(`[Server] Port ${p} is in use, retrying on port ${p + 1}...`);
           tryListen(p + 1, maxAttempts - 1);
         } else {
           reject(err);

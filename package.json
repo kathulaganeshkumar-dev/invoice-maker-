@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit",
     "db:purge": "ts-node src/server/database/purge.ts",
     "package:win": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win",
+    "package:update": "node scripts/package-update.js",
     "package:mac": "npm run build && electron-builder --mac",
     "package:linux": "npm run build && electron-builder --linux",
     "test": "vitest run"
@@ -34,11 +35,40 @@
     "asarUnpack": [
       "**/*.node"
     ],
+    "extraResources": [
+      {
+        "from": "assets/tesseract",
+        "to": "assets/tesseract",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "assets/fonts",
+        "to": "assets/fonts",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "assets/templates",
+        "to": "assets/templates",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
       "dist-server/**/*",
-      "package.json"
+      "package.json",
+      "!tools/**/*",
+      "!tests/**/*",
+      "!scripts/**/*",
+      "!**/*.pem",
+      "!**/*.key",
+      "!**/*.lic"
     ],
     "win": {
       "target": [
@@ -88,6 +118,7 @@
     }
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "call-bind-apply-helpers": "^1.0.2",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",

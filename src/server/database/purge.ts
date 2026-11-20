@@ -60,6 +60,8 @@ export async function purgeDatabaseFile(dbPath: string): Promise<void> {
           show_company_selector_on_startup: 1,
           admin_pin_hash: null,
           default_staff_menus_json: null,
+          last_seen_utc: null,
+          license_data_json: null,
         }).catch(() => {});
       }
       try {
@@ -128,6 +130,19 @@ export async function purgeAllData(): Promise<void> {
         console.log(`[Purge] Reset LAN config at ${lanFile}`);
       } catch (err) {
         console.warn(`[Purge] Could not reset ${lanFile}:`, err);
+      }
+    }
+
+    // Remove db-config.json and license.lic if present
+    for (const f of ['db-config.json', 'license.lic']) {
+      const filePath = path.join(dataDir, f);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`[Purge] Removed ${filePath}`);
+        } catch {
+          // ignore
+        }
       }
     }
   }

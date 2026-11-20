@@ -403,25 +403,40 @@ export async function runMigrations(db: Knex): Promise<void> {
     await db.schema.createTable('quotations', (table) => {
       table.string('id').primary();
       table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
-      table.string('branch_id').notNullable();
+      table.string('branch_id').nullable();
       table.string('quotation_number').notNullable();
       table.integer('revision_number').defaultTo(1);
       table.string('quotation_date').notNullable();
       table.string('valid_until_date').notNullable();
-      table.string('customer_id').notNullable().references('id').inTable('customers');
+      table.string('customer_id').nullable().references('id').inTable('customers');
       table.string('customer_name').notNullable();
       table.string('customer_gstin').nullable();
       table.text('billing_address').notNullable();
-      table.text('shipping_address').notNullable();
-      table.string('place_of_supply_state').notNullable();
-      table.string('place_of_supply_code', 2).notNullable();
+      table.text('shipping_address').nullable();
+      table.string('customer_state').nullable();
+      table.string('customer_state_code').nullable();
+      table.string('place_of_supply').nullable();
+      table.string('place_of_supply_state').nullable();
+      table.string('place_of_supply_code', 2).nullable();
+      table.string('contact_person').nullable();
+      table.string('contact_phone').nullable();
+      table.string('contact_email').nullable();
+      table.boolean('reverse_charge').defaultTo(false);
       table.string('subtotal').defaultTo('0.00');
       table.string('overall_discount_amount').defaultTo('0.00');
+      table.string('discount_total').defaultTo('0.00');
       table.string('total_taxable_value').defaultTo('0.00');
+      table.string('taxable_total').defaultTo('0.00');
       table.string('total_cgst').defaultTo('0.00');
+      table.string('cgst_total').defaultTo('0.00');
       table.string('total_sgst').defaultTo('0.00');
+      table.string('sgst_total').defaultTo('0.00');
       table.string('total_igst').defaultTo('0.00');
+      table.string('igst_total').defaultTo('0.00');
+      table.string('total_utgst').defaultTo('0.00');
+      table.string('utgst_total').defaultTo('0.00');
       table.string('total_tax').defaultTo('0.00');
+      table.string('gst_total').defaultTo('0.00');
       table.string('additional_charges').defaultTo('0.00');
       table.string('round_off').defaultTo('0.00');
       table.string('grand_total').defaultTo('0.00');
@@ -430,8 +445,19 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('converted_invoice_id').nullable();
       table.string('converted_at').nullable();
       table.string('letterhead_template_id').nullable();
+      table.string('salutation').defaultTo('Dear Sir,');
+      table.text('opening_text').defaultTo('With the reference to your enquiry, we are herewith quoting our lowest and best possible prices of the following.');
+      table.text('closing_text').defaultTo('Thanking you and assuring of our best services and attention at all times.');
+      table.string('sign_off_company').defaultTo('For VARUN SYSTEMS.');
       table.text('notes').nullable();
       table.text('terms_conditions').nullable();
+      table.text('terms_and_conditions').nullable();
+      table.float('top_margin_mm').defaultTo(55.0);
+      table.float('bottom_margin_mm').defaultTo(32.0);
+      table.float('left_margin_mm').defaultTo(15.0);
+      table.float('right_margin_mm').defaultTo(15.0);
+      table.boolean('print_letterhead_overlay').defaultTo(false);
+      table.boolean('is_gst').defaultTo(true);
       table.string('created_at').notNullable();
       table.string('updated_at').notNullable();
 
@@ -449,13 +475,17 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('item_type').defaultTo('PRODUCT');
       table.string('item_name').notNullable();
       table.text('description').nullable();
-      table.string('hsn_or_sac').notNullable();
+      table.string('hsn_or_sac').defaultTo('');
+      table.string('hsn_sac').defaultTo('');
       table.string('quantity').defaultTo('1.00');
       table.string('unit').defaultTo('NOS');
+      table.string('units').defaultTo('01');
       table.string('rate').defaultTo('0.00');
+      table.string('base_rate').defaultTo('0.00');
       table.string('discount_percentage').defaultTo('0.00');
       table.string('discount_amount').defaultTo('0.00');
       table.string('taxable_value').defaultTo('0.00');
+      table.string('taxable_amount').defaultTo('0.00');
       table.string('gst_rate').defaultTo('18.00');
       table.string('cgst_rate').defaultTo('9.00');
       table.string('cgst_amount').defaultTo('0.00');
@@ -463,8 +493,12 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('sgst_amount').defaultTo('0.00');
       table.string('igst_rate').defaultTo('0.00');
       table.string('igst_amount').defaultTo('0.00');
+      table.string('utgst_rate').defaultTo('0.00');
+      table.string('utgst_amount').defaultTo('0.00');
       table.string('total_tax').defaultTo('0.00');
+      table.string('gst_amount').defaultTo('0.00');
       table.string('line_total').defaultTo('0.00');
+      table.string('total_amount').defaultTo('0.00');
       table.integer('sort_order').defaultTo(0);
 
       table.index(['quotation_id']);
@@ -932,7 +966,7 @@ export async function runMigrations(db: Knex): Promise<void> {
     }
   }
 
-  for (const col of ['admin_pin_hash', 'default_staff_menus_json']) {
+  for (const col of ['admin_pin_hash', 'default_staff_menus_json', 'last_seen_utc', 'license_data_json']) {
     const exists = await db.schema.hasColumn('app_settings', col);
     if (!exists) {
       await db.schema.alterTable('app_settings', (table) => {
@@ -948,6 +982,112 @@ export async function runMigrations(db: Knex): Promise<void> {
       if (!exists) {
         await db.schema.alterTable(tbl, (table) => {
           table.string(col).nullable();
+        });
+      }
+    }
+  }
+
+  // Ensure host admin PC is never stored in workstation_permissions so staff list strictly contains user-created staff
+  if (await db.schema.hasTable('workstation_permissions')) {
+    await db('workstation_permissions').where('is_admin', 1).orWhere('is_admin', true).orWhere('role', 'ADMIN').del().catch(() => {});
+  }
+
+  // 29. Quotation Numbering Sequences (for Varun Systems VS-QT-... sequences)
+  if (!(await db.schema.hasTable('quotation_sequences'))) {
+    await db.schema.createTable('quotation_sequences', (table) => {
+      table.string('id').primary();
+      table.string('company_id').notNullable().references('id').inTable('companies').onDelete('CASCADE');
+      table.string('prefix').defaultTo('VS-QT-');
+      table.integer('current_number').defaultTo(0);
+      table.string('financial_year').notNullable();
+      table.integer('padding').defaultTo(3);
+      table.string('created_at').notNullable();
+      table.string('updated_at').notNullable();
+
+      table.unique(['company_id', 'prefix', 'financial_year']);
+      table.index(['company_id']);
+    });
+  }
+
+  // Ensure all Varun Systems quotation columns exist on existing databases
+  if (await db.schema.hasTable('quotations')) {
+    const qCols: Array<{ name: string; type: 'string' | 'text' | 'boolean' | 'float'; defaultVal?: any }> = [
+      { name: 'reverse_charge', type: 'boolean', defaultVal: false },
+      { name: 'discount_total', type: 'string', defaultVal: '0.00' },
+      { name: 'taxable_total', type: 'string', defaultVal: '0.00' },
+      { name: 'cgst_total', type: 'string', defaultVal: '0.00' },
+      { name: 'sgst_total', type: 'string', defaultVal: '0.00' },
+      { name: 'igst_total', type: 'string', defaultVal: '0.00' },
+      { name: 'utgst_total', type: 'string', defaultVal: '0.00' },
+      { name: 'gst_total', type: 'string', defaultVal: '0.00' },
+      { name: 'total_utgst', type: 'string', defaultVal: '0.00' },
+      { name: 'total_cgst', type: 'string', defaultVal: '0.00' },
+      { name: 'total_sgst', type: 'string', defaultVal: '0.00' },
+      { name: 'total_igst', type: 'string', defaultVal: '0.00' },
+      { name: 'total_tax', type: 'string', defaultVal: '0.00' },
+      { name: 'total_taxable_value', type: 'string', defaultVal: '0.00' },
+      { name: 'overall_discount_amount', type: 'string', defaultVal: '0.00' },
+      { name: 'additional_charges', type: 'string', defaultVal: '0.00' },
+      { name: 'round_off', type: 'string', defaultVal: '0.00' },
+      { name: 'salutation', type: 'string', defaultVal: 'Dear Sir,' },
+      { name: 'opening_text', type: 'text', defaultVal: 'With the reference to your enquiry, we are herewith quoting our lowest and best possible prices of the following.' },
+      { name: 'closing_text', type: 'text', defaultVal: 'Thanking you and assuring of our best services and attention at all times.' },
+      { name: 'sign_off_company', type: 'string', defaultVal: 'For VARUN SYSTEMS.' },
+      { name: 'contact_person', type: 'string' },
+      { name: 'contact_phone', type: 'string' },
+      { name: 'contact_email', type: 'string' },
+      { name: 'customer_state', type: 'string' },
+      { name: 'customer_state_code', type: 'string' },
+      { name: 'place_of_supply', type: 'string' },
+      { name: 'place_of_supply_state', type: 'string' },
+      { name: 'place_of_supply_code', type: 'string' },
+      { name: 'shipping_address', type: 'text' },
+      { name: 'terms_conditions', type: 'text' },
+      { name: 'terms_and_conditions', type: 'text' },
+      { name: 'top_margin_mm', type: 'float', defaultVal: 55.0 },
+      { name: 'bottom_margin_mm', type: 'float', defaultVal: 32.0 },
+      { name: 'left_margin_mm', type: 'float', defaultVal: 15.0 },
+      { name: 'right_margin_mm', type: 'float', defaultVal: 15.0 },
+      { name: 'print_letterhead_overlay', type: 'boolean', defaultVal: false },
+      { name: 'is_gst', type: 'boolean', defaultVal: true },
+      { name: 'letterhead_template_id', type: 'string' },
+    ];
+
+    for (const c of qCols) {
+      const exists = await db.schema.hasColumn('quotations', c.name);
+      if (!exists) {
+        await db.schema.alterTable('quotations', (table) => {
+          if (c.type === 'boolean') {
+            table.boolean(c.name).defaultTo(c.defaultVal ?? false);
+          } else if (c.type === 'text') {
+            table.text(c.name).nullable();
+          } else if (c.type === 'float') {
+            table.float(c.name).defaultTo(c.defaultVal ?? 0);
+          } else {
+            table.string(c.name).defaultTo(c.defaultVal ?? '');
+          }
+        });
+      }
+    }
+  }
+
+  if (await db.schema.hasTable('quotation_items')) {
+    const qiCols: Array<{ name: string; defaultVal?: string }> = [
+      { name: 'units', defaultVal: '01' },
+      { name: 'base_rate', defaultVal: '0.00' },
+      { name: 'taxable_amount', defaultVal: '0.00' },
+      { name: 'utgst_rate', defaultVal: '0.00' },
+      { name: 'utgst_amount', defaultVal: '0.00' },
+      { name: 'gst_amount', defaultVal: '0.00' },
+      { name: 'total_amount', defaultVal: '0.00' },
+      { name: 'hsn_sac', defaultVal: '' },
+    ];
+
+    for (const c of qiCols) {
+      const exists = await db.schema.hasColumn('quotation_items', c.name);
+      if (!exists) {
+        await db.schema.alterTable('quotation_items', (table) => {
+          table.string(c.name).defaultTo(c.defaultVal ?? '');
         });
       }
     }

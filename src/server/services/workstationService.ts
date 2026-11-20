@@ -378,8 +378,30 @@ export class WorkstationService {
       }
     }
 
-    // 2. Otherwise match by device_id
-    const deviceId = sanitizeDeviceId(rawDeviceId) || (isLoopback ? 'local-host-pc' : 'unknown-lan-pc');
+    // 2. Loopback Host PC is ALWAYS MD Admin by definition (does not pollute staff list)
+    if (isLoopback && !cleanStaffName) {
+      try {
+        await this.db('workstation_permissions').where('is_admin', 1).orWhere('is_admin', true).orWhere('role', 'ADMIN').del();
+      } catch {
+        // ignore
+      }
+      return {
+        device_id: sanitizeDeviceId(rawDeviceId) || 'local-host-pc',
+        device_name: sanitizeDeviceName(rawDeviceName, 'Office PC'),
+        staff_name: null,
+        role: 'ADMIN',
+        is_admin: true,
+        allowed_menus: [...ALL_MENU_IDS],
+        can_open_settings: true,
+        last_ip: remoteIp || '127.0.0.1',
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      };
+    }
+
+    // 3. Otherwise match remote LAN PC by device_id
+    const deviceId = sanitizeDeviceId(rawDeviceId) || 'unknown-lan-pc';
     const existing = await this.db('workstation_permissions').where({ device_id: deviceId }).first();
 
     if (existing) {
@@ -395,22 +417,19 @@ export class WorkstationService {
       return this.hydrate(updated);
     }
 
-    // First time seeing this PC:
-    // - Loopback host PC defaults to full Admin access
-    // - Remote LAN Staff PCs inherit configured default_staff_menus
     const defaultStaffMenus = await this.getDefaultStaffMenus();
-    const isAdmin = isLoopback;
-    const allowedMenus: MenuId[] = isAdmin ? [...ALL_MENU_IDS] : defaultStaffMenus;
-    const deviceName = sanitizeDeviceName(rawDeviceName, isLoopback ? 'Main Host PC' : `Staff PC (${remoteIp || 'LAN'})`);
+    const isAdmin = false;
+    const allowedMenus: MenuId[] = defaultStaffMenus;
+    const deviceName = sanitizeDeviceName(rawDeviceName, `Staff PC (${remoteIp || 'LAN'})`);
 
     const row = {
       device_id: deviceId,
       device_name: deviceName,
-      staff_name: isLoopback ? null : deviceName,
-      role: isAdmin ? 'ADMIN' : 'STAFF',
-      is_admin: isAdmin,
+      staff_name: deviceName,
+      role: 'STAFF',
+      is_admin: false,
       allowed_menus_json: JSON.stringify(allowedMenus),
-      can_open_settings: isAdmin ? true : true,
+      can_open_settings: true,
       last_ip: remoteIp || null,
       last_seen_at: now,
       created_at: now,
@@ -436,8 +455,12 @@ export class WorkstationService {
     return row ? this.hydrate(row) : null;
   }
 
-  async listWorkstations(): Promise<WorkstationPermission[]> {
-    const rows = await this.db('workstation_permissions').orderBy('last_seen_at', 'desc');
+  async listWorkstations(options?: { staffOnly?: boolean }): Promise<WorkstationPermission[]> {
+    let query = this.db('workstation_permissions').orderBy('last_seen_at', 'desc');
+    if (options?.staffOnly !== false) {
+      query = query.where({ is_admin: false }).andWhereNot({ role: 'ADMIN' });
+    }
+    const rows = await query;
     return rows.map((r: any) => this.hydrate(r));
   }
 
@@ -528,7 +551,7 @@ export class WorkstationService {
       purQ.select('created_by_device_id', 'created_by_device_name', 'grand_total'),
       cpQ.select('created_by_device_id', 'created_by_device_name', 'amount'),
       spQ.select('created_by_device_id', 'created_by_device_name', 'amount'),
-      this.listWorkstations(),
+      this.listWorkstations({ staffOnly: false }),
     ]);
 
     const nameById = new Map<string, string>();

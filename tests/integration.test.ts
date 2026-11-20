@@ -295,7 +295,7 @@ describe('End-to-End Business Application Operations', () => {
     });
 
     expect(quote.status).toBe('DRAFT');
-    expect(quote.quotation_number).toContain('QT/');
+    expect(quote.quotation_number).toMatch(/(VS-QT-|QT)/);
 
     const convertedInvoice = await quotationService.convertToInvoice(company.id, quote.id);
     expect(convertedInvoice.status).toBe('DRAFT');

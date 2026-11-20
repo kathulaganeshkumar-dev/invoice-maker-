@@ -48,6 +48,12 @@ Thumbs.db
 # Local agent artifacts
 .agents/
 
+# Cryptographic Keys & Licensing
+tools/keys/
+*.pem
+*.key
+*.lic
+
 .vercel
 .env*
 

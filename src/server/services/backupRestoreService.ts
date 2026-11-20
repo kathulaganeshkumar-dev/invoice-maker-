@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDefaultDataDir, getDefaultSqlitePath } from '../database/connection';
 import { runMigrations } from '../database/migrations';
 import { validateSafeLocalSaveDir } from './pathSecurity';
+import { assertDiskSpace } from './diskSpaceGuard';
 
 export interface BackupMetadata {
   id: string;
@@ -310,6 +311,7 @@ export class BackupRestoreService {
   async createFullBackup(): Promise<BackupMetadata> {
     const sqlitePath = this.getActiveSqliteFilename();
     const backupDir = this.getBackupDir();
+    await assertDiskSpace(backupDir, 25 * 1024 * 1024);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup_full_${timestamp}.sqlite3`;
     const destPath = path.join(backupDir, filename);
@@ -350,6 +352,7 @@ export class BackupRestoreService {
 
     await this.checkpointWal();
     const companyBackupDir = this.getCompanyBackupDir(companyId);
+    await assertDiskSpace(companyBackupDir, 15 * 1024 * 1024);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const safeCompName = String(company.name || 'company')
       .replace(/[^A-Za-z0-9_-]+/g, '_')
@@ -486,6 +489,77 @@ export class BackupRestoreService {
       filename,
       filePath: destPath,
       sizeBytes: stats.size,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Executes an automated daily rolling local backup (keeps latest 7 daily snapshots)
+   */
+  async runDailyRollingBackup(): Promise<BackupMetadata | null> {
+    const backupDir = this.getBackupDir();
+    const rollingDir = path.join(backupDir, 'rolling');
+    if (!fs.existsSync(rollingDir)) {
+      fs.mkdirSync(rollingDir, { recursive: true });
+    }
+
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const todayFilename = `rolling_${todayDate}.sqlite3`;
+    const todayPath = path.join(rollingDir, todayFilename);
+
+    // If today's rolling backup already exists, no need to duplicate
+    if (fs.existsSync(todayPath)) {
+      return null;
+    }
+
+    await assertDiskSpace(rollingDir, 25 * 1024 * 1024);
+    const sqlitePath = this.getActiveSqliteFilename();
+
+    if (this.isSqliteClient() && fs.existsSync(sqlitePath)) {
+      await this.checkpointWal();
+      fs.copyFileSync(sqlitePath, todayPath);
+    } else {
+      const dump: Record<string, any[]> = {};
+      for (const t of ORDERED_TABLES) {
+        if (await this.db.schema.hasTable(t)) {
+          dump[t] = await this.db(t).select('*');
+        }
+      }
+      fs.writeFileSync(todayPath + '.json', JSON.stringify(dump, null, 2));
+    }
+
+    // Prune rolling backups older than 7 days
+    try {
+      const files = fs.readdirSync(rollingDir);
+      const rollingFiles = files
+        .filter((f) => f.startsWith('rolling_') && (f.endsWith('.sqlite3') || f.endsWith('.json')))
+        .map((f) => ({
+          filename: f,
+          path: path.join(rollingDir, f),
+          mtime: fs.statSync(path.join(rollingDir, f)).mtimeMs,
+        }))
+        .sort((a, b) => b.mtime - a.mtime);
+
+      if (rollingFiles.length > 7) {
+        for (let i = 7; i < rollingFiles.length; i++) {
+          try {
+            fs.unlinkSync(rollingFiles[i].path);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const finalPath = fs.existsSync(todayPath) ? todayPath : todayPath + '.json';
+    const finalStats = fs.statSync(finalPath);
+    return {
+      id: path.basename(finalPath),
+      filename: path.basename(finalPath),
+      filePath: finalPath,
+      sizeBytes: finalStats.size,
       createdAt: new Date().toISOString(),
     };
   }
