@@ -17,6 +17,7 @@ import { InventoryView } from './views/InventoryView';
 import { PaymentsView } from './views/PaymentsView';
 import { LetterheadsView } from './views/LetterheadsView';
 import { ReportsView } from './views/ReportsView';
+import { WorkSummaryView } from './views/WorkSummaryView';
 import { ImportExportView } from './views/ImportExportView';
 import { BackupRestoreView } from './views/BackupRestoreView';
 import { RefreshCw, Building2, PlusCircle } from 'lucide-react';
@@ -164,6 +165,36 @@ export const App: React.FC = () => {
       }
     };
 
+    // Global mouse-wheel / laptop touchpad intelligent scrolling helper:
+    // When a modal dialog is open, if user wheels anywhere inside the modal overlay
+    // (even over the header, footer, or modal borders), automatically forward the wheel scroll
+    // to the active modal's scrollable container.
+    const onWheel = (e: WheelEvent) => {
+      const modalOverlays = document.querySelectorAll(
+        '.fixed.inset-0.z-50, .fixed.inset-0.z-\\[60\\], .fixed.inset-0.z-\\[70\\], .fixed.inset-0.z-\\[100\\]'
+      );
+      if (modalOverlays.length > 0) {
+        const topModal = modalOverlays[modalOverlays.length - 1] as HTMLElement;
+        const target = e.target as HTMLElement | null;
+        if (topModal.contains(target)) {
+          const scrollables = topModal.querySelectorAll('.overflow-y-auto, .overflow-auto');
+          if (scrollables.length > 0) {
+            let isInsideScrollable = false;
+            for (let i = 0; i < scrollables.length; i++) {
+              if (scrollables[i].contains(target)) {
+                isInsideScrollable = true;
+                break;
+              }
+            }
+            if (!isInsideScrollable) {
+              const primaryScroll = scrollables[0] as HTMLElement;
+              primaryScroll.scrollTop += e.deltaY;
+            }
+          }
+        }
+      }
+    };
+
     // Auto-sync timer every 3.5 seconds
     const syncTimer = setInterval(() => {
       syncLiveLanData();
@@ -176,6 +207,7 @@ export const App: React.FC = () => {
     window.addEventListener('eim-data-sync', onPermissionsChanged);
     window.addEventListener('focus', onPermissionsChanged);
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('wheel', onWheel, { passive: true });
     bootstrap();
 
     return () => {
@@ -185,6 +217,7 @@ export const App: React.FC = () => {
       window.removeEventListener('eim-data-sync', onPermissionsChanged);
       window.removeEventListener('focus', onPermissionsChanged);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('wheel', onWheel);
     };
   }, []);
 
@@ -254,6 +287,13 @@ export const App: React.FC = () => {
     });
   };
 
+  useEffect(() => {
+    const electronAPI = (window as any)?.electronAPI;
+    if (electronAPI?.setTitleBarTheme) {
+      electronAPI.setTitleBarTheme(isDarkMode).catch(() => {});
+    }
+  }, [isDarkMode]);
+
   if (initializing) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white select-none">
@@ -301,7 +341,6 @@ export const App: React.FC = () => {
       {dbMode?.type === 'postgres' && !dbMode?.connected && (
         <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm z-50">
           <div className="flex items-center space-x-2">
-            <span className="text-base">⚠️</span>
             <span>Local LAN PostgreSQL Server Unreachable. The software can automatically fall back to SQLite WAL mode to continue working offline.</span>
           </div>
           <button
@@ -388,6 +427,9 @@ export const App: React.FC = () => {
               )}
               {activeTab === 'reports' && (
                 <ReportsView companyId={activeCompany.id} />
+              )}
+              {activeTab === 'work_summary' && (
+                <WorkSummaryView companyId={activeCompany.id} />
               )}
               {activeTab === 'import_export' && (
                 <ImportExportView companyId={activeCompany.id} />

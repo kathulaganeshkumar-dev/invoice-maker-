@@ -5,7 +5,7 @@ import { INDIAN_STATES } from '../../shared/constants';
 import { api } from '../services/api';
 import { SearchableSelect } from './SearchableSelect';
 import { ModalPortal } from './ModalPortal';
-import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -389,16 +389,16 @@ export const CompanyBranchModal: React.FC<Props> = ({
   return (
     <ModalPortal>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] text-slate-800 dark:text-slate-100">
         {/* Modal Window Header */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/80">
           <div className="flex items-center space-x-2">
             <Building2 className="w-5 h-5 text-brand-600" />
-            <h2 className="text-lg font-bold text-slate-800">Select Business & Branch</h2>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Select Business & Branch</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/50 transition-colors"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -439,22 +439,22 @@ export const CompanyBranchModal: React.FC<Props> = ({
               </div>
 
               {/* Business Companies Table (scrollable when companies exceed viewport space) */}
-              <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm">
                 <div className="max-h-[42vh] overflow-y-auto">
                   <table className="w-full text-left text-sm border-collapse">
-                    <thead className="bg-slate-100 text-slate-600 font-semibold sticky top-0 z-10 shadow-[inset_0_-1px_0_0_rgb(226,232,240)]">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold sticky top-0 z-10 shadow-[inset_0_-1px_0_0_rgb(226,232,240)] dark:shadow-[inset_0_-1px_0_0_rgb(51,65,85)]">
                       <tr>
                         <th className="py-2.5 px-4 w-16">ID</th>
                         <th className="py-2.5 px-4">Business Name</th>
-                        <th className="py-2.5 px-4">GSTIN</th>
+                        <th className="py-2.5 px-4">GST Number</th>
                         <th className="py-2.5 px-4">State</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
                       {companies.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="py-8 text-center text-slate-400 text-sm">
-                            No companies found. Click <span className="font-semibold text-emerald-600">+ New</span> above to create your business profile.
+                            No companies found. Click <span className="font-semibold text-emerald-600 dark:text-emerald-400">+ New</span> above to create your business profile.
                           </td>
                         </tr>
                       ) : (
@@ -463,9 +463,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             key={c.id}
                             onClick={() => handleOpenCompany(c)}
                             title="Click row to open this company"
-                            className="group/row cursor-pointer transition-colors bg-white text-slate-700 hover:bg-sky-50/80 hover:font-medium hover:text-brand-900"
+                            className="cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
                           >
-                            <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">{idx + 1}</td>
+                            <td className="py-2.5 px-4 text-slate-500 dark:text-slate-400 font-mono text-xs">{idx + 1}</td>
                             <td className="py-2.5 px-4 font-semibold">
                               <button
                                 type="button"
@@ -475,14 +475,14 @@ export const CompanyBranchModal: React.FC<Props> = ({
                                   setEditingCompany({ ...c });
                                   setIsEditing(true);
                                 }}
-                                className="group/name text-left font-semibold text-brand-700 hover:text-brand-900 hover:underline inline-flex items-center space-x-2 cursor-pointer"
+                                className="text-left font-semibold text-slate-900 dark:text-white inline-flex items-center space-x-2 cursor-pointer"
                                 title="Click to edit company details"
                               >
-                                <span className="group-hover/name:underline">{c.name}</span>
+                                <span>{c.name}</span>
                               </button>
                             </td>
-                            <td className="py-2.5 px-4 font-mono text-xs text-slate-500">{c.gstin || '-'}</td>
-                            <td className="py-2.5 px-4 text-slate-600 group-hover/row:text-brand-900">{c.state} ({c.state_code})</td>
+                            <td className="py-2.5 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">{c.gstin || '-'}</td>
+                            <td className="py-2.5 px-4 text-slate-600 dark:text-slate-400">{c.state} ({c.state_code})</td>
                           </tr>
                         ))
                       )}
@@ -495,11 +495,11 @@ export const CompanyBranchModal: React.FC<Props> = ({
               {branches.length > 0 && (() => {
                 const selectedBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
                 return (
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <GitBranch className="w-4 h-4 text-slate-500" />
-                      <span className="text-sm font-semibold text-slate-700">Operating Branch:</span>
+                      <GitBranch className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Operating Branch:</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-56">
@@ -526,7 +526,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       <button
                         type="button"
                         onClick={handleOpenAddBranch}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-md border border-emerald-200 transition-colors"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-md border border-emerald-200 dark:border-emerald-800 transition-colors"
                         title="Add a new branch"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -538,11 +538,10 @@ export const CompanyBranchModal: React.FC<Props> = ({
                         className={`inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
                           showBranchesList || isBranchFormOpen
                             ? 'bg-brand-600 text-white border-brand-700 shadow-sm'
-                            : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                            : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'
                         }`}
                         title="View all branches table"
                       >
-                        <Eye className="w-3.5 h-3.5" />
                         <span>{showBranchesList || isBranchFormOpen ? 'Hide Branches' : `View Branches (${branches.length})`}</span>
                       </button>
                     </div>
@@ -550,17 +549,17 @@ export const CompanyBranchModal: React.FC<Props> = ({
 
                   {/* Branches Table List (when View Branches is clicked) */}
                   {showBranchesList && (
-                    <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                      <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    <div className="mt-3 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
+                      <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
                           All Branches of Selected Company
                         </span>
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
                           Click row to select, click branch name to edit or delete
                         </span>
                       </div>
                       <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold">
                           <tr>
                             <th className="py-2 px-3 w-10">#</th>
                             <th className="py-2 px-3">Branch Name</th>
@@ -569,7 +568,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             <th className="py-2 px-3">Bank Details</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {branches.map((b, idx) => {
                             const isSelected = b.id === selectedBranchId;
                             return (
@@ -587,7 +586,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                                   handleOpenEditBranch(b);
                                 }}
                                 className={`cursor-pointer transition-colors ${
-                                  isSelected ? 'bg-sky-50 font-medium text-brand-900' : 'hover:bg-slate-50 text-slate-700'
+                                  isSelected ? 'bg-sky-50 dark:bg-brand-950/60 font-medium text-brand-900 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300'
                                 }`}
                               >
                                 <td className="py-2 px-3 text-slate-400 font-mono">{idx + 1}</td>
@@ -599,24 +598,24 @@ export const CompanyBranchModal: React.FC<Props> = ({
                                       setSelectedBranchId(b.id);
                                       handleOpenEditBranch(b);
                                     }}
-                                    className="text-left font-semibold text-brand-700 hover:text-brand-900 hover:underline flex items-center space-x-1.5 cursor-pointer group"
+                                    className="text-left font-semibold text-brand-700 dark:text-brand-400 flex items-center space-x-1.5 cursor-pointer"
                                     title="Click to view & edit branch details"
                                   >
-                                    <span className="group-hover:underline">{b.name}</span>
+                                    <span>{b.name}</span>
                                     {b.is_default && (
-                                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
+                                      <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] rounded font-bold border border-blue-200 dark:border-blue-800">
                                         Default
                                       </span>
                                     )}
                                   </button>
                                 </td>
-                                <td className="py-2 px-3 font-mono font-bold text-slate-600">{b.code}</td>
+                                <td className="py-2 px-3 font-mono font-bold text-slate-600 dark:text-slate-300">{b.code}</td>
                                 <td className="py-2 px-3">{b.state} ({b.state_code})</td>
-                                <td className="py-2 px-3 text-slate-500">
+                                <td className="py-2 px-3 text-slate-500 dark:text-slate-400">
                                   {b.use_company_bank ? (
                                     <span className="text-slate-500 italic">Company Bank</span>
                                   ) : (
-                                    <span className="font-mono text-[11px] text-emerald-700 font-medium">
+                                    <span className="font-mono text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                                       {b.bank_name || 'Custom'} ({b.bank_ifsc || '-'})
                                     </span>
                                   )}
@@ -631,9 +630,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
 
                   {/* Add / Edit Branch Inline Form */}
                   {isBranchFormOpen && (
-                    <div className="mt-3 p-3.5 bg-white border border-brand-200 rounded-lg shadow-sm space-y-3">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                        <span className="text-xs font-bold text-brand-800 uppercase tracking-wide">
+                    <div className="mt-3 p-3.5 bg-white dark:bg-slate-800 border border-brand-200 dark:border-brand-800 rounded-lg shadow-sm space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-1.5">
+                        <span className="text-xs font-bold text-brand-800 dark:text-brand-300 uppercase tracking-wide">
                           {editingBranchId ? `Edit Operating Branch: ${branchFormData.name || ''}` : 'Create New Operating Branch'}
                         </span>
                         <button
@@ -643,94 +642,94 @@ export const CompanyBranchModal: React.FC<Props> = ({
                             setEditingBranchId(null);
                             setBranchFormData({});
                           }}
-                          className="text-xs text-slate-400 hover:text-slate-600 font-bold px-1"
+                          className="text-slate-400 hover:text-slate-600 p-1"
                         >
-                          ✕
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Branch Name *</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Name *</label>
                           <input
                             type="text"
                             placeholder="e.g. Hyderabad Regional Office"
                             value={branchFormData.name || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, name: e.target.value })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Branch Code *</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Code *</label>
                           <input
                             type="text"
                             placeholder="e.g. HYD01"
                             value={branchFormData.code || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, code: e.target.value.toUpperCase() })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">GSTIN</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">GST Number</label>
                           <input
                             type="text"
-                            placeholder="Branch GSTIN (if separate)"
+                            placeholder="Branch GST Number (if separate)"
                             value={branchFormData.gstin || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, gstin: e.target.value.toUpperCase() })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Mail ID (Email)</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mail ID (Email)</label>
                           <input
                             type="email"
                             placeholder="e.g. branch@company.com"
                             value={branchFormData.email || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, email: e.target.value })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">TAN Number</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">TAN Number</label>
                           <input
                             type="text"
                             placeholder="e.g. BLRE12345F"
                             value={branchFormData.tan || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, tan: e.target.value.toUpperCase() })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">CIN Number</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">CIN Number</label>
                           <input
                             type="text"
                             placeholder="e.g. U72900MH2023PTC123456"
                             value={branchFormData.cin || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, cin: e.target.value.toUpperCase() })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">MSME / Udyam Number</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">MSME / Udyam Number</label>
                           <input
                             type="text"
                             placeholder="e.g. UDYAM-XX-00-0000000"
                             value={branchFormData.msme || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, msme: e.target.value.toUpperCase() })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">ISO Number / Certification</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">ISO Number / Certification</label>
                           <input
                             type="text"
                             placeholder="e.g. ISO 9001:2015"
                             value={branchFormData.iso || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, iso: e.target.value })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">State & Code</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">State & Code</label>
                           <SearchableSelect
                             options={stateOptions}
                             value={branchFormData.state_code || branchFormData.state || '23'}
@@ -747,24 +746,24 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
                           <input
                             type="text"
                             placeholder="e.g. +91 98260 12345"
                             value={branchFormData.phone || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, phone: e.target.value })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="block font-semibold text-slate-700 mb-1">Financial Year</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Financial Year</label>
                           <input
                             type="text"
                             list="fy-branch-list"
                             placeholder="e.g. 2026-27"
                             value={branchFormData.financial_year || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, financial_year: e.target.value })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                           <datalist id="fy-branch-list">
                             <option value="2026-27" />
@@ -775,20 +774,20 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           </datalist>
                         </div>
                         <div className="col-span-2">
-                          <label className="block font-semibold text-slate-700 mb-1">Branch Address</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Address</label>
                           <input
                             type="text"
                             placeholder="Plot / Street / Locality"
                             value={branchFormData.address || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, address: e.target.value })}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500"
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </div>
 
                         {/* Option: Use Main Branch / Company Bank Details */}
-                        <div className="col-span-2 pt-2 border-t border-slate-100">
-                          <div className="flex items-center justify-between bg-sky-50/70 p-2.5 rounded-lg border border-sky-200">
-                            <label className="flex items-center space-x-2 text-xs font-semibold text-brand-900 cursor-pointer select-none">
+                        <div className="col-span-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                          <div className="flex items-center justify-between bg-sky-50/70 dark:bg-sky-950/40 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800">
+                            <label className="flex items-center space-x-2 text-xs font-semibold text-brand-900 dark:text-sky-200 cursor-pointer select-none">
                               <input
                                 type="checkbox"
                                 checked={branchFormData.use_company_bank ?? true}
@@ -808,61 +807,69 @@ export const CompanyBranchModal: React.FC<Props> = ({
                               />
                               <span>Use Main Branch / Company Bank Details</span>
                             </label>
-                            <span className="text-[11px] font-medium text-slate-500">
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                               {(branchFormData.use_company_bank ?? true) ? 'Using Company Bank' : 'Custom Branch Bank'}
                             </span>
                           </div>
                         </div>
 
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Bank Name</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Name</label>
                           <input
                             type="text"
                             placeholder="e.g. State Bank of India"
                             disabled={branchFormData.use_company_bank ?? true}
                             value={branchFormData.bank_name || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, bank_name: e.target.value })}
-                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            className={`w-full border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (branchFormData.use_company_bank ?? true)
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed border-slate-300 dark:border-slate-700'
+                                : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600'
                             }`}
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Bank Account Number</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Account Number</label>
                           <input
                             type="text"
                             placeholder="Account Number"
                             disabled={branchFormData.use_company_bank ?? true}
                             value={branchFormData.bank_account_no || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, bank_account_no: e.target.value })}
-                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            className={`w-full border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (branchFormData.use_company_bank ?? true)
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed border-slate-300 dark:border-slate-700'
+                                : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600'
                             }`}
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">IFSC Code</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">IFSC Code</label>
                           <input
                             type="text"
                             placeholder="e.g. SBIN0001234"
                             disabled={branchFormData.use_company_bank ?? true}
                             value={branchFormData.bank_ifsc || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, bank_ifsc: e.target.value.toUpperCase() })}
-                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            className={`w-full border rounded px-2.5 py-1.5 font-mono uppercase outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (branchFormData.use_company_bank ?? true)
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed border-slate-300 dark:border-slate-700'
+                                : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600'
                             }`}
                           />
                         </div>
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Branch Details</label>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Details</label>
                           <input
                             type="text"
                             placeholder="e.g. Main Branch, MG Road"
                             disabled={branchFormData.use_company_bank ?? true}
                             value={branchFormData.bank_branch || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, bank_branch: e.target.value })}
-                            className={`w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
-                              (branchFormData.use_company_bank ?? true) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                            className={`w-full border rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 ${
+                              (branchFormData.use_company_bank ?? true)
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed border-slate-300 dark:border-slate-700'
+                                : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600'
                             }`}
                           />
                         </div>
@@ -893,7 +900,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                               setEditingBranchId(null);
                               setBranchFormData({});
                             }}
-                            className="px-3 py-1.5 border border-slate-300 text-slate-600 rounded text-xs font-semibold hover:bg-slate-50 transition-colors"
+                            className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 rounded text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                           >
                             Cancel
                           </button>
@@ -916,14 +923,14 @@ export const CompanyBranchModal: React.FC<Props> = ({
           ) : (
             /* Company Edit Form */
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <h3 className="font-bold text-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <h3 className="font-bold text-slate-800 dark:text-slate-100">
                   {editingCompany.id ? 'Edit Company Information' : 'Create New Company'}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800 underline"
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline"
                 >
                   Back to list
                 </button>
@@ -931,94 +938,94 @@ export const CompanyBranchModal: React.FC<Props> = ({
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Company Name *</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Company Name *</label>
                   <input
                     type="text"
                     value={editingCompany.name || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, name: e.target.value })}
                     placeholder="e.g. Acme Trading Co."
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">GSTIN</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">GST Number</label>
                   <input
                     type="text"
                     value={editingCompany.gstin || ''}
                     onChange={(e) => handleGstinChange(e.target.value)}
                     placeholder="e.g. 36AABCA1234D1Z5"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">PAN</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">PAN</label>
                   <input
                     type="text"
                     value={editingCompany.pan || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, pan: e.target.value.toUpperCase() })}
                     placeholder="e.g. AABCA1234D"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">TAN Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">TAN Number</label>
                   <input
                     type="text"
                     value={editingCompany.tan || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, tan: e.target.value.toUpperCase() })}
                     placeholder="e.g. BLRE12345F"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">CIN Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">CIN Number</label>
                   <input
                     type="text"
                     value={editingCompany.cin || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, cin: e.target.value.toUpperCase() })}
                     placeholder="e.g. U72900MH2023PTC123456"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">MSME / Udyam Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">MSME / Udyam Number</label>
                   <input
                     type="text"
                     value={editingCompany.msme || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, msme: e.target.value.toUpperCase() })}
                     placeholder="e.g. UDYAM-XX-00-0000000"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">ISO Number / Certification</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">ISO Number / Certification</label>
                   <input
                     type="text"
                     value={editingCompany.iso || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, iso: e.target.value })}
                     placeholder="e.g. ISO 9001:2015"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mail ID (Email)</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mail ID (Email)</label>
                   <input
                     type="email"
                     value={editingCompany.email || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, email: e.target.value })}
                     placeholder="e.g. info@company.com"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Financial Year</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Financial Year</label>
                   <input
                     type="text"
                     list="fy-company-list"
                     value={editingCompany.financial_year || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, financial_year: e.target.value })}
                     placeholder="e.g. 2026-27"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                   <datalist id="fy-company-list">
                     <option value="2026-27" />
@@ -1029,7 +1036,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                   </datalist>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">State & Code *</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">State & Code *</label>
                   <SearchableSelect
                     options={stateOptions}
                     value={editingCompany.state_code || editingCompany.state || '23'}
@@ -1046,68 +1053,68 @@ export const CompanyBranchModal: React.FC<Props> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
                   <input
                     type="text"
                     value={editingCompany.phone || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, phone: e.target.value })}
                     placeholder="+91 98260 12345"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Registered Address</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Registered Address</label>
                   <textarea
                     rows={2}
                     value={editingCompany.registered_address || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, registered_address: e.target.value })}
                     placeholder="Complete address with PIN code"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Bank Name</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Name</label>
                   <input
                     type="text"
                     value={editingCompany.bank_name || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, bank_name: e.target.value })}
                     placeholder="State Bank of India"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Bank Account Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Account Number</label>
                   <input
                     type="text"
                     value={editingCompany.bank_account_no || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, bank_account_no: e.target.value })}
                     placeholder="Account Number"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">IFSC Code</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">IFSC Code</label>
                   <input
                     type="text"
                     value={editingCompany.bank_ifsc || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, bank_ifsc: e.target.value.toUpperCase() })}
                     placeholder="e.g. SBIN0001234"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 font-mono uppercase outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Branch Details</label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Details</label>
                   <input
                     type="text"
                     value={editingCompany.bank_branch || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, bank_branch: e.target.value })}
                     placeholder="e.g. Main Branch, MG Road"
-                    className="w-full border border-slate-300 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
 
                 {/* Optional manual selection for Default Company */}
-                <div className="col-span-2 pt-2 border-t border-slate-100">
+                <div className="col-span-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <label className="inline-flex items-center space-x-2.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -1116,7 +1123,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500 cursor-pointer"
                     />
                     <div>
-                      <span className="text-xs font-semibold text-slate-700">Set as Default Business Profile</span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Set as Default Business Profile</span>
                       <p className="text-[11px] text-slate-400">Manually check this if you want this company pre-selected automatically when opening the software.</p>
                     </div>
                   </label>
@@ -1148,7 +1155,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       setIsEditing(false);
                       setEditingCompany({});
                     }}
-                    className="px-4 py-1.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 text-sm font-semibold transition-colors"
+                    className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold transition-colors"
                   >
                     Cancel
                   </button>
@@ -1168,8 +1175,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
 
         {/* Modal Window Footer */}
         {!isEditing && (
-          <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-            <label className="flex items-center space-x-2 text-xs font-medium text-slate-600 cursor-pointer select-none">
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 flex items-center justify-between">
+            <label className="flex items-center space-x-2 text-xs font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={showOnStartup}
@@ -1187,7 +1194,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-sm font-semibold transition-all"
+                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-lg text-sm font-semibold transition-all"
               >
                 <X className="w-4 h-4" />
                 <span>Cancel</span>

@@ -447,6 +447,75 @@ export class MasterDataService {
     };
 
     await this.db('products').insert(dbRow);
+
+    if (dbRow.item_type === 'PRODUCT') {
+      try {
+        let defaultWh = await this.db('warehouses')
+          .where({ company_id: companyId, is_default: true, is_active: true })
+          .first();
+        if (!defaultWh) {
+          defaultWh = await this.db('warehouses').where({ company_id: companyId, is_active: true }).first();
+        }
+        if (!defaultWh) {
+          const defaultBranch =
+            (await this.db('branches').where({ company_id: companyId, is_default: true, is_archived: false }).first()) ||
+            (await this.db('branches').where({ company_id: companyId, is_archived: false }).first());
+          const whId = uuidv4();
+          await this.db('warehouses').insert({
+            id: whId,
+            company_id: companyId,
+            branch_id: defaultBranch?.id || 'DEFAULT_BRANCH',
+            name: 'Main Warehouse',
+            code: 'MW01',
+            address: 'Default Local Storage',
+            is_default: true,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+          });
+          defaultWh = await this.db('warehouses').where({ id: whId }).first();
+        }
+
+        if (defaultWh) {
+          const qtyDec = new Decimal(dbRow.current_stock || 0);
+          const costDec = new Decimal(dbRow.purchase_price || 0);
+          const totalVal = qtyDec.mul(costDec).toFixed(2);
+          await this.db('stock_balances').insert({
+            id: uuidv4(),
+            company_id: companyId,
+            warehouse_id: defaultWh.id,
+            product_id: id,
+            quantity_on_hand: qtyDec.toFixed(2),
+            average_unit_cost: costDec.toFixed(2),
+            total_stock_value: totalVal,
+            last_updated_at: now,
+          });
+
+          if (qtyDec.gt(0)) {
+            await this.db('inventory_transactions').insert({
+              id: uuidv4(),
+              company_id: companyId,
+              branch_id: defaultWh.branch_id || 'DEFAULT_BRANCH',
+              warehouse_id: defaultWh.id,
+              product_id: id,
+              movement_type: 'OPENING_BALANCE',
+              quantity: qtyDec.toFixed(2),
+              unit_cost: costDec.toFixed(2),
+              total_cost: totalVal,
+              reference_document_type: 'OPENING_BALANCE',
+              reference_document_id: id,
+              reference_document_number: 'INIT-STOCK',
+              notes: 'Initial opening stock balance',
+              transaction_date: now.split('T')[0],
+              created_at: now,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to initialize stock_balances on createProduct:', err);
+      }
+    }
+
     return this.hydrateProduct(dbRow);
   }
 
@@ -471,6 +540,7 @@ export class MasterDataService {
       'max_selling_price',
       'is_tax_inclusive',
       'minimum_stock',
+      'current_stock',
       'preferred_supplier_id',
       'is_active',
     ]);
@@ -479,6 +549,10 @@ export class MasterDataService {
       if (allowed.has(k)) {
         updateData[k] = v;
       }
+    }
+
+    if (updateData.current_stock !== undefined && updateData.current_stock !== null && String(updateData.current_stock).trim() !== '') {
+      updateData.current_stock = new Decimal(updateData.current_stock || 0).toFixed(2);
     }
 
     if (updateData.custom_notes !== undefined) {
@@ -527,6 +601,111 @@ export class MasterDataService {
     }
 
     await this.db('products').where({ company_id: companyId, id: productId }).update(updateData);
+
+    if (updateData.current_stock !== undefined || updateData.purchase_price !== undefined) {
+      try {
+        const prod = await this.db('products').where({ id: productId, company_id: companyId }).first();
+        if (prod && prod.item_type === 'PRODUCT') {
+          const targetQty = new Decimal(prod.current_stock || 0);
+          const unitCost = new Decimal(prod.purchase_price || 0);
+          const balances = await this.db('stock_balances').where({ company_id: companyId, product_id: productId });
+
+          if (balances.length > 0) {
+            const primary = balances[0];
+            const oldQty = new Decimal(primary.quantity_on_hand || 0);
+            const diff = targetQty.sub(oldQty);
+
+            await this.db('stock_balances').where({ id: primary.id }).update({
+              quantity_on_hand: targetQty.toFixed(2),
+              average_unit_cost: unitCost.toFixed(2),
+              total_stock_value: targetQty.mul(unitCost).toFixed(2),
+              last_updated_at: now,
+            });
+
+            if (!diff.isZero()) {
+              const wh = await this.db('warehouses').where({ id: primary.warehouse_id }).first();
+              await this.db('inventory_transactions').insert({
+                id: uuidv4(),
+                company_id: companyId,
+                branch_id: wh?.branch_id || 'DEFAULT_BRANCH',
+                warehouse_id: primary.warehouse_id,
+                product_id: productId,
+                movement_type: diff.gt(0) ? 'ADJUSTMENT_ADD' : 'ADJUSTMENT_REDUCE',
+                quantity: diff.toFixed(2),
+                unit_cost: unitCost.toFixed(2),
+                total_cost: diff.abs().mul(unitCost).toFixed(2),
+                reference_document_type: 'STOCK_ADJUSTMENT',
+                reference_document_id: productId,
+                reference_document_number: `ADJ-${Date.now()}`,
+                notes: 'Stock quantity updated from Products catalogue',
+                transaction_date: now.split('T')[0],
+                created_at: now,
+              });
+            }
+          } else {
+            let defaultWh = await this.db('warehouses').where({ company_id: companyId, is_default: true, is_active: true }).first();
+            if (!defaultWh) {
+              defaultWh = await this.db('warehouses').where({ company_id: companyId, is_active: true }).first();
+            }
+            if (!defaultWh) {
+              const defaultBranch =
+                (await this.db('branches').where({ company_id: companyId, is_default: true, is_archived: false }).first()) ||
+                (await this.db('branches').where({ company_id: companyId, is_archived: false }).first());
+              const whId = uuidv4();
+              await this.db('warehouses').insert({
+                id: whId,
+                company_id: companyId,
+                branch_id: defaultBranch?.id || 'DEFAULT_BRANCH',
+                name: 'Main Warehouse',
+                code: 'MW01',
+                address: 'Default Local Storage',
+                is_default: true,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+              });
+              defaultWh = await this.db('warehouses').where({ id: whId }).first();
+            }
+
+            if (defaultWh) {
+              await this.db('stock_balances').insert({
+                id: uuidv4(),
+                company_id: companyId,
+                warehouse_id: defaultWh.id,
+                product_id: productId,
+                quantity_on_hand: targetQty.toFixed(2),
+                average_unit_cost: unitCost.toFixed(2),
+                total_stock_value: targetQty.mul(unitCost).toFixed(2),
+                last_updated_at: now,
+              });
+
+              if (targetQty.gt(0)) {
+                await this.db('inventory_transactions').insert({
+                  id: uuidv4(),
+                  company_id: companyId,
+                  branch_id: defaultWh.branch_id || 'DEFAULT_BRANCH',
+                  warehouse_id: defaultWh.id,
+                  product_id: productId,
+                  movement_type: 'OPENING_BALANCE',
+                  quantity: targetQty.toFixed(2),
+                  unit_cost: unitCost.toFixed(2),
+                  total_cost: targetQty.mul(unitCost).toFixed(2),
+                  reference_document_type: 'OPENING_BALANCE',
+                  reference_document_id: productId,
+                  reference_document_number: 'INIT-STOCK',
+                  notes: 'Initial stock balance from Products catalogue',
+                  transaction_date: now.split('T')[0],
+                  created_at: now,
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing stock balance on updateProduct:', err);
+      }
+    }
+
     return (await this.getProductById(companyId, productId))!;
   }
 

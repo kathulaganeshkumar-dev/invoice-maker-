@@ -120,7 +120,7 @@ export const BackupRestoreView: React.FC<Props> = ({ companyId, companyName }) =
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto">
+    <div className="p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
@@ -202,7 +202,7 @@ export const BackupRestoreView: React.FC<Props> = ({ companyId, companyName }) =
               </tr>
             ) : (
               backups.map((b) => (
-                <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <tr key={b.id}>
                   <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
                     {b.filename}
                   </td>

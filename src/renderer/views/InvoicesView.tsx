@@ -24,7 +24,6 @@ import {
   X,
   FileText,
   Trash2,
-  Eye,
   Stamp,
   ArrowRightCircle,
   CreditCard,
@@ -360,10 +359,11 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
   const handleUpdateItemNotes = (index: number, nextNotes: string[]) => {
     const copy = [...items];
+    const formattedNotes = formatItemNotesToDescription(nextNotes);
     copy[index] = {
       ...copy[index],
       custom_notes: nextNotes,
-      description: formatItemNotesToDescription(nextNotes),
+      description: formattedNotes || copy[index].description || '',
     };
     setItems(copy);
   };
@@ -377,12 +377,13 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
     } else {
       current.length = qtyCount;
     }
+    const formattedNotes = formatItemNotesToDescription(current);
     const copy = [...items];
     copy[index] = {
       ...copy[index],
       custom_notes: current,
       show_notes: true,
-      description: formatItemNotesToDescription(current),
+      description: formattedNotes || copy[index].description || '',
     };
     setItems(copy);
   };
@@ -437,6 +438,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
       const created = await api.createProduct(companyId, {
         item_type: row.item_type || 'PRODUCT',
         name: row.item_name.trim(),
+        description: row.description || undefined,
         hsn_or_sac: row.hsn_or_sac || '',
         unit: row.unit || 'NOS',
         selling_price: String(row.rate || '0.00'),
@@ -854,7 +856,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   return (
     <>
       {!modalOnly && (
-        <div className="p-6 space-y-5 overflow-y-auto">
+        <div className="p-6 space-y-5">
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -919,24 +921,24 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
           className={`p-3.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
             filterAuthor === 'STAFF'
-              ? 'bg-purple-100 dark:bg-purple-900/50 border-purple-400 dark:border-purple-600'
-              : 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/60 hover:border-purple-300'
+              ? 'bg-sky-100 dark:bg-sky-950/60 border-sky-400 dark:border-sky-600'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
           }`}
           title="Click to filter invoices created by staff"
         >
           <div className="flex items-center justify-between">
-            <span className="text-purple-800 dark:text-purple-300 font-bold flex items-center space-x-1">
-              <Users className="w-3.5 h-3.5 text-purple-600" />
+            <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center space-x-1">
+              <Users className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
               <span>Created by Staff</span>
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200/80 text-purple-900 dark:bg-purple-800 dark:text-purple-100">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
               {staffInvoices.length} Files
             </span>
           </div>
-          <div className="text-lg font-extrabold text-purple-950 dark:text-purple-100 mt-0.5">
+          <div className="text-lg font-extrabold text-slate-900 dark:text-slate-100 mt-0.5">
             Rs. {formatIndianCurrency(staffTotalAmount)}
           </div>
-          <div className="text-[10px] text-purple-700 dark:text-purple-300 truncate mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
             {staffContributors.length > 0 ? staffContributors.join(', ') : 'No staff files yet'}
           </div>
         </div>
@@ -944,16 +946,16 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
       {/* Staff Activity Alert Banner */}
       {staffInvoices.length > 0 && (
-        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
+        <div className="bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 bg-purple-600 text-white rounded-lg">
+            <div className="p-1.5 bg-brand-600 text-white rounded-lg">
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <span className="font-bold text-purple-950 dark:text-purple-200">
+              <span className="font-bold text-slate-900 dark:text-slate-100">
                 Staff Activity: {staffInvoices.length} file{staffInvoices.length > 1 ? 's' : ''} created by office staff ({staffContributors.join(', ') || 'Staff Workstations'})
               </span>
-              <span className="text-purple-700 dark:text-purple-300 ml-2">
+              <span className="text-slate-600 dark:text-slate-300 ml-2">
                 Total value: Rs. {formatIndianCurrency(staffTotalAmount)}. All records synced live over office LAN.
               </span>
             </div>
@@ -964,8 +966,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
             onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
               filterAuthor === 'STAFF'
-                ? 'bg-purple-700 text-white'
-                : 'bg-white dark:bg-slate-800 text-purple-800 dark:text-purple-200 border border-purple-300 hover:bg-purple-100'
+                ? 'bg-brand-600 text-white'
+                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
             }`}
           >
             {filterAuthor === 'STAFF' ? 'Showing Staff Invoices (Show All)' : `View Only Staff Invoices (${staffInvoices.length})`}
@@ -1010,8 +1012,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
             onClick={() => setFilterAuthor('STAFF')}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
               filterAuthor === 'STAFF'
-                ? 'bg-purple-700 text-white'
-                : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             <Users className="w-3 h-3 mr-1" />
@@ -1071,7 +1073,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               filteredInvoices.map((inv) => {
                 const isPaid = Number(inv.balance_amount) <= 0;
                 return (
-                  <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <tr key={inv.id}>
                     <td className="py-3 px-4 font-mono font-bold">
                       <button
                         type="button"
@@ -1079,11 +1081,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                           setViewingInvoice(inv);
                           setActivePrintTemplateId(inv.letterhead_template_id || (templates[0]?.id || ''));
                         }}
-                        className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center space-x-1"
+                        className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
                         title="Click to view full invoice details"
                       >
-                        <span>{inv.invoice_number}</span>
-                        <Eye className="w-3.5 h-3.5 text-slate-400 opacity-60 hover:opacity-100" />
+                        {inv.invoice_number}
                       </button>
                     </td>
                     <td className="py-3 px-4 text-slate-500 font-medium text-[10px]">
@@ -1098,10 +1099,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     <td className="py-3 px-4">
                       {isStaffInvoice(inv) ? (
                         <span
-                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
                           title={`Created on staff workstation: ${inv.created_by_device_name || 'Staff'}`}
                         >
-                          <Users className="w-3 h-3 text-purple-600" />
+                          <Users className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                           <span>Staff: {inv.created_by_device_name || 'Staff PC'}</span>
                         </span>
                       ) : (
@@ -1326,7 +1327,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     <div className="text-slate-600 dark:text-slate-400 mt-1">{viewingInvoice.billing_address}</div>
                   )}
                   {viewingInvoice.customer_gstin && (
-                    <div className="font-mono text-slate-500 mt-1">GSTIN: {viewingInvoice.customer_gstin}</div>
+                    <div className="font-mono text-slate-500 mt-1">GST Number: {viewingInvoice.customer_gstin}</div>
                   )}
                 </div>
 
@@ -1571,7 +1572,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                         setSelectedCustomerId(val);
                       }
                     }}
-                    placeholder="Search customer by name or GSTIN..."
+                    placeholder="Search customer by name or GST Number..."
                   />
                 </div>
 
@@ -1721,7 +1722,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                 <table className="w-full text-left">
                   <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
                     <tr>
-                      <th className="p-2 min-w-[260px]">Product / Item *</th>
+                      <th className="p-2 min-w-[280px]">Product / Description of Goods *</th>
                       <th className="p-2 w-24">HSN / SAC</th>
                       <th className="p-2 w-20">Unit</th>
                       <th className="p-2 w-20">Qty</th>
@@ -1741,7 +1742,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                       return (
                         <React.Fragment key={idx}>
                           <tr className="bg-white dark:bg-slate-800">
-                            <td className="p-2 align-middle">
+                            <td className="p-2 align-top">
                               <SearchableSelect
                                 options={catalogItemOptions}
                                 value={item.item_id || ''}
@@ -1764,8 +1765,19 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                 placeholder="Search product or enter custom item..."
                                 size="sm"
                               />
+                              <textarea
+                                rows={2}
+                                placeholder="Specifications / warranty details (e.g. 1 Year Warranty, Intel i5, 16GB RAM...)"
+                                value={item.description || ''}
+                                onChange={(e) => {
+                                  const copy = [...items];
+                                  copy[idx].description = e.target.value;
+                                  setItems(copy);
+                                }}
+                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700/60 mt-1 font-sans text-slate-900 dark:text-slate-100"
+                              />
                             </td>
-                            <td className="p-2 align-middle">
+                            <td className="p-2 align-top pt-2.5">
                               <input
                                 type="text"
                                 placeholder="HSN/SAC"
@@ -1775,10 +1787,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                   copy[idx].hsn_or_sac = e.target.value;
                                   setItems(copy);
                                 }}
-                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono"
+                                className="w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded px-2 py-1 text-xs font-mono"
                               />
                             </td>
-                            <td className="p-2 align-middle">
+                            <td className="p-2 align-top pt-2.5">
                               <input
                                 type="text"
                                 placeholder="NOS"
@@ -1788,10 +1800,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                   copy[idx].unit = e.target.value;
                                   setItems(copy);
                                 }}
-                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs uppercase"
+                                className="w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded px-2 py-1 text-xs uppercase"
                               />
                             </td>
-                            <td className="p-2 align-middle">
+                            <td className="p-2 align-top pt-2.5">
                               <input
                                 type="number"
                                 step="any"
@@ -1803,10 +1815,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                   copy[idx].quantity = e.target.value;
                                   setItems(copy);
                                 }}
-                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-right"
+                                className="w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded px-2 py-1 text-right"
                               />
                             </td>
-                            <td className="p-2 align-middle">
+                            <td className="p-2 align-top pt-2.5">
                               {(() => {
                                 let isBelowMin = false;
                                 let isAboveMax = false;
@@ -1837,7 +1849,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                         copy[idx].rate = e.target.value;
                                         setItems(copy);
                                       }}
-                                      className={`w-full border rounded px-2 py-1 text-right ${
+                                      className={`w-full border rounded px-2 py-1 text-right bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 ${
                                         isBelowMin
                                           ? 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300'
                                           : isAboveMax
@@ -1899,7 +1911,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                 );
                               })()}
                             </td>
-                            <td className="p-2 align-middle">
+                            <td className="p-2 align-top pt-2.5">
                               <select
                                 value={item.gst_rate}
                                 onChange={(e) => {
@@ -1914,7 +1926,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                 ))}
                               </select>
                             </td>
-                            <td className="p-2 align-middle text-center">
+                            <td className="p-2 align-top pt-3 text-center">
                               <input
                                 type="checkbox"
                                 checked={Boolean(item.is_tax_inclusive)}
@@ -1927,7 +1939,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                 className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
                               />
                             </td>
-                            <td className="p-2 align-middle text-center">
+                            <td className="p-2 align-top pt-2.5 text-center">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1944,7 +1956,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                     ...copy[idx],
                                     show_notes: nextShow,
                                     custom_notes: currentNotes,
-                                    description: formatItemNotesToDescription(currentNotes),
+                                    description: formatItemNotesToDescription(currentNotes) || copy[idx].description || '',
                                   };
                                   setItems(copy);
                                 }}
@@ -1955,10 +1967,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                 <span>{activeNotesCount > 0 ? `Notes (${activeNotesCount})` : '+ Note'}</span>
                               </button>
                             </td>
-                            <td className="p-2 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                            <td className="p-2 align-top pt-3 text-right font-mono font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
                               {formatIndianCurrency(lineCalc.lineTotal)}
                             </td>
-                            <td className="p-2 align-middle text-center">
+                            <td className="p-2 align-top pt-2.5 text-center">
                               <div className="flex items-center justify-center space-x-1">
                                 {isCustomRow && item.item_name?.trim() && (
                                   <button
@@ -2119,7 +2131,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Payment instructions, bank transfer details, delivery terms..."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs font-mono leading-relaxed"
+                  className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded p-2 text-xs font-mono leading-relaxed"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
                   Pre-filled from Settings. You can edit, add, or delete terms for this invoice.

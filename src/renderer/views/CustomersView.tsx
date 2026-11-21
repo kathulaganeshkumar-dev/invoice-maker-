@@ -108,7 +108,7 @@ const getCustomerTypeBadge = (type?: string) => {
     case 'EDUCATION':
       return {
         label: 'Education',
-        className: 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700',
+        className: 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-700',
       };
   }
 };
@@ -199,6 +199,17 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const handleOpenEdit = (c: Customer) => {
+    setEditingCustomer({
+      ...c,
+      additional_bank_accounts: c.additional_bank_accounts
+        ? c.additional_bank_accounts.map((b) => ({ ...b }))
+        : [],
+    });
+    setReminderDaysInput(c.payment_terms_days > 0 ? String(c.payment_terms_days) : '');
+    setIsModalOpen(true);
+  };
+
   const handleAddBankAccount = () => {
     setEditingCustomer((prev) => ({
       ...prev,
@@ -249,7 +260,7 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
   });
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -300,7 +311,7 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Search customer name, mobile, GSTIN..."
+            placeholder="Search customer name, mobile, GST Number..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
@@ -331,11 +342,11 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
               <th className="py-3 px-4">Customer Name</th>
               <th className="py-3 px-4">Type</th>
               <th className="py-3 px-4">Mobile & Email</th>
-              <th className="py-3 px-4">GSTIN / PAN</th>
-              <th className="py-3 px-4">City & State</th>
+              <th className="py-3 px-4">GST Number / PAN</th>
+              <th className="py-3 px-4">State</th>
               <th className="py-3 px-4">Payment Reminder</th>
               <th className="py-3 px-4 text-right">Current Balance</th>
-              <th className="py-3 px-4 text-center">Actions</th>
+              <th className="py-3 px-4">City</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -364,22 +375,30 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                 const urgent = pendingInvoices[0];
 
                 return (
-                <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <tr
+                  key={c.id}
+                  onClick={() => handleOpenEdit(c)}
+                  className="cursor-pointer"
+                  title="Click to view and edit customer details"
+                >
                   <td className="py-3 px-4">
-                    <div className="font-bold text-slate-900 dark:text-white">{c.name}</div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(c);
+                      }}
+                      className="text-left font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+                      title="Click to view and edit customer details"
+                    >
+                      {c.name}
+                    </button>
                     {c.company_name && (
                       <div className="text-[10px] text-slate-400">{c.company_name}</div>
                     )}
                   </td>
-                  <td className="py-3 px-4">
-                    {(() => {
-                      const badge = getCustomerTypeBadge(c.customer_type);
-                      return (
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      );
-                    })()}
+                  <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">
+                    {getCustomerTypeBadge(c.customer_type).label}
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
                     <div>{c.mobile}</div>
@@ -393,7 +412,7 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                    <div>{c.city ? `${c.city}, ${c.state}` : c.state}</div>
+                    <div>{c.state || '-'}</div>
                     {c.bank_name && (
                       <div
                         className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5"
@@ -409,58 +428,23 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
                     {urgent ? (
-                      <div
-                        className="space-y-0.5"
+                      <span
+                        className="font-medium"
                         title={pendingInvoices
                           .map(
                             (p) =>
-                              `${p.inv.invoice_number}: ${
-                                p.countdown.daysLeft < 0
-                                  ? `Overdue by ${Math.abs(p.countdown.daysLeft)}d`
-                                  : p.countdown.daysLeft === 0
-                                    ? 'Due Today'
-                                    : `${p.countdown.daysLeft}d left`
-                              } (Due ${formatShortDate(p.countdown.dueDate)})`
+                              `${p.inv.invoice_number}: Due ${formatShortDate(p.countdown.dueDate)}`
                           )
                           .join('\n')}
                       >
-                        <span
-                          className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            urgent.countdown.daysLeft <= 0
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                              : urgent.countdown.daysLeft <= 7
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
-                          }`}
-                        >
-                          <Clock className="w-3 h-3" />
-                          <span>
-                            {urgent.countdown.daysLeft < 0
-                              ? `Overdue ${Math.abs(urgent.countdown.daysLeft)} day${Math.abs(urgent.countdown.daysLeft) === 1 ? '' : 's'}`
-                              : urgent.countdown.daysLeft === 0
-                                ? 'Due Today'
-                                : `${urgent.countdown.daysLeft} day${urgent.countdown.daysLeft === 1 ? '' : 's'} left`}
-                          </span>
-                        </span>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          {urgent.inv.invoice_number} • Due {formatShortDate(urgent.countdown.dueDate)}
-                          {pendingInvoices.length > 1 && (
-                            <span className="ml-1 text-brand-600 font-sans font-semibold">
-                              (+{pendingInvoices.length - 1} more)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ) : c.payment_terms_days > 0 ? (
-                      <div className="space-y-0.5">
-                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          <span>{c.payment_terms_days} days reminder</span>
-                        </span>
-                        <div className="text-[10px] text-slate-400">No pending invoices</div>
-                      </div>
+                        {urgent.countdown.daysLeft < 0
+                          ? `Overdue by ${Math.abs(urgent.countdown.daysLeft)}d`
+                          : urgent.countdown.daysLeft === 0
+                            ? 'Due Today'
+                            : `${urgent.countdown.daysLeft}d left`}
+                      </span>
                     ) : (
                       <span className="text-slate-400">-</span>
                     )}
@@ -468,34 +452,8 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                   <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                     {formatIndianCurrency(c.current_balance)}
                   </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingCustomer({
-                            ...c,
-                            additional_bank_accounts: c.additional_bank_accounts
-                              ? c.additional_bank_accounts.map((b) => ({ ...b }))
-                              : [],
-                          });
-                          setReminderDaysInput(c.payment_terms_days > 0 ? String(c.payment_terms_days) : '');
-                          setIsModalOpen(true);
-                        }}
-                        className="p-1 text-slate-400 hover:text-brand-600"
-                        title="Edit Customer"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(c.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                        title="Archive Customer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
+                    {c.city || '-'}
                   </td>
                 </tr>
                 );
@@ -513,7 +471,7 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <Users className="w-4 h-4 text-brand-600" />
-                <span>{editingCustomer.id ? 'Edit Customer' : 'Add New Customer'}</span>
+                <span>{editingCustomer.id ? 'Customer Details & Settings' : 'Add New Customer'}</span>
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -572,11 +530,11 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                 <div className="col-span-2 grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
                     <div className="flex items-center justify-between h-6 mb-1.5">
-                      <label className="font-semibold text-slate-700 dark:text-slate-300">GSTIN</label>
+                      <label className="font-semibold text-slate-700 dark:text-slate-300">GST Number</label>
                     </div>
                     <input
                       type="text"
-                      placeholder="15-character GSTIN"
+                      placeholder="15-character GST Number"
                       value={editingCustomer.gstin || ''}
                       onChange={(e) => setEditingCustomer({ ...editingCustomer, gstin: e.target.value.toUpperCase() })}
                       className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono uppercase bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
@@ -833,21 +791,40 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
-              >
-                Save Customer
-              </button>
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+              <div>
+                {editingCustomer.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingCustomer.id) {
+                        handleDelete(editingCustomer.id);
+                        setIsModalOpen(false);
+                      }
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-semibold transition-colors border border-rose-200 dark:border-rose-900/50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Customer</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                >
+                  Save Customer
+                </button>
+              </div>
             </div>
           </div>
         </div>

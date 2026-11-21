@@ -46,9 +46,14 @@ export const Navbar: React.FC<Props> = ({
 }) => {
   const currentFy = getIndianFinancialYear();
   const canAccess = (menuId: string) => !allowedMenus || allowedMenus.length === 0 || allowedMenus.includes(menuId);
+  const isElectron = typeof window !== 'undefined' && Boolean((window as any).electronAPI);
 
   return (
-    <header className="h-14 border-b border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between px-4 select-none z-20">
+    <header
+      className={`h-14 border-b border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between px-4 select-none z-20 ${
+        isElectron ? 'pr-[145px] app-drag-region' : ''
+      }`}
+    >
       {/* Left: Brand logo & Active Business Selector */}
       <div className="flex items-center space-x-3">
         <div className="flex items-center space-x-2 text-brand-900 dark:text-white font-extrabold text-base tracking-tight">

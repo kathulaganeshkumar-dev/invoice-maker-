@@ -124,7 +124,105 @@ export class InventoryService {
   }
 
   // Stock Balances & Ledger
+  async ensureStockBalances(companyId: string): Promise<void> {
+    const products = await this.db('products').where({
+      company_id: companyId,
+      item_type: 'PRODUCT',
+      is_archived: false,
+    });
+    if (products.length === 0) return;
+
+    let warehouses = await this.db('warehouses').where({ company_id: companyId, is_active: true });
+    if (warehouses.length === 0) {
+      const defaultBranch =
+        (await this.db('branches').where({ company_id: companyId, is_default: true, is_archived: false }).first()) ||
+        (await this.db('branches').where({ company_id: companyId, is_archived: false }).first());
+      const branchId = defaultBranch?.id || 'DEFAULT_BRANCH';
+      const whId = uuidv4();
+      const now = new Date().toISOString();
+      await this.db('warehouses').insert({
+        id: whId,
+        company_id: companyId,
+        branch_id: branchId,
+        name: 'Main Warehouse',
+        code: 'MW01',
+        address: 'Default Local Storage',
+        is_default: true,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      });
+      warehouses = await this.db('warehouses').where({ company_id: companyId, is_active: true });
+    }
+
+    const defaultWh = warehouses.find((w) => w.is_default) || warehouses[0];
+    const existingBalances = await this.db('stock_balances').where({ company_id: companyId });
+    const balanceMap = new Map<string, any>();
+    for (const b of existingBalances) {
+      balanceMap.set(`${b.product_id}::${b.warehouse_id}`, b);
+    }
+
+    const now = new Date().toISOString();
+    for (const prod of products) {
+      const key = `${prod.id}::${defaultWh.id}`;
+      const existing = balanceMap.get(key);
+      const prodStockDec = new Decimal(prod.current_stock || 0);
+      const prodCostDec = new Decimal(prod.purchase_price || 0);
+
+      if (!existing) {
+        const totalVal = prodStockDec.mul(prodCostDec).toFixed(2);
+        await this.db('stock_balances').insert({
+          id: uuidv4(),
+          company_id: companyId,
+          warehouse_id: defaultWh.id,
+          product_id: prod.id,
+          quantity_on_hand: prodStockDec.toFixed(2),
+          average_unit_cost: prodCostDec.toFixed(2),
+          total_stock_value: totalVal,
+          last_updated_at: now,
+        });
+
+        if (prodStockDec.gt(0)) {
+          await this.db('inventory_transactions').insert({
+            id: uuidv4(),
+            company_id: companyId,
+            branch_id: defaultWh.branch_id || 'DEFAULT_BRANCH',
+            warehouse_id: defaultWh.id,
+            product_id: prod.id,
+            movement_type: 'OPENING_BALANCE',
+            quantity: prodStockDec.toFixed(2),
+            unit_cost: prodCostDec.toFixed(2),
+            total_cost: totalVal,
+            reference_document_type: 'OPENING_BALANCE',
+            reference_document_id: prod.id,
+            reference_document_number: 'INIT-STOCK',
+            notes: 'Initial opening stock balance',
+            transaction_date: now.split('T')[0],
+            created_at: now,
+          });
+        }
+      } else {
+        const updates: Record<string, any> = {};
+        if (Number(existing.average_unit_cost || 0) === 0 && prodCostDec.gt(0)) {
+          updates.average_unit_cost = prodCostDec.toFixed(2);
+        }
+        if (Number(existing.quantity_on_hand || 0) === 0 && prodStockDec.gt(0)) {
+          updates.quantity_on_hand = prodStockDec.toFixed(2);
+        }
+        if (Object.keys(updates).length > 0) {
+          const qty = updates.quantity_on_hand ? new Decimal(updates.quantity_on_hand) : new Decimal(existing.quantity_on_hand || 0);
+          const cost = updates.average_unit_cost ? new Decimal(updates.average_unit_cost) : new Decimal(existing.average_unit_cost || 0);
+          updates.total_stock_value = qty.mul(cost).toFixed(2);
+          updates.last_updated_at = now;
+          await this.db('stock_balances').where({ id: existing.id }).update(updates);
+        }
+      }
+    }
+  }
+
   async getStockBalances(companyId: string, warehouseId?: string): Promise<StockBalance[]> {
+    await this.ensureStockBalances(companyId);
+
     let query = this.db('stock_balances')
       .join('products', 'stock_balances.product_id', 'products.id')
       .join('warehouses', 'stock_balances.warehouse_id', 'warehouses.id')
@@ -136,7 +234,8 @@ export class InventoryService {
         'products.minimum_stock as minimum_stock',
         'warehouses.name as warehouse_name'
       )
-      .where('stock_balances.company_id', companyId);
+      .where('stock_balances.company_id', companyId)
+      .where('products.is_archived', false);
 
     if (warehouseId) {
       query = query.andWhere('stock_balances.warehouse_id', warehouseId);

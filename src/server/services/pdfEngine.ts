@@ -25,6 +25,143 @@ function getLocalFontPaths(): { regular?: string; bold?: string } {
   return { regular, bold };
 }
 
+function getHandwritingFontPath(): string | undefined {
+  const resourcesPath = (process as any).resourcesPath || '';
+  const candidates = [
+    path.join(process.cwd(), 'assets', 'fonts', 'LucidaHandwriting.ttf'),
+    path.join(resourcesPath, 'assets', 'fonts', 'LucidaHandwriting.ttf'),
+    'C:\\Windows\\Fonts\\LHANDW.TTF',
+    'C:\\Windows\\Fonts\\lhandw.ttf',
+  ];
+  return candidates.find((p) => fs.existsSync(p));
+}
+
+// 28 States & 8 Union Territories mapping for Indian GST invoices & quotations
+const STATE_INITIALS_MAP: Record<string, string> = {
+  // 28 States & Common Variants
+  'ANDHRA PRADESH': 'AP',
+  'ANDHRA PRADESH (NEW)': 'AP',
+  'ANDHRA PRADESH (OLD)': 'AP',
+  'ANDHRA': 'AP',
+  'ARUNACHAL PRADESH': 'AR',
+  'ASSAM': 'AS',
+  'BIHAR': 'BR',
+  'CHHATTISGARH': 'CG',
+  'CHATTISGARH': 'CG',
+  'GOA': 'GA',
+  'GUJARAT': 'GJ',
+  'HARYANA': 'HR',
+  'HIMACHAL PRADESH': 'HP',
+  'JHARKHAND': 'JH',
+  'KARNATAKA': 'KA',
+  'KERALA': 'KL',
+  'MADHYA PRADESH': 'MP',
+  'MAHARASHTRA': 'MH',
+  'MAHARASTRA': 'MH',
+  'MANIPUR': 'MN',
+  'MEGHALAYA': 'ML',
+  'MIZORAM': 'MZ',
+  'NAGALAND': 'NL',
+  'ODISHA': 'OD',
+  'ORISSA': 'OD',
+  'PUNJAB': 'PB',
+  'RAJASTHAN': 'RJ',
+  'SIKKIM': 'SK',
+  'TAMIL NADU': 'TN',
+  'TAMILNADU': 'TN',
+  'TELANGANA': 'TG',
+  'TELENGANA': 'TG',
+  'TRIPURA': 'TR',
+  'UTTAR PRADESH': 'UP',
+  'UTTARAKHAND': 'UK',
+  'UTTRANCHAL': 'UK',
+  'UTTARANCHAL': 'UK',
+  'WEST BENGAL': 'WB',
+  'BENGAL': 'WB',
+  // 8 Union Territories & Variants
+  'ANDAMAN AND NICOBAR ISLANDS': 'AN',
+  'ANDAMAN AND NICOBAR': 'AN',
+  'ANDAMAN & NICOBAR': 'AN',
+  'CHANDIGARH': 'CH',
+  'DADRA AND NAGAR HAVELI AND DAMAN AND DIU': 'DD',
+  'DADRA AND NAGAR HAVELI': 'DD',
+  'DAMAN AND DIU': 'DD',
+  'DELHI': 'DL',
+  'DELHI (NCT)': 'DL',
+  'NEW DELHI': 'DL',
+  'NATIONAL CAPITAL TERRITORY OF DELHI': 'DL',
+  'JAMMU AND KASHMIR': 'JK',
+  'JAMMU & KASHMIR': 'JK',
+  'J&K': 'JK',
+  'LADAKH': 'LA',
+  'LAKSHADWEEP': 'LD',
+  'PUDUCHERRY': 'PY',
+  'PONDICHERRY': 'PY',
+  // GST State Numeric Codes (first 2 digits of GSTIN)
+  '01': 'JK',
+  '02': 'HP',
+  '03': 'PB',
+  '04': 'CH',
+  '05': 'UK',
+  '06': 'HR',
+  '07': 'DL',
+  '08': 'RJ',
+  '09': 'UP',
+  '10': 'BR',
+  '11': 'SK',
+  '12': 'AR',
+  '13': 'NL',
+  '14': 'MN',
+  '15': 'MZ',
+  '16': 'TR',
+  '17': 'ML',
+  '18': 'AS',
+  '19': 'WB',
+  '20': 'JH',
+  '21': 'OD',
+  '22': 'CG',
+  '23': 'MP',
+  '24': 'GJ',
+  '26': 'DD',
+  '27': 'MH',
+  '28': 'AP',
+  '29': 'KA',
+  '30': 'GA',
+  '31': 'LD',
+  '32': 'KL',
+  '33': 'TN',
+  '34': 'PY',
+  '35': 'AN',
+  '36': 'TG',
+  '37': 'AP',
+  '38': 'LA',
+};
+
+function getStateInitials(stateName?: string, stateCode?: string, gstin?: string): string {
+  // 1. Direct state name check
+  if (stateName) {
+    const clean = stateName.trim().toUpperCase();
+    if (STATE_INITIALS_MAP[clean]) return STATE_INITIALS_MAP[clean];
+    // Check partial / substring matches
+    for (const [k, v] of Object.entries(STATE_INITIALS_MAP)) {
+      if (isNaN(Number(k)) && (clean.includes(k) || k.includes(clean))) {
+        return v;
+      }
+    }
+  }
+  // 2. Direct state numeric code check (e.g. '27', '36', '37')
+  if (stateCode) {
+    const cleanCode = stateCode.toString().trim().padStart(2, '0');
+    if (STATE_INITIALS_MAP[cleanCode]) return STATE_INITIALS_MAP[cleanCode];
+  }
+  // 3. GSTIN prefix check (if first 2 digits are numeric)
+  if (gstin && gstin.trim().length >= 2) {
+    const prefix = gstin.trim().substring(0, 2);
+    if (STATE_INITIALS_MAP[prefix]) return STATE_INITIALS_MAP[prefix];
+  }
+  return 'AP';
+}
+
 export interface PdfGenerationOptions {
   mode: 'DIGITAL_LETTERHEAD' | 'PREPRINTED_STATIONERY';
   template?: LetterheadTemplate;
@@ -771,12 +908,18 @@ export class PdfEngine {
     let fontRegular: any;
     let fontBold: any;
     let fontItalic: any;
+    let fontHandwriting: any = null;
+
+    let fontkitLoaded = false;
+    try {
+      const fontkit = require('@pdf-lib/fontkit');
+      pdfDoc.registerFontkit(fontkit);
+      fontkitLoaded = true;
+    } catch {}
 
     const fontPaths = getLocalFontPaths();
-    if (fontPaths.regular && fontPaths.bold) {
+    if (fontkitLoaded && fontPaths.regular && fontPaths.bold) {
       try {
-        const fontkit = require('@pdf-lib/fontkit');
-        pdfDoc.registerFontkit(fontkit);
         const regBytes = fs.readFileSync(fontPaths.regular);
         const boldBytes = fs.readFileSync(fontPaths.bold);
         fontRegular = await pdfDoc.embedFont(regBytes);
@@ -791,6 +934,18 @@ export class PdfEngine {
       fontRegular = await pdfDoc.embedFont(StandardFonts.TimesRoman);
       fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
       fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+    }
+
+    if (fontkitLoaded) {
+      const hwPath = getHandwritingFontPath();
+      if (hwPath && fs.existsSync(hwPath)) {
+        try {
+          const hwBytes = fs.readFileSync(hwPath);
+          fontHandwriting = await pdfDoc.embedFont(hwBytes);
+        } catch (err) {
+          console.warn('Could not embed handwriting font:', err);
+        }
+      }
     }
 
     const formatAmt = (val: any) => {
@@ -838,11 +993,11 @@ export class PdfEngine {
           { name: 'Total Amount', width: 72, align: 'right' },
         ]
       : [
-          { name: 'Sl.No', width: 35, align: 'center' },
-          { name: 'Description of Goods', width: tableWidth - (35 + 45 + 115 + 115), align: 'left' },
-          { name: 'Units', width: 45, align: 'center' },
-          { name: 'Base rate', width: 115, align: 'right' },
-          { name: 'Total Amount', width: 115, align: 'right' },
+          { name: 'Sl.No', width: 32, align: 'center' },
+          { name: 'Description of Goods', width: tableWidth - (32 + 36 + 55 + 65), align: 'left' },
+          { name: 'Units', width: 36, align: 'center' },
+          { name: 'Base rate', width: 55, align: 'right' },
+          { name: 'Total Amount', width: 65, align: 'right' },
         ];
 
     let page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
@@ -982,28 +1137,58 @@ export class PdfEngine {
     };
 
     const drawTableHeader = (startY: number) => {
-      const headerH = 22;
+      const headerH = 24;
       // Pure crisp transparent background (remove any gray/color shading)
 
       let curColX = leftX;
       for (const c of cols) {
-        let fontSize = 7.5;
-        let textW = fontBold.widthOfTextAtSize(c.name, fontSize);
-        while (textW > c.width - 6 && fontSize > 5.5) {
-          fontSize -= 0.5;
-          textW = fontBold.widthOfTextAtSize(c.name, fontSize);
+        let lines: string[] = [c.name];
+        if (c.name === 'Base rate') {
+          lines = ['Base', 'rate'];
+        } else if (c.name === 'Total Amount') {
+          lines = ['Total', 'Amount'];
+        } else if (c.name === 'Taxable Amount') {
+          lines = ['Taxable', 'Amount'];
+        } else if (c.name === 'GST Amount') {
+          lines = ['GST', 'Amount'];
         }
-        // Center all column titles inside their header cell to avoid header text overlap
-        let textX = curColX + (c.width - textW) / 2;
-        if (textX < curColX + 2) textX = curColX + 2;
 
-        page.drawText(c.name, {
-          x: textX,
-          y: toPdfY(startY + 15),
-          size: fontSize,
-          font: fontBold,
-          color: rgb(0, 0, 0),
-        });
+        if (lines.length === 2) {
+          const fontSize = 7.5;
+          const w1 = fontBold.widthOfTextAtSize(lines[0], fontSize);
+          const w2 = fontBold.widthOfTextAtSize(lines[1], fontSize);
+          page.drawText(lines[0], {
+            x: curColX + (c.width - w1) / 2,
+            y: toPdfY(startY + 10),
+            size: fontSize,
+            font: fontBold,
+            color: rgb(0, 0, 0),
+          });
+          page.drawText(lines[1], {
+            x: curColX + (c.width - w2) / 2,
+            y: toPdfY(startY + 19),
+            size: fontSize,
+            font: fontBold,
+            color: rgb(0, 0, 0),
+          });
+        } else {
+          let fontSize = 7.5;
+          let textW = fontBold.widthOfTextAtSize(lines[0], fontSize);
+          while (textW > c.width - 6 && fontSize > 5.5) {
+            fontSize -= 0.5;
+            textW = fontBold.widthOfTextAtSize(lines[0], fontSize);
+          }
+          let textX = curColX + (c.width - textW) / 2;
+          if (textX < curColX + 2) textX = curColX + 2;
+
+          page.drawText(lines[0], {
+            x: textX,
+            y: toPdfY(startY + 15),
+            size: fontSize,
+            font: fontBold,
+            color: rgb(0, 0, 0),
+          });
+        }
         curColX += c.width;
       }
 
@@ -1064,6 +1249,13 @@ export class PdfEngine {
 
       // Check remaining space against bottom margin clearance
       if (currentY + rowHeight > height - bottomMarginPt - 130) {
+        // Close table on current page before breaking to next page
+        page.drawLine({
+          start: { x: leftX, y: toPdfY(currentY) },
+          end: { x: rightX, y: toPdfY(currentY) },
+          thickness: 0.75,
+          color: rgb(0, 0, 0),
+        });
         page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
         currentY = drawHeader(true);
         currentY = drawTableHeader(currentY);
@@ -1123,15 +1315,7 @@ export class PdfEngine {
         colX += c.width;
       });
 
-      // Bottom Row Divider (Solid crisp black line, uniform 0.75pt thickness)
-      page.drawLine({
-        start: { x: leftX, y: toPdfY(rowStartY + rowHeight) },
-        end: { x: rightX, y: toPdfY(rowStartY + rowHeight) },
-        thickness: 0.75,
-        color: rgb(0, 0, 0),
-      });
-
-      // Vertical Cell Dividers (Crisp solid black lines, no blur)
+      // Vertical Cell Dividers (Crisp solid black lines; in-between row bottom lines are omitted per requirement)
       let rDivX = leftX;
       page.drawLine({ start: { x: leftX, y: toPdfY(rowStartY) }, end: { x: leftX, y: toPdfY(rowStartY + rowHeight) }, thickness: 0.75, color: rgb(0, 0, 0) });
       for (const c of cols) {
@@ -1143,6 +1327,14 @@ export class PdfEngine {
       currentY += rowHeight;
     }
 
+    // Close bottom of items table with solid horizontal line before summary totals
+    page.drawLine({
+      start: { x: leftX, y: toPdfY(currentY) },
+      end: { x: rightX, y: toPdfY(currentY) },
+      thickness: 0.75,
+      color: rgb(0, 0, 0),
+    });
+
     // Check space for Summary Totals & Terms
     if (currentY + 160 > height - bottomMarginPt) {
       page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
@@ -1151,6 +1343,7 @@ export class PdfEngine {
 
     // Totals Rows (TOTAL, Round Off, Grand Total)
     const totalsColsSpanWidth = cols.slice(0, cols.length - 1).reduce((acc, c) => acc + c.width, 0);
+    const dividerX = leftX + totalsColsSpanWidth;
 
     // TOTAL row = sum of all products' Total Amount (Taxable Amount + GST Amount)
     let productsTotalDec = new Decimal(0);
@@ -1178,48 +1371,114 @@ export class PdfEngine {
 
     const summaryRows = [
       { label: 'TOTAL', val: formatAmt(totalOfAllProducts), isBold: true },
-      { label: 'Round Off', val: formatAmt(roundOffVal), isBold: false },
+      { label: 'Round Off', val: formatAmt(roundOffVal), isBold: true },
       { label: 'Grand Total', val: formatAmt(grandTotalVal), isBold: true },
     ];
 
-    for (const s of summaryRows) {
-      const sH = 17;
-      const sY = currentY;
+    const sH = 17;
+    const totalsBlockStartY = currentY;
+    const totalBlockH = sH * summaryRows.length; // 51 pt
 
-      const labelW = (s.isBold ? fontBold : fontRegular).widthOfTextAtSize(s.label, 8.5);
+    // 1. Draw labels in left merged cell and values in right column (no horizontal lines in left cell)
+    summaryRows.forEach((s, idx) => {
+      const rowY = totalsBlockStartY + idx * sH;
+
+      // Label right-aligned inside the left merged cell (against dividerX - 6)
+      const labelW = fontBold.widthOfTextAtSize(s.label, 8.5);
       page.drawText(s.label, {
-        x: leftX + totalsColsSpanWidth - labelW - 6,
-        y: toPdfY(sY + 11.5),
+        x: dividerX - labelW - 6,
+        y: toPdfY(rowY + 11.5),
         size: 8.5,
-        font: s.isBold ? fontBold : fontRegular,
+        font: fontBold,
         color: rgb(0, 0, 0),
       });
 
-      const valW = (s.isBold ? fontBold : fontRegular).widthOfTextAtSize(s.val, 8.5);
+      // Amount right-aligned inside the right column (against rightX - 4)
+      const valW = fontBold.widthOfTextAtSize(s.val, 8.5);
       page.drawText(s.val, {
         x: rightX - valW - 4,
-        y: toPdfY(sY + 11.5),
+        y: toPdfY(rowY + 11.5),
         size: 8.5,
-        font: s.isBold ? fontBold : fontRegular,
+        font: fontBold,
         color: rgb(0, 0, 0),
       });
 
-      // Borders
-      page.drawLine({
-        start: { x: leftX, y: toPdfY(sY + sH) },
-        end: { x: rightX, y: toPdfY(sY + sH) },
-        thickness: 0.75,
+      // Horizontal divider for the right amounts column ONLY (between rows 0-1 and 1-2)
+      if (idx < summaryRows.length - 1) {
+        page.drawLine({
+          start: { x: dividerX, y: toPdfY(rowY + sH) },
+          end: { x: rightX, y: toPdfY(rowY + sH) },
+          thickness: 0.75,
+          color: rgb(0, 0, 0),
+        });
+      }
+    });
+
+    // 2. Vertical borders for the totals block
+    // Left outer border
+    page.drawLine({
+      start: { x: leftX, y: toPdfY(totalsBlockStartY) },
+      end: { x: leftX, y: toPdfY(totalsBlockStartY + totalBlockH) },
+      thickness: 0.75,
+      color: rgb(0, 0, 0),
+    });
+    // Middle vertical divider separating left merged cell from right amounts column
+    page.drawLine({
+      start: { x: dividerX, y: toPdfY(totalsBlockStartY) },
+      end: { x: dividerX, y: toPdfY(totalsBlockStartY + totalBlockH) },
+      thickness: 0.75,
+      color: rgb(0, 0, 0),
+    });
+    // Right outer border
+    page.drawLine({
+      start: { x: rightX, y: toPdfY(totalsBlockStartY) },
+      end: { x: rightX, y: toPdfY(totalsBlockStartY + totalBlockH) },
+      thickness: 0.75,
+      color: rgb(0, 0, 0),
+    });
+
+    // 3. Full-width horizontal bottom border closing the entire table
+    page.drawLine({
+      start: { x: leftX, y: toPdfY(totalsBlockStartY + totalBlockH) },
+      end: { x: rightX, y: toPdfY(totalsBlockStartY + totalBlockH) },
+      thickness: 0.75,
+      color: rgb(0, 0, 0),
+    });
+
+    currentY = totalsBlockStartY + totalBlockH;
+
+    // 4. Company GST Number line placed directly below the table's bottom border matching the screenshot (GST format only)
+    if (isGst) {
+      const companyGstin = (
+        options.company?.gstin ||
+        options.branch?.gstin ||
+        (quotation as any).company_gstin ||
+        ''
+      ).trim();
+      // Prioritize Company Details state (options.company?.state) as explicitly configured by the user
+      const stateInitials = getStateInitials(
+        options.company?.state || options.branch?.state || (quotation as any).company_state || quotation.state,
+        options.company?.state_code || options.branch?.state_code,
+        companyGstin
+      );
+      const gstPrefix = `${stateInitials}-GST Number :`;
+      const gstLine = companyGstin ? `${gstPrefix} ${companyGstin}` : `${gstPrefix} `;
+
+      // Spacing: exactly below table bottom line
+      currentY += 12;
+
+      page.drawText(gstLine, {
+        x: leftX,
+        y: toPdfY(currentY),
+        size: 9.5,
+        font: fontBold,
         color: rgb(0, 0, 0),
       });
-      page.drawLine({ start: { x: leftX, y: toPdfY(sY) }, end: { x: leftX, y: toPdfY(sY + sH) }, thickness: 0.75, color: rgb(0, 0, 0) });
-      page.drawLine({ start: { x: leftX + totalsColsSpanWidth, y: toPdfY(sY) }, end: { x: leftX + totalsColsSpanWidth, y: toPdfY(sY + sH) }, thickness: 0.75, color: rgb(0, 0, 0) });
-      page.drawLine({ start: { x: rightX, y: toPdfY(sY) }, end: { x: rightX, y: toPdfY(sY + sH) }, thickness: 0.75, color: rgb(0, 0, 0) });
 
-      currentY += sH;
+      currentY += 16;
+    } else {
+      currentY += 12;
     }
-
-    // Clean spacing after Grand Total row before Terms & Conditions (No AP-GST number below table)
-    currentY += 16;
 
     // Check space for Terms & Conditions Block
     if (currentY + 110 > height - bottomMarginPt) {
@@ -1308,8 +1567,26 @@ export class PdfEngine {
     });
 
     // Sign-Off Block (Yours truly, For VARUN SYSTEMS.)
+    const rawSignCompany =
+      quotation.sign_off_company ||
+      (options.company?.name ? options.company.name.toUpperCase() : 'VARUN SYSTEMS');
+    let companyClean = rawSignCompany.trim();
+    if (companyClean.toLowerCase().startsWith('for ')) {
+      companyClean = companyClean.substring(4).trim();
+    }
+    if (!companyClean.endsWith('.')) {
+      companyClean = `${companyClean}.`;
+    }
+
+    const forPrefix = 'For ';
+    const compW = fontHandwriting
+      ? fontHandwriting.widthOfTextAtSize(companyClean, 11)
+      : fontBold.widthOfTextAtSize(companyClean, 9.5);
+    const forW = fontBold.widthOfTextAtSize(forPrefix, 9.5);
+    const totalSignW = forW + compW;
+    const signX = Math.max(leftX + 150, rightX - Math.max(totalSignW, 140));
+
     const signY = courtesyY + 20;
-    const signX = width - 180;
     page.drawText('Yours truly,', {
       x: signX,
       y: toPdfY(signY),
@@ -1318,15 +1595,31 @@ export class PdfEngine {
       color: rgb(0, 0, 0),
     });
 
-    // Space for physical rubber stamp and signature (~36 pt)
-    const companySignText = quotation.sign_off_company || 'For VARUN SYSTEMS.';
-    page.drawText(companySignText, {
-      x: signX,
-      y: toPdfY(signY + 38),
-      size: 9.5,
-      font: fontBold,
-      color: rgb(0, 0, 0),
-    });
+    // Space for physical rubber stamp and signature (~38 pt)
+    if (fontHandwriting) {
+      page.drawText(forPrefix, {
+        x: signX,
+        y: toPdfY(signY + 38),
+        size: 9.5,
+        font: fontBold,
+        color: rgb(0, 0, 0),
+      });
+      page.drawText(companyClean, {
+        x: signX + forW,
+        y: toPdfY(signY + 38),
+        size: 11,
+        font: fontHandwriting,
+        color: rgb(0, 0, 0),
+      });
+    } else {
+      page.drawText(`For ${companyClean}`, {
+        x: signX,
+        y: toPdfY(signY + 38),
+        size: 9.5,
+        font: fontBold,
+        color: rgb(0, 0, 0),
+      });
+    }
 
     return await pdfDoc.save();
   }

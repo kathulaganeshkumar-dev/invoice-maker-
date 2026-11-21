@@ -231,6 +231,11 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
       setEditingProduct({});
       setShowNotesSection(false);
       setNoteCountInput('');
+      window.dispatchEvent(
+        new CustomEvent('eim-data-changed', {
+          detail: { type: 'product', id: editingProduct.id, current_stock: payload.current_stock },
+        })
+      );
       await loadProducts();
     } catch (err: any) {
       alert(err.message || 'Error saving product');
@@ -245,6 +250,29 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
     } catch (err: any) {
       alert(err.message || 'Error archiving product');
     }
+  };
+
+  const handleOpenEdit = (p: Product) => {
+    const existingNotes = Array.isArray(p.custom_notes) ? [...p.custom_notes] : [];
+    const legacyPrice =
+      !p.min_selling_price && !p.max_selling_price && Number(p.selling_price) > 0
+        ? p.selling_price
+        : '';
+    setEditingProduct({
+      ...p,
+      current_stock: p.current_stock !== undefined && p.current_stock !== null ? String(p.current_stock) : '0',
+      selling_price: Number(p.selling_price) === 0 ? '' : p.selling_price,
+      min_selling_price: p.min_selling_price ?? legacyPrice,
+      max_selling_price: p.max_selling_price ?? '',
+      purchase_price: Number(p.purchase_price) === 0 ? '' : p.purchase_price,
+      minimum_stock: Number(p.minimum_stock) === 0 ? '' : p.minimum_stock,
+      custom_notes: existingNotes,
+    });
+    setShowNotesSection(existingNotes.length > 0);
+    setNoteCountInput(existingNotes.length > 0 ? String(existingNotes.length) : '');
+    setIsInlineCatOpen(false);
+    setInlineCatName('');
+    setIsModalOpen(true);
   };
 
   const handleCreateCategory = async () => {
@@ -314,7 +342,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
   });
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -353,6 +381,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
               setEditingProduct({
                 item_type: 'PRODUCT',
                 unit: 'NOS',
+                current_stock: '0',
                 gst_rate: '18.00',
                 purchase_price: '',
                 selling_price: '',
@@ -430,7 +459,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
               <th className="py-3 px-4">GST Rate</th>
               <th className="py-3 px-4 text-right">Selling Price</th>
               <th className="py-3 px-4 text-right">Stock on Hand</th>
-              <th className="py-3 px-4 text-center">Actions</th>
+              <th className="py-3 px-4 text-right">Purchase Price</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -448,9 +477,24 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   Number(p.current_stock) <= Number(p.minimum_stock);
 
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <tr
+                    key={p.id}
+                    onClick={() => handleOpenEdit(p)}
+                    className="cursor-pointer"
+                    title={`Click to view/edit ${p.item_type === 'SERVICE' ? 'service' : 'product'} details`}
+                  >
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900 dark:text-white">{p.name}</div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(p);
+                        }}
+                        className="text-left font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+                        title="Click to view and edit details"
+                      >
+                        {p.name}
+                      </button>
                       {p.sku && <div className="text-[10px] text-slate-400 font-mono">SKU: {p.sku}</div>}
                       {p.custom_notes && p.custom_notes.length > 0 && (
                         <div className="mt-1 space-y-0.5">
@@ -480,8 +524,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           p.item_type === 'PRODUCT'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600'
                         }`}
                       >
                         {p.item_type}
@@ -491,7 +535,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                       {p.category_name || '-'}
                     </td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                      {p.hsn_or_sac}
+                      {p.hsn_or_sac || '-'}
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
                       {p.gst_rate}%
@@ -519,45 +563,12 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const existingNotes = Array.isArray(p.custom_notes) ? [...p.custom_notes] : [];
-                            const legacyPrice =
-                              !p.min_selling_price && !p.max_selling_price && Number(p.selling_price) > 0
-                                ? p.selling_price
-                                : '';
-                            setEditingProduct({
-                              ...p,
-                              selling_price: Number(p.selling_price) === 0 ? '' : p.selling_price,
-                              min_selling_price: p.min_selling_price ?? legacyPrice,
-                              max_selling_price: p.max_selling_price ?? '',
-                              purchase_price: Number(p.purchase_price) === 0 ? '' : p.purchase_price,
-                              minimum_stock: Number(p.minimum_stock) === 0 ? '' : p.minimum_stock,
-                              custom_notes: existingNotes,
-                            });
-                            setShowNotesSection(existingNotes.length > 0);
-                            setNoteCountInput(existingNotes.length > 0 ? String(existingNotes.length) : '');
-                            setIsInlineCatOpen(false);
-                            setInlineCatName('');
-                            setIsModalOpen(true);
-                          }}
-                          className="p-1 text-slate-400 hover:text-brand-600"
-                          title="Edit Item"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(p.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600"
-                          title="Archive Item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                      {Number(p.purchase_price) > 0 ? (
+                        formatIndianCurrency(p.purchase_price)
+                      ) : (
+                        <span className="text-slate-400 font-normal">₹ 0.00</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -575,7 +586,11 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                 <Package className="w-4 h-4 text-brand-600" />
-                <span>{editingProduct.id ? 'Edit Item' : 'New Product / Service'}</span>
+                <span>
+                  {editingProduct.id
+                    ? `${editingProduct.item_type === 'SERVICE' ? 'Service' : 'Product'} Details & Settings`
+                    : 'New Product / Service'}
+                </span>
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -863,8 +878,12 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between h-6 mb-1.5">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300">Opening Stock</label>
-                    <span className="text-[10px] text-slate-400 font-normal">Initial quantity</span>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                      {editingProduct.id ? 'Stock on Hand / Quantity' : 'Opening Stock'}
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {editingProduct.id ? 'Current stock count' : 'Initial quantity'}
+                    </span>
                   </div>
                   {editingProduct.item_type === 'PRODUCT' ? (
                     <input
@@ -928,21 +947,40 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
-              >
-                Save Item
-              </button>
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+              <div>
+                {editingProduct.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingProduct.id) {
+                        handleDelete(editingProduct.id);
+                        setIsModalOpen(false);
+                      }
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-semibold transition-colors border border-rose-200 dark:border-rose-900/50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete {editingProduct.item_type === 'SERVICE' ? 'Service' : 'Product'}</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                >
+                  Save Item
+                </button>
+              </div>
             </div>
           </div>
         </div>

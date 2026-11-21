@@ -140,7 +140,7 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
   const viewingCompany = companies.find((c) => c.id === viewingCompanyId);
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -349,7 +349,6 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
                           title={tpl.file_path}
                         >
                           <span className="truncate">{tpl.file_path.split(/[\\/]/).pop()}</span>
-                          <ExternalLink className="w-3 h-3 shrink-0" />
                         </a>
                       </div>
                     )}

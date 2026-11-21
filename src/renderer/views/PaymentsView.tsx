@@ -49,6 +49,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [showMoreInvoices, setShowMoreInvoices] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [editingPayment, setEditingPayment] = useState<CustomerPayment | SupplierPayment | null>(null);
 
   // Form State
   const [selectedPartyId, setSelectedPartyId] = useState<string>('');
@@ -280,6 +281,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
   };
 
   const resetForm = () => {
+    setEditingPayment(null);
     setSelectedPartyId('');
     setSelectedInvoiceId('');
     setShowMoreInvoices(false);
@@ -524,6 +526,98 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const handleOpenEditPayment = async (p: CustomerPayment | SupplierPayment) => {
+    setEditingPayment(p);
+    setSelectedInvoiceId('');
+    setShowMoreInvoices(false);
+
+    const isCust = activeTab === 'customer';
+    const partyId = isCust ? (p as CustomerPayment).customer_id : (p as SupplierPayment).supplier_id;
+    setSelectedPartyId(partyId);
+
+    setPaymentAmount(p.amount);
+    setPaymentDate(p.payment_date || new Date().toISOString().split('T')[0]);
+    setPaymentMethod(p.payment_method || 'BANK_TRANSFER');
+
+    if (p.payment_method === 'CASH') {
+      if (p.bank_account && p.bank_account.startsWith('Cash: ')) {
+        setCashNote(p.bank_account.replace('Cash: ', ''));
+      } else {
+        setCashNote(p.bank_account || '');
+      }
+      setSelectedBankAccount('');
+    } else {
+      setSelectedBankAccount(p.bank_account || companyBankOptions[0]?.value || '');
+      setCashNote('');
+    }
+
+    if (!isCust) {
+      setSelectedVendorBankAccount((p as SupplierPayment).vendor_bank_account || '');
+    }
+
+    setReferenceNumber(p.reference_number || '');
+    setNotes(p.notes || '');
+
+    // Map existing allocations
+    const initialAlloc: Record<string, string> = {};
+    const allocDocIds = new Set<string>();
+    if (p.allocations && p.allocations.length > 0) {
+      for (const a of p.allocations) {
+        initialAlloc[a.document_id] = new Decimal(a.allocated_amount || 0).toFixed(2);
+        allocDocIds.add(a.document_id);
+      }
+      if (p.allocations.length === 1) {
+        setSelectedInvoiceId(p.allocations[0].document_id);
+      } else {
+        setShowMoreInvoices(true);
+      }
+    }
+    setAllocations(initialAlloc);
+
+    if (isCust) {
+      let sourceInvs = allCompanyInvoices;
+      try {
+        const fresh = await api.getInvoices(companyId);
+        sourceInvs = fresh.filter((i) => i.status !== 'CANCELLED');
+        setAllCompanyInvoices(sourceInvs);
+        setAllUnpaidInvoices(
+          sourceInvs.filter((i) => i.status === 'FINALIZED' && new Decimal(i.balance_amount || 0).gt(0))
+        );
+      } catch {}
+      const relevantInvs = sourceInvs.filter(
+        (i) => i.customer_id === partyId && i.status === 'FINALIZED' && (new Decimal(i.balance_amount || 0).gt(0) || allocDocIds.has(i.id))
+      );
+      const adjustedInvs = relevantInvs.map((inv) => {
+        const alreadyAlloc = initialAlloc[inv.id] ? new Decimal(initialAlloc[inv.id]) : new Decimal(0);
+        return {
+          ...inv,
+          balance_amount: new Decimal(inv.balance_amount || 0).add(alreadyAlloc).toFixed(2),
+        };
+      });
+      setUnpaidInvoices(adjustedInvs);
+    } else {
+      let sourceBills = allCompanyBills;
+      try {
+        sourceBills = await api.getPurchaseInvoices(companyId);
+        setAllCompanyBills(sourceBills);
+        setAllUnpaidBills(sourceBills.filter((b) => b.is_finalized && new Decimal(b.balance_amount || 0).gt(0)));
+      } catch {}
+      const relevantBills = sourceBills.filter(
+        (b) => b.supplier_id === partyId && b.is_finalized && (new Decimal(b.balance_amount || 0).gt(0) || allocDocIds.has(b.id))
+      );
+      const adjustedBills = relevantBills.map((bill) => {
+        const alreadyAlloc = initialAlloc[bill.id] ? new Decimal(initialAlloc[bill.id]) : new Decimal(0);
+        return {
+          ...bill,
+          balance_amount: new Decimal(bill.balance_amount || 0).add(alreadyAlloc).toFixed(2),
+        };
+      });
+      setUnpaidBills(adjustedBills);
+    }
+
+    setIsModalOpen(true);
+  };
+
   const handleRecordPayment = async () => {
     let enteredAmt: Decimal;
     try {
@@ -562,7 +656,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           .filter(([_, amt]) => amt && new Decimal(amt || 0).gt(0))
           .map(([invoiceId, amount]) => ({ invoiceId, amount }));
 
-        await api.recordCustomerPayment(companyId, {
+        const payload = {
           customerId: cust.id,
           customerName: cust.name,
           amount: enteredAmt.toFixed(2),
@@ -575,7 +669,13 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           referenceNumber,
           notes,
           allocations: allocationList,
-        });
+        };
+
+        if (editingPayment) {
+          await api.updateCustomerPayment(companyId, editingPayment.id, payload);
+        } else {
+          await api.recordCustomerPayment(companyId, payload);
+        }
       } else {
         const sup = suppliers.find((s) => s.id === selectedPartyId);
         if (!sup) {
@@ -588,7 +688,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           .filter(([_, amt]) => amt && new Decimal(amt || 0).gt(0))
           .map(([billId, amount]) => ({ billId, amount }));
 
-        await api.recordSupplierPayment(companyId, {
+        const payload = {
           supplierId: sup.id,
           supplierName: sup.name,
           amount: enteredAmt.toFixed(2),
@@ -603,8 +703,24 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           referenceNumber,
           notes,
           allocations: billAllocations,
-        });
+        };
+
+        if (editingPayment) {
+          await api.updateSupplierPayment(companyId, editingPayment.id, payload);
+        } else {
+          await api.recordSupplierPayment(companyId, payload);
+        }
       }
+
+      window.dispatchEvent(
+        new CustomEvent('eim-data-changed', {
+          detail: {
+            type: 'payment',
+            id: editingPayment ? editingPayment.id : undefined,
+          },
+        })
+      );
+      window.dispatchEvent(new CustomEvent('eim-data-sync'));
 
       setIsModalOpen(false);
       resetForm();
@@ -667,7 +783,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
   );
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -801,14 +917,30 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 </tr>
               ) : (
                 filteredCustomerPayments.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <tr key={p.id}>
                     <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
-                      {p.payment_number}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditPayment(p)}
+                        className="font-mono font-bold text-left cursor-pointer"
+                        title="Click to view & edit receipt details"
+                      >
+                        {p.payment_number}
+                      </button>
                     </td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
                       {isoToDisplayDate(p.payment_date) || p.payment_date}
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">{p.customer_name}</td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditPayment(p)}
+                        className="text-left cursor-pointer"
+                        title="Click to view & edit receipt details"
+                      >
+                        {p.customer_name}
+                      </button>
+                    </td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                         {p.payment_method}
@@ -879,15 +1011,29 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                   const hasAllocs = p.allocations && p.allocations.length > 0;
                   const unalloc = new Decimal(p.unallocated_amount || 0);
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                    <tr key={p.id}>
                       <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {p.payment_number}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPayment(p)}
+                          className="font-mono font-bold text-left cursor-pointer"
+                          title="Click to view & edit payment voucher details"
+                        >
+                          {p.payment_number}
+                        </button>
                       </td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
                       {isoToDisplayDate(p.payment_date) || p.payment_date}
                     </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900 dark:text-white">{p.supplier_name}</div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPayment(p)}
+                          className="text-left font-semibold text-slate-900 dark:text-white cursor-pointer block"
+                          title="Click to view & edit payment voucher details"
+                        >
+                          {p.supplier_name}
+                        </button>
                         {p.notes && <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{p.notes}</div>}
                       </td>
                       <td className="py-3 px-4">
@@ -966,7 +1112,11 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                   <ArrowUpRight className="w-4 h-4 text-rose-600" />
                 )}
                 <span>
-                  {activeTab === 'customer'
+                  {editingPayment
+                    ? activeTab === 'customer'
+                      ? `Edit Customer Receipt (${editingPayment.payment_number})`
+                      : `Edit Vendor Payment Voucher (${editingPayment.payment_number})`
+                    : activeTab === 'customer'
                     ? 'Record Customer Receipt (Money Received)'
                     : 'Record Vendor Payment (Paid to Supplier)'}
                 </span>
@@ -1145,12 +1295,20 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                       {activeTab === 'customer' ? 'Received From Customer *' : 'Paid To Supplier *'}
                     </label>
                   </div>
-                  <SearchableSelect
-                    options={partyOptions}
-                    value={selectedPartyId}
-                    onChange={(val) => handlePartyChange(val)}
-                    placeholder={activeTab === 'customer' ? 'Search customer by name or GSTIN...' : 'Search supplier by name or GSTIN...'}
-                  />
+                  {editingPayment ? (
+                    <div className="h-9 border border-slate-200 dark:border-slate-700 rounded-lg px-3 flex items-center bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs">
+                      {activeTab === 'customer'
+                        ? (editingPayment as CustomerPayment).customer_name
+                        : (editingPayment as SupplierPayment).supplier_name}
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      options={partyOptions}
+                      value={selectedPartyId}
+                      onChange={(val) => handlePartyChange(val)}
+                      placeholder={activeTab === 'customer' ? 'Search customer by name or GSTIN...' : 'Search supplier by name or GSTIN...'}
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -1463,7 +1621,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                               } ${
                                 isPicked
                                   ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-400 dark:border-sky-600'
-                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
                               }`}
                             >
                               <div className="space-y-0.5">
@@ -1677,6 +1835,10 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
               >
                 {saving
                   ? 'Saving...'
+                  : editingPayment
+                  ? activeTab === 'customer'
+                    ? 'Update Customer Receipt'
+                    : 'Update Vendor Payment'
                   : activeTab === 'customer'
                   ? 'Save Customer Receipt'
                   : 'Save Vendor Payment'}

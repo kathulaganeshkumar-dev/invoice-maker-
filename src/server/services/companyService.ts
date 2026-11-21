@@ -226,6 +226,18 @@ export class CompanyService {
     }
 
     await this.db('companies').where({ id: companyId }).update(updateData);
+
+    // Keep default/head-office branch in sync with company state, state_code, and gstin
+    if (updateData.state !== undefined || updateData.state_code !== undefined || updateData.gstin !== undefined) {
+      const branchSync: Record<string, any> = { updated_at: now };
+      if (updateData.state !== undefined) branchSync.state = updateData.state;
+      if (updateData.state_code !== undefined) branchSync.state_code = updateData.state_code;
+      if (updateData.gstin !== undefined) branchSync.gstin = updateData.gstin;
+      await this.db('branches')
+        .where({ company_id: companyId, is_default: true })
+        .update(branchSync);
+    }
+
     return (await this.getCompanyById(companyId))!;
   }
 

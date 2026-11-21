@@ -294,6 +294,282 @@ export class PaymentService {
     });
   }
 
+  async updateCustomerPayment(
+    companyId: string,
+    paymentId: string,
+    input: {
+      customerId: string;
+      customerName?: string;
+      amount: string | number;
+      paymentMethod: PaymentMethod;
+      bankAccount?: string;
+      paymentDate?: string;
+      referenceNumber?: string;
+      notes?: string;
+      allocations?: { invoiceId: string; amount: string | number }[];
+    }
+  ): Promise<CustomerPayment> {
+    return this.db.transaction(async (trx) => {
+      const now = new Date().toISOString();
+      const oldPayment = await trx('customer_payments').where({ company_id: companyId, id: paymentId }).first();
+      if (!oldPayment) throw new Error('Customer payment not found');
+
+      const totalPaymentAmount = new Decimal(input.amount || 0);
+      if (!totalPaymentAmount.isFinite() || totalPaymentAmount.lte(0)) {
+        throw new Error('Customer payment amount must be greater than zero.');
+      }
+
+      // Step 1: Revert previous allocations on invoices
+      const oldAllocations = await trx('payment_allocations').where({ payment_id: paymentId, document_type: 'INVOICE' });
+      for (const oldAlloc of oldAllocations) {
+        const inv = await trx('invoices').where({ id: oldAlloc.document_id, company_id: companyId }).first();
+        if (inv) {
+          const allocAmt = new Decimal(oldAlloc.allocated_amount);
+          const newPaid = new Decimal(inv.paid_amount).sub(allocAmt);
+          const newBal = new Decimal(inv.balance_amount).add(allocAmt);
+          await trx('invoices').where({ id: inv.id }).update({
+            paid_amount: newPaid.toFixed(2),
+            balance_amount: newBal.toFixed(2),
+            updated_at: now,
+          });
+        }
+      }
+
+      // Step 2: Restore previous payment amount to the old customer's balance
+      const oldCustRecord = await trx('customers').where({ id: oldPayment.customer_id, company_id: companyId }).first();
+      if (oldCustRecord) {
+        const restoredBal = new Decimal(oldCustRecord.current_balance || 0).add(new Decimal(oldPayment.amount));
+        await trx('customers')
+          .where({ id: oldCustRecord.id, company_id: companyId })
+          .update({
+            current_balance: restoredBal.toFixed(2),
+            updated_at: now,
+          });
+      }
+
+      // Delete old allocations
+      await trx('payment_allocations').where({ payment_id: paymentId }).del();
+
+      // Step 3: Process new allocations
+      let allocatedSum = new Decimal(0);
+      const newAllocationRecords: PaymentAllocation[] = [];
+
+      if (input.allocations && input.allocations.length > 0) {
+        for (const alloc of input.allocations) {
+          const allocAmount = new Decimal(alloc.amount);
+          if (allocAmount.lte(0)) continue;
+
+          const inv = await trx('invoices').where({ id: alloc.invoiceId, company_id: companyId }).first();
+          if (!inv) throw new Error(`Invoice ${alloc.invoiceId} not found`);
+
+          const invBalance = new Decimal(inv.balance_amount);
+          if (allocAmount.gt(invBalance)) {
+            throw new Error(`Allocation ₹ ${allocAmount} exceeds outstanding invoice balance ₹ ${invBalance}`);
+          }
+
+          allocatedSum = allocatedSum.add(allocAmount);
+
+          const newPaid = new Decimal(inv.paid_amount).add(allocAmount);
+          const newBalance = invBalance.sub(allocAmount);
+
+          await trx('invoices').where({ id: inv.id }).update({
+            paid_amount: newPaid.toFixed(2),
+            balance_amount: newBalance.toFixed(2),
+            updated_at: now,
+          });
+
+          const allocRec: PaymentAllocation = {
+            id: uuidv4(),
+            payment_id: paymentId,
+            document_type: 'INVOICE',
+            document_id: inv.id,
+            document_number: inv.invoice_number,
+            allocated_amount: allocAmount.toFixed(2),
+            allocated_at: now,
+          };
+
+          await trx('payment_allocations').insert(allocRec);
+          newAllocationRecords.push(allocRec);
+        }
+      }
+
+      if (allocatedSum.gt(totalPaymentAmount)) {
+        throw new Error('Total allocated amount cannot exceed received payment amount.');
+      }
+
+      const unallocatedAmount = totalPaymentAmount.sub(allocatedSum);
+
+      // Step 4: Apply new payment amount to customer balance
+      const newCustRecord = await trx('customers').where({ id: input.customerId, company_id: companyId }).first();
+      if (newCustRecord) {
+        const nextCustBal = new Decimal(newCustRecord.current_balance || 0).sub(totalPaymentAmount);
+        await trx('customers')
+          .where({ id: input.customerId, company_id: companyId })
+          .update({
+            current_balance: nextCustBal.toFixed(2),
+            updated_at: now,
+          });
+      }
+
+      // Step 5: Update customer_payments record
+      await trx('customer_payments').where({ id: paymentId, company_id: companyId }).update({
+        customer_id: input.customerId,
+        customer_name: input.customerName || newCustRecord?.name || oldPayment.customer_name,
+        amount: totalPaymentAmount.toFixed(2),
+        payment_method: input.paymentMethod || oldPayment.payment_method,
+        bank_account: input.bankAccount !== undefined ? input.bankAccount : oldPayment.bank_account,
+        reference_number: input.referenceNumber !== undefined ? input.referenceNumber : oldPayment.reference_number,
+        payment_date: input.paymentDate || oldPayment.payment_date,
+        notes: input.notes !== undefined ? input.notes : oldPayment.notes,
+        unallocated_amount: unallocatedAmount.toFixed(2),
+        updated_at: now,
+      });
+
+      const updated = await trx('customer_payments').where({ id: paymentId, company_id: companyId }).first();
+      updated.allocations = newAllocationRecords;
+      return updated;
+    });
+  }
+
+  async updateSupplierPayment(
+    companyId: string,
+    paymentId: string,
+    input: {
+      supplierId: string;
+      supplierName?: string;
+      amount: string | number;
+      paymentMethod: PaymentMethod;
+      bankAccount?: string;
+      vendorBankAccount?: string;
+      paymentDate?: string;
+      referenceNumber?: string;
+      notes?: string;
+      allocations?: { billId: string; amount: string | number }[];
+    }
+  ): Promise<SupplierPayment> {
+    return this.db.transaction(async (trx) => {
+      const now = new Date().toISOString();
+      const oldPayment = await trx('supplier_payments').where({ company_id: companyId, id: paymentId }).first();
+      if (!oldPayment) throw new Error('Supplier payment not found');
+
+      const totalAmount = new Decimal(input.amount || 0);
+      if (totalAmount.lte(0)) {
+        throw new Error('Payment amount must be greater than zero.');
+      }
+
+      // Step 1: Revert previous allocations on purchase bills
+      const oldAllocations = await trx('payment_allocations').where({ payment_id: paymentId, document_type: 'PURCHASE_INVOICE' });
+      for (const oldAlloc of oldAllocations) {
+        const bill = await trx('purchase_invoices').where({ id: oldAlloc.document_id, company_id: companyId }).first();
+        if (bill) {
+          const allocAmt = new Decimal(oldAlloc.allocated_amount);
+          const newPaid = new Decimal(bill.paid_amount).sub(allocAmt);
+          const newBal = new Decimal(bill.balance_amount).add(allocAmt);
+          await trx('purchase_invoices').where({ id: bill.id }).update({
+            paid_amount: newPaid.toFixed(2),
+            balance_amount: newBal.toFixed(2),
+            updated_at: now,
+          });
+        }
+      }
+
+      // Step 2: Restore previous payment amount to the old supplier's balance (payable increased)
+      const oldSupRecord = await trx('suppliers').where({ id: oldPayment.supplier_id, company_id: companyId }).first();
+      if (oldSupRecord) {
+        const restoredBal = new Decimal(oldSupRecord.current_balance || 0).add(new Decimal(oldPayment.amount));
+        await trx('suppliers')
+          .where({ id: oldSupRecord.id, company_id: companyId })
+          .update({
+            current_balance: restoredBal.toFixed(2),
+            updated_at: now,
+          });
+      }
+
+      // Delete old allocations
+      await trx('payment_allocations').where({ payment_id: paymentId }).del();
+
+      // Step 3: Process new allocations
+      let allocatedSum = new Decimal(0);
+      const newAllocationRecords: PaymentAllocation[] = [];
+
+      if (input.allocations && input.allocations.length > 0) {
+        for (const alloc of input.allocations) {
+          const allocAmount = new Decimal(alloc.amount || 0);
+          if (allocAmount.lte(0)) continue;
+
+          const bill = await trx('purchase_invoices').where({ id: alloc.billId, company_id: companyId }).first();
+          if (!bill) throw new Error(`Purchase invoice ${alloc.billId} not found`);
+
+          const billBalance = new Decimal(bill.balance_amount);
+          if (allocAmount.gt(billBalance)) {
+            throw new Error(`Allocation ₹ ${allocAmount} exceeds outstanding bill balance ₹ ${billBalance}`);
+          }
+
+          allocatedSum = allocatedSum.add(allocAmount);
+
+          const newPaid = new Decimal(bill.paid_amount).add(allocAmount);
+          const newBalance = billBalance.sub(allocAmount);
+
+          await trx('purchase_invoices').where({ id: bill.id }).update({
+            paid_amount: newPaid.toFixed(2),
+            balance_amount: newBalance.toFixed(2),
+            updated_at: now,
+          });
+
+          const allocRec: PaymentAllocation = {
+            id: uuidv4(),
+            payment_id: paymentId,
+            document_type: 'PURCHASE_INVOICE',
+            document_id: bill.id,
+            document_number: bill.bill_number,
+            allocated_amount: allocAmount.toFixed(2),
+            allocated_at: now,
+          };
+
+          await trx('payment_allocations').insert(allocRec);
+          newAllocationRecords.push(allocRec);
+        }
+      }
+
+      if (allocatedSum.gt(totalAmount)) {
+        throw new Error('Total allocated amount cannot exceed payment amount.');
+      }
+
+      const unallocated = totalAmount.sub(allocatedSum);
+
+      // Step 4: Apply new payment amount to supplier balance (payable decreased)
+      const newSupRecord = await trx('suppliers').where({ id: input.supplierId, company_id: companyId }).first();
+      if (newSupRecord) {
+        const nextSupBal = new Decimal(newSupRecord.current_balance || 0).sub(totalAmount);
+        await trx('suppliers')
+          .where({ id: input.supplierId, company_id: companyId })
+          .update({
+            current_balance: nextSupBal.toFixed(2),
+            updated_at: now,
+          });
+      }
+
+      // Step 5: Update supplier_payments record
+      await trx('supplier_payments').where({ id: paymentId, company_id: companyId }).update({
+        supplier_id: input.supplierId,
+        supplier_name: input.supplierName || newSupRecord?.name || oldPayment.supplier_name,
+        amount: totalAmount.toFixed(2),
+        payment_method: input.paymentMethod || oldPayment.payment_method,
+        bank_account: input.bankAccount !== undefined ? input.bankAccount : oldPayment.bank_account,
+        vendor_bank_account: input.vendorBankAccount !== undefined ? input.vendorBankAccount : oldPayment.vendor_bank_account,
+        reference_number: input.referenceNumber !== undefined ? input.referenceNumber : oldPayment.reference_number,
+        payment_date: input.paymentDate || oldPayment.payment_date,
+        notes: input.notes !== undefined ? input.notes : oldPayment.notes,
+        unallocated_amount: unallocated.toFixed(2),
+        updated_at: now,
+      });
+
+      const updated = await trx('supplier_payments').where({ id: paymentId, company_id: companyId }).first();
+      updated.allocations = newAllocationRecords;
+      return updated;
+    });
+  }
+
   async deleteCustomerPayment(companyId: string, paymentId: string): Promise<boolean> {
     return this.db.transaction(async (trx) => {
       const p = await trx('customer_payments').where({ company_id: companyId, id: paymentId }).first();

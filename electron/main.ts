@@ -113,6 +113,8 @@ if (!gotSingleLock) {
 
   app.whenReady().then(async () => {
     console.log('[Electron] app.whenReady fired');
+    // Remove default legacy Win32 application menu (File, Edit, View, Window)
+    Menu.setApplicationMenu(null);
     // 1. Ensure persistent application data directory exists
     if (!fs.existsSync(resolvedDataDir)) {
       fs.mkdirSync(resolvedDataDir, { recursive: true });
@@ -291,7 +293,17 @@ async function createMainWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
-    autoHideMenuBar: false,
+    autoHideMenuBar: true,
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: '#ffffff',
+            symbolColor: '#1e293b',
+            height: 44, // Full-sized titlebar window options matching Google Chrome (Image 2)
+          },
+        }
+      : {}),
     show: !startHiddenInTray,
     backgroundColor: '#ffffff',
   });
@@ -450,6 +462,22 @@ ipcMain.handle('app:open-external', async (_, url: string) => {
   if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
     await shell.openExternal(url);
   }
+});
+
+ipcMain.handle('app:set-title-bar-theme', async (_event, isDark: boolean) => {
+  if (mainWindow && !mainWindow.isDestroyed() && process.platform === 'win32') {
+    try {
+      mainWindow.setTitleBarOverlay({
+        color: isDark ? '#0f172a' : '#ffffff',
+        symbolColor: isDark ? '#f8fafc' : '#1e293b',
+        height: 44,
+      });
+      return true;
+    } catch (err) {
+      console.warn('[Electron] Could not update titleBarOverlay theme:', err);
+    }
+  }
+  return false;
 });
 
 ipcMain.handle('app:set-software-icon', async (event, dataUrl: string | null) => {

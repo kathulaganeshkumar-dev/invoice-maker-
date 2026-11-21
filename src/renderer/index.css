@@ -44,71 +44,96 @@ a {
   user-drag: none;
 }
 
-/* Custom scrollbars for clean desktop appearance */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+/* ============================================================
+   HIDE ALL SCROLLBARS GLOBALLY ACROSS ALL MENUS, MODALS & WINDOWS
+   Completely removes visible scrollbar UI (tracks, thumbs, buttons/arrows)
+   while preserving 100% functional mouse-wheel and laptop trackpad scrolling.
+   ============================================================ */
+html,
+body,
+#root,
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important; /* Firefox / modern standards */
+  -ms-overflow-style: none !important; /* IE 10+ / Edge */
 }
 
-.dark * {
-  scrollbar-color: #475569 transparent;
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
+::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-corner {
+  display: none !important;
+  background: transparent !important;
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+/* Ensure smooth mouse-wheel & laptop touchpad scrolling everywhere */
+html,
+body,
+main,
+div,
+form,
+nav,
+section,
+ul,
+table {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+/* Universal Dark Mode Input & Form Elements Base Styling */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not(.no-dark-bg),
+.dark textarea:not(.no-dark-bg) {
+  background-color: #1e293b; /* slate-800 */
+  color: #f8fafc; /* slate-50 */
+  border-color: #334155; /* slate-700 */
 }
 
-/* Specific sleek dropdown scrollbar */
-.custom-dropdown-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not(.no-dark-bg):focus,
+.dark textarea:not(.no-dark-bg):focus {
+  background-color: #0f172a; /* slate-900 */
+  border-color: #3b82f6; /* brand-500 */
 }
 
-.custom-dropdown-scrollbar::-webkit-scrollbar {
-  width: 5px;
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b !important; /* slate-500 */
 }
 
-.custom-dropdown-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+.dark select:not(.no-dark-bg) {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
 }
 
-.custom-dropdown-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
-}
-
-.custom-dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-.dark .custom-dropdown-scrollbar::-webkit-scrollbar-thumb {
-  background: #475569;
-}
-
-.dark .custom-dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+.dark select option {
+  background-color: #0f172a;
+  color: #f8fafc;
 }
 
 /* Print styling */
@@ -125,4 +150,17 @@ a {
     -ms-user-select: text !important;
     user-select: text !important;
   }
+}
+
+/* Window Controls & App Drag Region for Desktop App (Chrome / WCO style) */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+.app-drag-region button,
+.app-drag-region a,
+.app-drag-region input,
+.app-drag-region select,
+.app-drag-region [role="button"],
+.app-drag-region .no-drag {
+  -webkit-app-region: no-drag;
 }

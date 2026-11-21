@@ -126,7 +126,7 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
   };
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <div className="p-6 space-y-5">
       <div>
         <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
           <FileDown className="w-5 h-5 text-brand-600" />

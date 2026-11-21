@@ -143,6 +143,17 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
     }
   };
 
+  const handleOpenEdit = (s: Supplier) => {
+    setEditingSupplier({
+      ...s,
+      additional_bank_accounts: s.additional_bank_accounts
+        ? s.additional_bank_accounts.map((b) => ({ ...b }))
+        : [],
+    });
+    setReminderDaysInput(s.payment_terms_days > 0 ? String(s.payment_terms_days) : '');
+    setIsModalOpen(true);
+  };
+
   const handleAddBankAccount = () => {
     setEditingSupplier((prev) => ({
       ...prev,
@@ -187,7 +198,7 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
   });
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -224,7 +235,7 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Search company name, mobile, GSTIN, bank..."
+            placeholder="Search company name, mobile, GST Number, bank..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
@@ -239,11 +250,11 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
             <tr>
               <th className="py-3 px-4">Company Name</th>
               <th className="py-3 px-4">Mobile & Email</th>
-              <th className="py-3 px-4">GSTIN / PAN</th>
+              <th className="py-3 px-4">GST Number</th>
               <th className="py-3 px-4">State</th>
               <th className="py-3 px-4">Payment Reminder</th>
               <th className="py-3 px-4 text-right">Outstanding Payable</th>
-              <th className="py-3 px-4 text-center">Actions</th>
+              <th className="py-3 px-4">Address</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -263,125 +274,49 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                 const urgent = pendingBills[0];
 
                 return (
-                <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                <tr
+                  key={s.id}
+                  onClick={() => handleOpenEdit(s)}
+                  className="cursor-pointer"
+                >
+                  <td className="py-3 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
                     <div>{s.name}</div>
-                    {s.bank_name && (
-                      <div
-                        className="text-[10px] text-slate-400 font-normal flex items-center space-x-1 mt-0.5"
-                        title={`Bank: ${s.bank_name}${s.bank_account_no ? ` | A/c: ${s.bank_account_no}` : ''}${s.bank_ifsc ? ` | IFSC: ${s.bank_ifsc}` : ''}`}
-                      >
-                        <Building className="w-2.5 h-2.5 text-slate-400" />
-                        <span className="truncate max-w-[150px]">{s.bank_name}</span>
-                        {s.additional_bank_accounts && s.additional_bank_accounts.length > 0 && (
-                          <span className="px-1 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[9px] font-semibold">
-                            +{s.additional_bank_accounts.length} more
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                    <div>{s.mobile}</div>
-                    {s.email && <div className="text-[10px] text-slate-400">{s.email}</div>}
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    <div>{s.mobile}{s.email ? ` • ${s.email}` : ''}</div>
                   </td>
-                  <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                  <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">
                     <div>{s.gstin || '-'}</div>
-                    {s.pan && <div className="text-[10px] text-slate-400">PAN: {s.pan}</div>}
                   </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                    <div>{s.state} ({s.state_code})</div>
-                    {s.pin_code && <div className="text-[10px] text-slate-400 font-mono">PIN: {s.pin_code}</div>}
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    <div>{s.state} ({s.state_code}){s.pin_code ? ` - ${s.pin_code}` : ''}</div>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
                     {urgent ? (
-                      <div
-                        className="space-y-0.5"
+                      <span
+                        className="font-medium"
                         title={pendingBills
                           .map(
                             (p) =>
-                              `${p.bill.bill_number}: ${
-                                p.countdown.daysLeft < 0
-                                  ? `Overdue by ${Math.abs(p.countdown.daysLeft)}d`
-                                  : p.countdown.daysLeft === 0
-                                    ? 'Due Today'
-                                    : `${p.countdown.daysLeft}d left`
-                              } (Due ${formatShortDate(p.countdown.dueDate)})`
+                              `${p.bill.bill_number}: Due ${formatShortDate(p.countdown.dueDate)}`
                           )
                           .join('\n')}
                       >
-                        <span
-                          className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            urgent.countdown.daysLeft < 0
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                              : urgent.countdown.daysLeft === 0
-                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                                : urgent.countdown.daysLeft <= 5
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                  : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
-                          }`}
-                        >
-                          <Clock className="w-3 h-3" />
-                          <span>
-                            {urgent.countdown.daysLeft < 0
-                              ? `Overdue ${Math.abs(urgent.countdown.daysLeft)} day${Math.abs(urgent.countdown.daysLeft) === 1 ? '' : 's'}`
-                              : urgent.countdown.daysLeft === 0
-                                ? 'Due Today'
-                                : `${urgent.countdown.daysLeft} day${urgent.countdown.daysLeft === 1 ? '' : 's'} left`}
-                          </span>
-                        </span>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          {urgent.bill.bill_number} • Due {formatShortDate(urgent.countdown.dueDate)}
-                          {pendingBills.length > 1 && (
-                            <span className="ml-1 text-brand-600 font-sans font-semibold">
-                              (+{pendingBills.length - 1} more)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ) : s.payment_terms_days > 0 ? (
-                      <div className="space-y-0.5">
-                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          <span>{s.payment_terms_days} days reminder</span>
-                        </span>
-                        <div className="text-[10px] text-slate-400">No pending bills</div>
-                      </div>
+                        {urgent.countdown.daysLeft < 0
+                          ? `Overdue by ${Math.abs(urgent.countdown.daysLeft)}d`
+                          : urgent.countdown.daysLeft === 0
+                            ? 'Due Today'
+                            : `${urgent.countdown.daysLeft}d left`}
+                      </span>
                     ) : (
                       <span className="text-slate-400">-</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                  <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                     {formatIndianCurrency(s.current_balance)}
                   </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingSupplier({
-                            ...s,
-                            additional_bank_accounts: s.additional_bank_accounts
-                              ? s.additional_bank_accounts.map((b) => ({ ...b }))
-                              : [],
-                          });
-                          setReminderDaysInput(s.payment_terms_days > 0 ? String(s.payment_terms_days) : '');
-                          setIsModalOpen(true);
-                        }}
-                        className="p-1 text-slate-400 hover:text-brand-600"
-                        title="Edit Supplier"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(s.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                        title="Archive Supplier"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs whitespace-nowrap truncate" title={s.address}>
+                    <span className="truncate">{s.address || '-'}</span>
                   </td>
                 </tr>
                 );
@@ -446,11 +381,11 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between h-6 mb-1.5">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300">GSTIN</label>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">GST Number</label>
                   </div>
                   <input
                     type="text"
-                    placeholder="15-character GSTIN"
+                    placeholder="15-character GST Number"
                     value={editingSupplier.gstin || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, gstin: e.target.value.toUpperCase() })}
                     className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-mono uppercase bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
@@ -698,21 +633,41 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
-              >
-                Save Supplier
-              </button>
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+              <div>
+                {editingSupplier.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idToDelete = editingSupplier.id;
+                      if (idToDelete) {
+                        handleDelete(idToDelete);
+                        setIsModalOpen(false);
+                      }
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors border border-rose-200 dark:border-rose-900/50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Supplier</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                >
+                  Save Supplier
+                </button>
+              </div>
             </div>
           </div>
         </div>

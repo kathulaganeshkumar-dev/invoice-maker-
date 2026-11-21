@@ -8,6 +8,7 @@ import { GST_RATES } from '../../shared/constants';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { ModalPortal } from '../components/ModalPortal';
 import { DateInput, isoToDisplayDate } from '../components/DateInput';
+import { QuickAddSupplierModal } from '../components/QuickAddSupplierModal';
 import {
   ShoppingCart,
   Plus,
@@ -18,7 +19,6 @@ import {
   PackageCheck,
   Package,
   Tags,
-  Eye,
   Warehouse as WarehouseIcon,
   Edit2,
   Clock,
@@ -102,6 +102,8 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   const [quickInlineCatName, setQuickInlineCatName] = useState<string>('');
 
   // Form State
+  const [isQuickAddSupplierOpen, setIsQuickAddSupplierOpen] = useState<boolean>(false);
+  const [companyDefaultState, setCompanyDefaultState] = useState<string>('Telangana');
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
   const [billNumber, setBillNumber] = useState<string>('');
@@ -127,6 +129,12 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   const supplierOptions = useMemo(() => {
     return [
       { value: '', label: '-- Select Vendor --' },
+      {
+        value: '__ADD_NEW_SUPPLIER__',
+        label: '+ Add New Supplier',
+        sublabel: 'Quickly create vendor record',
+        isAction: true,
+      },
       ...suppliers.map((s) => ({
         value: s.id,
         label: s.name,
@@ -265,18 +273,22 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
 
   const loadMaster = async () => {
     try {
-      const [sList, pList, wList, cList, uList] = await Promise.all([
+      const [sList, pList, wList, cList, uList, comp] = await Promise.all([
         api.getSuppliers(companyId),
         api.getProducts(companyId, { item_type: 'PRODUCT' }),
         api.getWarehouses(companyId),
         api.getCategories(companyId),
         api.getUnits(companyId),
+        api.getCompany(companyId).catch(() => null),
       ]);
       setSuppliers(sList);
       setProducts(pList);
       setWarehouses(wList);
       setCategories(cList);
       setUnits(uList);
+      if (comp?.state) {
+        setCompanyDefaultState(comp.state);
+      }
       if (wList.length > 0 && (!selectedWarehouseId || !wList.some((w) => w.id === selectedWarehouseId))) {
         const def = wList.find((w) => w.is_default) || wList[0];
         setSelectedWarehouseId(def.id);
@@ -674,7 +686,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   });
 
   return (
-    <div className="p-6 space-y-5 overflow-y-auto">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -761,16 +773,15 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                 const taxDec = new Decimal(b.total_tax || 0);
                 const discDec = new Decimal(b.overall_discount_amount || 0);
                 return (
-                <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <tr key={b.id}>
                   <td className="py-3 px-4 font-mono font-bold">
                     <button
                       type="button"
                       onClick={() => setViewingBill(b)}
-                      className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center space-x-1"
+                      className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
                       title="Click to view purchase bill details"
                     >
-                      <span>{b.bill_number}</span>
-                      <Eye className="w-3.5 h-3.5 text-slate-400 opacity-60 hover:opacity-100" />
+                      {b.bill_number}
                     </button>
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
@@ -898,12 +909,27 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                 <div>
                   <div className="flex items-center justify-between h-6 mb-1.5">
                     <label className="font-semibold text-slate-700 dark:text-slate-300">Supplier *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickAddSupplierOpen(true)}
+                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                      title="Quickly create a new vendor"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ New Supplier</span>
+                    </button>
                   </div>
                   <SearchableSelect
                     options={supplierOptions}
                     value={selectedSupplierId}
-                    onChange={(val) => setSelectedSupplierId(val)}
-                    placeholder="Search vendor by name or GSTIN..."
+                    onChange={(val) => {
+                      if (val === '__ADD_NEW_SUPPLIER__') {
+                        setIsQuickAddSupplierOpen(true);
+                      } else {
+                        setSelectedSupplierId(val);
+                      }
+                    }}
+                    placeholder="Search vendor by name or GST Number..."
                   />
                 </div>
                 <div>
@@ -978,7 +1004,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                           <button
                             type="button"
                             onClick={() => handleOpenQuickProduct(null)}
-                            className="inline-flex items-center space-x-0.5 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5 transition-colors shrink-0"
+                            className="inline-flex items-center space-x-0.5 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 dark:border-emerald-800 border border-emerald-200 rounded px-1.5 py-0.5 transition-colors shrink-0"
                             title="Create a new product and add it to this bill"
                           >
                             <Plus className="w-3 h-3" />
@@ -1017,7 +1043,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                               copy[idx].hsn_code = e.target.value;
                               setItems(copy);
                             }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 font-mono"
+                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </td>
                         <td className="p-2 align-middle">
@@ -1032,7 +1058,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                               copy[idx].quantity = e.target.value;
                               setItems(copy);
                             }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </td>
                         <td className="p-2 align-middle">
@@ -1060,7 +1086,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                               copy[idx].rate = e.target.value;
                               setItems(copy);
                             }}
-                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                            className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                         </td>
                         <td className="p-2 align-middle">
@@ -1076,7 +1102,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                                 copy[idx].min_selling_price = e.target.value;
                                 setItems(copy);
                               }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                               title="Minimum Selling Price (₹)"
                             />
                             <input
@@ -1090,7 +1116,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                                 copy[idx].max_selling_price = e.target.value;
                                 setItems(copy);
                               }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1"
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                               title="Maximum Selling Price (₹)"
                             />
                           </div>
@@ -1515,7 +1541,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   <div className="font-semibold text-slate-400 uppercase text-[10px]">Vendor / Supplier</div>
                   <div className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-0.5">{viewingBill.supplier_name}</div>
                   {viewingBill.supplier_gstin && (
-                    <div className="font-mono text-slate-500 mt-1">GSTIN: {viewingBill.supplier_gstin}</div>
+                    <div className="font-mono text-slate-500 mt-1">GST Number: {viewingBill.supplier_gstin}</div>
                   )}
                 </div>
 
@@ -1765,7 +1791,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       </tr>
                     ) : (
                       warehouses.map((w) => (
-                        <tr key={w.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <tr key={w.id}>
                           <td className="py-2 px-3 font-bold text-slate-800 dark:text-slate-100">{w.name}</td>
                           <td className="py-2 px-3 font-mono">{w.code}</td>
                           <td className="py-2 px-3 text-slate-500">{w.address || '-'}</td>
@@ -1831,6 +1857,18 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
         </div>
         </ModalPortal>
       )}
+
+      {/* Inline Quick Add Supplier Modal */}
+      <QuickAddSupplierModal
+        isOpen={isQuickAddSupplierOpen}
+        onClose={() => setIsQuickAddSupplierOpen(false)}
+        companyId={companyId}
+        defaultState={companyDefaultState}
+        onSupplierCreated={(newSupplier) => {
+          setSuppliers((prev) => [newSupplier, ...prev]);
+          setSelectedSupplierId(newSupplier.id);
+        }}
+      />
     </div>
   );
 };

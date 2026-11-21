@@ -13,6 +13,7 @@ import {
   CreditCard,
   FileUp,
   BarChart3,
+  Monitor,
   FileDown,
   Database,
   Settings,
@@ -46,6 +47,7 @@ export const Sidebar: React.FC<Props> = ({
     { id: 'payments', label: 'Payments (AR/AP)', icon: CreditCard },
     { id: 'letterheads', label: 'Print Templates', icon: FileUp },
     { id: 'reports', label: 'Reports & GST', icon: BarChart3 },
+    { id: 'work_summary', label: 'Work Summary', icon: Monitor },
     { id: 'import_export', label: 'Excel Import/Export', icon: FileDown },
     { id: 'backup_restore', label: 'Backup & Restore', icon: Database },
   ];

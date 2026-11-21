@@ -270,16 +270,14 @@ export class InvoiceService {
         letterhead_template_id: input.letterhead_template_id || undefined,
         notes: input.notes || undefined,
         terms_conditions: input.terms_conditions || undefined,
+        created_by_device_id: input.created_by_device_id || null,
+        created_by_device_name: input.created_by_device_name || null,
         created_at: now,
         updated_at: now,
       };
 
       const { items, ...invoiceRow } = newInvoice;
-      await trx('invoices').insert({
-        ...invoiceRow,
-        created_by_device_id: input.created_by_device_id || null,
-        created_by_device_name: input.created_by_device_name || null,
-      });
+      await trx('invoices').insert(invoiceRow);
 
       for (const item of calculatedItems) {
         await trx('invoice_items').insert(item);

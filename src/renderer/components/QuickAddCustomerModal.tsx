@@ -272,7 +272,7 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
                 <div className="sm:col-span-2">
                   <div className="flex items-center justify-between h-6 mb-1.5">
                     <label className="font-semibold text-slate-700 dark:text-slate-300">
-                      GSTIN (15 Digits)
+                      GST Number (15 Digits)
                     </label>
                   </div>
                   <input

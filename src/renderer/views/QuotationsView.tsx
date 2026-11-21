@@ -22,7 +22,6 @@ import {
   FileCheck,
   Printer,
   ExternalLink,
-  Eye,
   FileText,
   BookmarkPlus,
   Package,
@@ -597,7 +596,7 @@ export const QuotationsView: React.FC<Props> = ({
   return (
     <>
       {!modalOnly && (
-        <div className="p-6 space-y-5 overflow-y-auto">
+        <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -645,24 +644,24 @@ export const QuotationsView: React.FC<Props> = ({
           onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
           className={`p-3.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
             filterAuthor === 'STAFF'
-              ? 'bg-purple-100 dark:bg-purple-900/50 border-purple-400 dark:border-purple-600'
-              : 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/60 hover:border-purple-300'
+              ? 'bg-sky-100 dark:bg-sky-950/60 border-sky-400 dark:border-sky-600'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
           }`}
           title="Click to filter quotations created by staff"
         >
           <div className="flex items-center justify-between">
-            <span className="text-purple-800 dark:text-purple-300 font-bold flex items-center space-x-1">
-              <Users className="w-3.5 h-3.5 text-purple-600" />
+            <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center space-x-1">
+              <Users className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
               <span>Created by Staff</span>
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200/80 text-purple-900 dark:bg-purple-800 dark:text-purple-100">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
               {staffQuotations.length} Quotes
             </span>
           </div>
-          <div className="text-lg font-extrabold text-purple-950 dark:text-purple-100 mt-0.5">
+          <div className="text-lg font-extrabold text-slate-900 dark:text-slate-100 mt-0.5">
             Rs. {formatIndianCurrency(staffTotalAmount)}
           </div>
-          <div className="text-[10px] text-purple-700 dark:text-purple-300 truncate mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
             {staffContributors.length > 0 ? staffContributors.join(', ') : 'No staff quotes yet'}
           </div>
         </div>
@@ -670,16 +669,16 @@ export const QuotationsView: React.FC<Props> = ({
 
       {/* Staff Activity Alert Banner */}
       {staffQuotations.length > 0 && (
-        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
+        <div className="bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 bg-purple-600 text-white rounded-lg">
+            <div className="p-1.5 bg-brand-600 text-white rounded-lg">
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <span className="font-bold text-purple-950 dark:text-purple-200">
+              <span className="font-bold text-slate-900 dark:text-slate-100">
                 Staff Activity: {staffQuotations.length} quotation{staffQuotations.length > 1 ? 's' : ''} created by office staff ({staffContributors.join(', ') || 'Staff Workstations'})
               </span>
-              <span className="text-purple-700 dark:text-purple-300 ml-2">
+              <span className="text-slate-600 dark:text-slate-300 ml-2">
                 Total value: Rs. {formatIndianCurrency(staffTotalAmount)}. Synced live over office LAN.
               </span>
             </div>
@@ -690,8 +689,8 @@ export const QuotationsView: React.FC<Props> = ({
             onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
               filterAuthor === 'STAFF'
-                ? 'bg-purple-700 text-white'
-                : 'bg-white dark:bg-slate-800 text-purple-800 dark:text-purple-200 border border-purple-300 hover:bg-purple-100'
+                ? 'bg-brand-600 text-white'
+                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
             }`}
           >
             {filterAuthor === 'STAFF' ? 'Showing Staff Quotes (Show All)' : `View Only Staff Quotes (${staffQuotations.length})`}
@@ -718,8 +717,8 @@ export const QuotationsView: React.FC<Props> = ({
             onClick={() => setFilterAuthor('STAFF')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
               filterAuthor === 'STAFF'
-                ? 'bg-purple-700 text-white'
-                : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             <Users className="w-3.5 h-3.5 mr-1" />
@@ -775,7 +774,7 @@ export const QuotationsView: React.FC<Props> = ({
               </tr>
             ) : (
               filtered.map((q) => (
-                <tr key={q.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <tr key={q.id}>
                   <td className="py-3 px-4 font-mono font-bold">
                     <button
                       type="button"
@@ -783,11 +782,10 @@ export const QuotationsView: React.FC<Props> = ({
                         setViewingQuotation(q);
                         setActivePrintTemplateId(q.letterhead_template_id || (templates[0]?.id || ''));
                       }}
-                      className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center space-x-1"
+                      className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
                       title="Click to view full quotation"
                     >
-                      <span>{q.quotation_number}</span>
-                      <Eye className="w-3.5 h-3.5 text-slate-400 opacity-60 hover:opacity-100" />
+                      {q.quotation_number}
                     </button>
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
@@ -802,10 +800,10 @@ export const QuotationsView: React.FC<Props> = ({
                   <td className="py-3 px-4">
                     {isStaffQuotation(q) ? (
                       <span
-                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
                         title={`Created on staff workstation: ${q.created_by_device_name || 'Staff'}`}
                       >
-                        <Users className="w-3 h-3 text-purple-600" />
+                        <Users className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                         <span>Staff: {q.created_by_device_name || 'Staff PC'}</span>
                       </span>
                     ) : (
@@ -827,7 +825,7 @@ export const QuotationsView: React.FC<Props> = ({
                         q.status === 'ACCEPTED'
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                           : q.status === 'CONVERTED'
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                          ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 dark:border-sky-800'
                           : q.status === 'REJECTED'
                           ? 'bg-rose-100 text-rose-800'
                           : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
@@ -968,7 +966,7 @@ export const QuotationsView: React.FC<Props> = ({
                       <div className="text-slate-600 dark:text-slate-400 whitespace-pre-line leading-relaxed">{viewingQuotation.billing_address}</div>
                     )}
                     {viewingQuotation.customer_gstin && (
-                      <div className="font-bold pt-0.5">GSTIN: <span className="font-mono">{viewingQuotation.customer_gstin}</span></div>
+                      <div className="font-bold pt-0.5">GST Number: <span className="font-mono">{viewingQuotation.customer_gstin}</span></div>
                     )}
                     {viewingQuotation.place_of_supply_state && (
                       <div className="text-slate-600 dark:text-slate-400">State: {viewingQuotation.place_of_supply_state} ({viewingQuotation.place_of_supply_code})</div>
@@ -999,41 +997,47 @@ export const QuotationsView: React.FC<Props> = ({
                     <table className="w-full text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-slate-800 dark:border-slate-300 bg-slate-100 dark:bg-slate-800 font-bold">
-                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center w-12">Sl.No</th>
+                          <th className="py-2 px-1.5 border-r border-slate-800 dark:border-slate-300 text-center w-10">Sl.No</th>
                           <th className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-left">Description of Goods</th>
-                          <th className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center w-16">Units</th>
-                          <th className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right w-24">Base rate</th>
-                          <th className="py-2 px-3 text-right w-28">Total Amount</th>
+                          <th className="py-2 px-1 border-r border-slate-800 dark:border-slate-300 text-center w-14">Units</th>
+                          <th className="py-1 px-2 border-r border-slate-800 dark:border-slate-300 text-center w-20 leading-tight">
+                            <div>Base</div>
+                            <div>rate</div>
+                          </th>
+                          <th className="py-1 px-2 text-center w-24 leading-tight">
+                            <div>Total</div>
+                            <div>Amount</div>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
                         {viewingQuotation.items?.map((it, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{idx + 1}</td>
+                          <tr key={idx}>
+                            <td className="py-2 px-1.5 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{idx + 1}</td>
                             <td className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-left">
                               <div className="font-bold text-slate-900 dark:text-slate-100">{it.item_name}</div>
                               {it.description && <div className="text-[11px] text-slate-500 italic mt-0.5">{it.description}</div>}
                             </td>
-                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{it.quantity} {it.unit || 'NOS'}</td>
-                            <td className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right font-mono">{formatIndianCurrency(it.rate)}</td>
-                            <td className="py-2 px-3 text-right font-bold font-mono">{formatIndianCurrency(it.line_total)}</td>
+                            <td className="py-2 px-1 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{it.quantity} {it.unit || 'NOS'}</td>
+                            <td className="py-2 px-2 border-r border-slate-800 dark:border-slate-300 text-right font-mono">{formatIndianCurrency(it.rate)}</td>
+                            <td className="py-2 px-2 text-right font-bold font-mono">{formatIndianCurrency(it.line_total)}</td>
                           </tr>
                         ))}
 
                         {/* TOTAL Row */}
                         <tr className="border-t border-slate-800 dark:border-slate-300 bg-slate-50/70 dark:bg-slate-800/50 font-bold">
                           <td colSpan={4} className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right">TOTAL</td>
-                          <td className="py-2 px-3 text-right font-mono">{formatIndianCurrency(viewingTotalOfProducts)}</td>
+                          <td className="py-2 px-2 text-right font-mono">{formatIndianCurrency(viewingTotalOfProducts)}</td>
                         </tr>
                         {/* Round Off Row */}
                         <tr className="border-t border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50">
                           <td colSpan={4} className="py-1.5 px-3 border-r border-slate-800 dark:border-slate-300 text-right font-medium">Round Off</td>
-                          <td className="py-1.5 px-3 text-right font-mono">{formatIndianCurrency(viewingQuotation.round_off || '0.00')}</td>
+                          <td className="py-1.5 px-2 text-right font-mono">{formatIndianCurrency(viewingQuotation.round_off || '0.00')}</td>
                         </tr>
                         {/* Grand Total Row */}
                         <tr className="border-t-2 border-slate-800 dark:border-slate-300 bg-slate-100 dark:bg-slate-800 font-extrabold text-sm">
                           <td colSpan={4} className="py-2 px-3 border-r border-slate-800 dark:border-slate-300 text-right">Grand Total</td>
-                          <td className="py-2 px-3 text-right font-mono text-brand-600 dark:text-brand-400">{formatIndianCurrency(viewingGrandTotal)}</td>
+                          <td className="py-2 px-2 text-right font-mono text-brand-600 dark:text-brand-400">{formatIndianCurrency(viewingGrandTotal)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1056,7 +1060,7 @@ export const QuotationsView: React.FC<Props> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
                         {viewingQuotation.items?.map((it, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                          <tr key={idx}>
                             <td className="py-2 px-1.5 border-r border-slate-800 dark:border-slate-300 text-center font-medium">{idx + 1}</td>
                             <td className="py-2 px-2.5 border-r border-slate-800 dark:border-slate-300 text-left">
                               <div className="font-bold text-slate-900 dark:text-slate-100">{it.item_name}</div>
@@ -1205,7 +1209,7 @@ export const QuotationsView: React.FC<Props> = ({
                         setSelectedCustomerId(val);
                       }
                     }}
-                    placeholder="Search customer by name or GSTIN..."
+                    placeholder="Search customer by name or GST Number..."
                   />
                 </div>
 
@@ -1274,7 +1278,7 @@ export const QuotationsView: React.FC<Props> = ({
                       const isUnsavedCustom = !item.item_id && Boolean(item.item_name?.trim());
 
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                        <tr key={idx}>
                           <td className="p-2 text-center font-mono font-bold text-slate-400 text-xs align-top pt-3">
                             {idx + 1}
                           </td>
@@ -1323,7 +1327,7 @@ export const QuotationsView: React.FC<Props> = ({
                                 copy[idx].quantity = !isNaN(num) && num > 0 ? String(num) : '1';
                                 setItems(copy);
                               }}
-                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-1.5 py-1 text-center text-xs font-mono"
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-1.5 py-1 text-center text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                             />
                           </td>
                           <td className="p-2 align-top pt-2.5">
@@ -1362,7 +1366,7 @@ export const QuotationsView: React.FC<Props> = ({
                                         ? 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300'
                                         : isAboveMax
                                           ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300'
-                                          : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700'
+                                          : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
                                     }`}
                                   />
                                   {(item.min_selling_price || item.max_selling_price) && (
@@ -1529,7 +1533,7 @@ export const QuotationsView: React.FC<Props> = ({
                         max="120"
                         value={topMarginMm}
                         onChange={(e) => setTopMarginMm(Number(e.target.value) || 55)}
-                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono"
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                     <div>
@@ -1540,7 +1544,7 @@ export const QuotationsView: React.FC<Props> = ({
                         max="100"
                         value={bottomMarginMm}
                         onChange={(e) => setBottomMarginMm(Number(e.target.value) || 32)}
-                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono"
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                   </div>
@@ -1568,7 +1572,7 @@ export const QuotationsView: React.FC<Props> = ({
                     value={termsAndConditions}
                     onChange={(e) => setTermsAndConditions(e.target.value)}
                     placeholder="Enter quotation terms and conditions..."
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs font-mono leading-relaxed"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs font-mono leading-relaxed bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
                     Pre-filled from Settings. You can edit, add, or delete points for this quotation. All points print on the quotation.
@@ -1585,7 +1589,7 @@ export const QuotationsView: React.FC<Props> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Payment within 30 days, delivery at site."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2"
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                 />
               </div>
             </div>
@@ -1594,7 +1598,7 @@ export const QuotationsView: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={closeCreateModal}
-                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold"
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>

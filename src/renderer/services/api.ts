@@ -465,11 +465,15 @@ export const api = {
   getCustomerPayments: (companyId: string) => request<CustomerPayment[]>(`/companies/${companyId}/payments/customer`),
   recordCustomerPayment: (companyId: string, data: any) =>
     request<CustomerPayment>(`/companies/${companyId}/payments/customer`, { method: 'POST', body: JSON.stringify(data) }),
+  updateCustomerPayment: (companyId: string, id: string, data: any) =>
+    request<CustomerPayment>(`/companies/${companyId}/payments/customer/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCustomerPayment: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/payments/customer/${id}`, { method: 'DELETE' }),
   getSupplierPayments: (companyId: string) => request<SupplierPayment[]>(`/companies/${companyId}/payments/supplier`),
   recordSupplierPayment: (companyId: string, data: any) =>
     request<SupplierPayment>(`/companies/${companyId}/payments/supplier`, { method: 'POST', body: JSON.stringify(data) }),
+  updateSupplierPayment: (companyId: string, id: string, data: any) =>
+    request<SupplierPayment>(`/companies/${companyId}/payments/supplier/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSupplierPayment: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/payments/supplier/${id}`, { method: 'DELETE' }),
 

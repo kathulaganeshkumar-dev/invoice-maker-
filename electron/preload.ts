@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPrinters: () => ipcRenderer.invoke('app:get-printers'),
   openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
   setSoftwareIcon: (dataUrl: string | null) => ipcRenderer.invoke('app:set-software-icon', dataUrl),
+  setTitleBarTheme: (isDark: boolean) => ipcRenderer.invoke('app:set-title-bar-theme', isDark),
   getLanConfig: () => ipcRenderer.invoke('app:get-lan-config'),
   setLanConfig: (config: {
     role: 'STANDALONE' | 'LAN_HOST' | 'LAN_CLIENT';

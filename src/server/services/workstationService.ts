@@ -16,6 +16,7 @@ export const ALL_MENU_IDS = [
   'payments',
   'letterheads',
   'reports',
+  'work_summary',
   'import_export',
   'backup_restore',
 ] as const;
@@ -25,6 +26,7 @@ export type MenuId = (typeof ALL_MENU_IDS)[number];
 export const MENU_CATALOG: { id: MenuId; label: string; group: 'Insights' | 'Operations' | 'Administration' }[] = [
   { id: 'dashboard', label: 'Dashboard', group: 'Insights' },
   { id: 'reports', label: 'Reports & GST', group: 'Insights' },
+  { id: 'work_summary', label: 'Work Summary', group: 'Insights' },
   { id: 'invoices', label: 'Invoices (Sales)', group: 'Operations' },
   { id: 'invoices_other', label: 'Invoices (Other)', group: 'Operations' },
   { id: 'quotations', label: 'Quotations', group: 'Operations' },

@@ -1079,23 +1079,23 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   return (
     <ModalPortal>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden text-slate-800 dark:text-slate-100">
         {/* Title Bar */}
-        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/80">
           <div className="flex items-center space-x-2">
-            <Settings className="w-5 h-5 text-brand-600" />
-            <h2 className="text-base font-bold text-slate-800">Configuration & Preferences</h2>
+            <Settings className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Configuration & Preferences</h2>
             {company ? (
-              <span className="text-xs bg-brand-50 text-brand-700 px-2 py-0.5 rounded font-semibold border border-brand-200">
+              <span className="text-xs bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 px-2 py-0.5 rounded font-semibold border border-brand-200 dark:border-brand-800">
                 {company.name}
               </span>
             ) : (
-              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold border border-slate-200">
+              <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
                 Global System Settings
               </span>
             )}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-md">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1103,7 +1103,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         {/* Body Container: Sidebar + Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left Category Sidebar */}
-          <div className="w-64 border-r border-slate-200 bg-slate-50/70 p-3 overflow-y-auto space-y-4 text-xs font-medium select-none">
+          <div className="w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/80 p-3 overflow-y-auto space-y-4 text-xs font-medium select-none">
             {/* Business Group */}
             <div>
               <div className="font-bold text-slate-400 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
@@ -1121,7 +1121,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     key={item.id}
                     onClick={() => setActiveCategory(item.id)}
                     className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                      activeCategory === item.id ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                      activeCategory === item.id ? 'bg-brand-100 dark:bg-brand-950/80 text-brand-900 dark:text-brand-300 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
                     }`}
                   >
                     {item.label}
@@ -1146,7 +1146,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     key={item.id}
                     onClick={() => setActiveCategory(item.id)}
                     className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                      activeCategory === item.id ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                      activeCategory === item.id ? 'bg-brand-100 dark:bg-brand-950/80 text-brand-900 dark:text-brand-300 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
                     }`}
                   >
                     {item.label}
@@ -1165,7 +1165,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 <button
                   onClick={() => setActiveCategory('Category_Save_Paths')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'Category_Save_Paths' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                    activeCategory === 'Category_Save_Paths' ? 'bg-brand-100 dark:bg-brand-950/80 text-brand-900 dark:text-brand-300 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   Local Folders by Category
@@ -1183,7 +1183,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 <button
                   onClick={() => setActiveCategory('Inventory_Rules')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'Inventory_Rules' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                    activeCategory === 'Inventory_Rules' ? 'bg-brand-100 dark:bg-brand-950/80 text-brand-900 dark:text-brand-300 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   Valuation & Alerts
@@ -1201,7 +1201,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 <button
                   onClick={() => setActiveCategory('Deployment_Mode')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'Deployment_Mode' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                    activeCategory === 'Deployment_Mode' ? 'bg-brand-100 dark:bg-brand-950/80 text-brand-900 dark:text-brand-300 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   Standalone / LAN Setup
@@ -1219,7 +1219,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 <button
                   onClick={() => setActiveCategory('System_Diagnostics')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
-                    activeCategory === 'System_Diagnostics' ? 'bg-brand-100 text-brand-900 font-bold' : 'text-slate-700 hover:bg-slate-200/60'
+                    activeCategory === 'System_Diagnostics' ? 'bg-brand-100 dark:bg-brand-950/80 text-brand-900 dark:text-brand-300 font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   System Diagnostics &amp; Logs
@@ -1228,7 +1228,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             </div>
 
             {/* Danger Zone / Factory Reset Group */}
-            <div className="pt-2 border-t border-slate-200">
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
               <div className="font-bold text-red-500 uppercase tracking-wider px-2 mb-1 flex items-center space-x-1">
                 <AlertCircle className="w-3.5 h-3.5 text-red-500" />
                 <span>Danger Zone</span>
@@ -1238,8 +1238,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   onClick={() => setActiveCategory('Factory_Reset')}
                   className={`w-full text-left px-3 py-1.5 rounded-md transition-colors ${
                     activeCategory === 'Factory_Reset'
-                      ? 'bg-red-100 text-red-900 font-bold'
-                      : 'text-red-700 hover:bg-red-50'
+                      ? 'bg-red-100 dark:bg-red-950/80 text-red-900 dark:text-red-300 font-bold'
+                      : 'text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
                   }`}
                 >
                   Factory Reset &amp; Wipe Data
@@ -1249,7 +1249,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
           </div>
 
           {/* Right Main Settings Panel */}
-          <div className="flex-1 p-6 overflow-y-auto space-y-6">
+          <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
             {loading ? (
               <div className="h-full flex flex-col items-center justify-center p-8 space-y-3">
                 <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
@@ -1296,11 +1296,11 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 {/* 1. Document Settings */}
                 {activeCategory === 'Business_Settings' && companySettings && (
               <>
-                <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white shadow-sm">
-                  <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">Document Behavior</h3>
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 space-y-3 bg-white dark:bg-slate-800/60 shadow-sm">
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Document Behavior</h3>
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Invoice overdue days (Grace Period):</label>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Invoice overdue days (Grace Period):</label>
                       <input
                         type="number"
                         placeholder="e.g. 30"
@@ -1311,13 +1311,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             (e.target.value === '' ? '' : Number(e.target.value)) as any
                           )
                         }
-                        className="w-32 border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
+                        className="w-32 border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2 pt-2 text-xs">
-                    <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                    <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={companySettings.print_invoice_after_save}
@@ -1327,7 +1327,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <span>Print invoice immediately after finalization</span>
                     </label>
 
-                    <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                    <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={companySettings.show_postal_code_before_city}
@@ -1337,7 +1337,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <span>Show postal PIN code before city in addresses</span>
                     </label>
 
-                    <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                    <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={companySettings.include_additional_notes_in_search}
@@ -1347,7 +1347,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <span>Include Additional Notes when searching invoices</span>
                     </label>
 
-                    <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                    <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={companySettings.sort_invoices_by_number}
@@ -1359,14 +1359,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   </div>
                 </div>
 
-                <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white shadow-sm">
-                  <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">Printed Date Format</h3>
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 space-y-3 bg-white dark:bg-slate-800/60 shadow-sm">
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Printed Date Format</h3>
                   <div className="w-72 text-xs">
-                    <label className="block font-semibold text-slate-700 mb-1">Standard display date format:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Standard display date format:</label>
                     <select
                       value={companySettings.printed_date_format}
                       onChange={(e) => updateCompanySetting('printed_date_format', e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm bg-white outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     >
                       <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 09/11/2026)</option>
                       <option value="DD MMMM YYYY">DD MMMM YYYY (e.g. 09 November 2026)</option>
@@ -1379,12 +1379,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 2. Currency & Numbering */}
             {activeCategory === 'Business_Currency' && companySettings && (
-              <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">
                   Currency & Numbering Formatting
                 </h3>
                 <div className="space-y-3 text-xs">
-                  <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                  <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={companySettings.show_amount_in_words}
@@ -1394,7 +1394,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <span>Print Amount in Words automatically on document footers</span>
                   </label>
 
-                  <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                  <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={companySettings.indian_number_style}
@@ -1404,7 +1404,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <span>Indian Numbering Grouping (Crores & Lakhs, e.g. 12,34,567.00)</span>
                   </label>
 
-                  <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                  <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={companySettings.zero_not_displayed}
@@ -1416,32 +1416,32 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                   <div className="grid grid-cols-3 gap-4 pt-3">
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Currency Name:</label>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Currency Name:</label>
                       <input
                         type="text"
                         value={companySettings.currency_name}
                         onChange={(e) => updateCompanySetting('currency_name', e.target.value)}
-                        className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                         placeholder="Rupees"
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Currency Symbol:</label>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Currency Symbol:</label>
                       <input
                         type="text"
                         value={companySettings.currency_symbol}
                         onChange={(e) => updateCompanySetting('currency_symbol', e.target.value)}
-                        className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                         placeholder="₹"
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Fractional Decimal Name:</label>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Fractional Decimal Name:</label>
                       <input
                         type="text"
                         value={companySettings.decimal_name}
                         onChange={(e) => updateCompanySetting('decimal_name', e.target.value)}
-                        className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                         placeholder="Paise"
                       />
                     </div>
@@ -1452,22 +1452,22 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 3. Company Logo */}
             {activeCategory === 'Business_Logo' && company && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
-                  <ImageIcon className="w-4 h-4 text-brand-600" />
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center space-x-2">
+                  <ImageIcon className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                   <span>Company Brand Logo</span>
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Upload your high-resolution company emblem or trade logo. It prints directly on PDF invoices, quotations, and official receipts.
                 </p>
 
-                <div className="flex items-center space-x-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="w-36 h-28 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center bg-white overflow-hidden shadow-sm">
+                <div className="flex items-center space-x-6 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="w-36 h-28 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center bg-white dark:bg-slate-800 overflow-hidden shadow-sm">
                     {company.logo_url ? (
                       <img src={company.logo_url} alt="Company Logo" className="max-w-full max-h-full object-contain p-2" />
                     ) : (
                       <div className="text-center p-3">
-                        <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                        <ImageIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-1" />
                         <span className="text-[10px] text-slate-400 font-semibold">No Logo Uploaded</span>
                       </div>
                     )}
@@ -1485,7 +1485,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         <button
                           type="button"
                           onClick={handleClearLogo}
-                          className="px-3 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 rounded text-xs font-semibold"
+                          className="px-3 py-1.5 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded text-xs font-semibold"
                         >
                           Remove Logo
                         </button>
@@ -1503,10 +1503,10 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             {activeCategory === 'Software_Icon' && (() => {
               const activeIconPreview = calibratedIconPreview || appSettings?.software_icon || null;
               return (
-                <div className="border border-slate-200 rounded-lg p-5 space-y-5 bg-white shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                    <h3 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                      <Monitor className="w-4 h-4 text-brand-600" />
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-5 bg-white dark:bg-slate-800/60 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                      <Monitor className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                       <span>Software Logo &amp; Desktop Application Icon</span>
                     </h3>
                     <div className="flex items-center gap-2">
@@ -1527,7 +1527,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           type="button"
                           disabled={iconSaving}
                           onClick={handleResetSoftwareIcon}
-                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Reset Default</span>
@@ -1537,10 +1537,10 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   </div>
 
                   {/* Interactive Calibrator + Exact Previews */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
                     {/* Left: Interactive Drag & Crop Calibrator */}
                     <div className="lg:col-span-5 flex flex-col items-center space-y-3">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         {iconSourceImg ? 'Drag Image to Position (256×256)' : 'Current Software Icon'}
                       </div>
 
@@ -1602,7 +1602,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         </div>
 
                         {/* Top Navbar Logo Preview */}
-                        <div className="flex flex-col items-center justify-center px-3 py-2.5 rounded-xl bg-white border border-slate-200 w-36 shadow-sm select-none">
+                        <div className="flex flex-col items-center justify-center px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 w-36 shadow-sm select-none">
                           <div className="flex items-center space-x-1.5 py-2">
                             {activeIconPreview ? (
                               <img
@@ -1615,7 +1615,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                 Σ
                               </div>
                             )}
-                            <span className="text-[11px] font-extrabold text-brand-900 leading-tight">
+                            <span className="text-[11px] font-extrabold text-brand-900 dark:text-brand-300 leading-tight">
                               Enterprise<br />Invoicer
                             </span>
                           </div>
@@ -1626,7 +1626,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                     {/* Right: Calibration Sliders & Apply Action */}
                     <div className="lg:col-span-7 space-y-3.5 text-xs">
-                      <div className="font-bold text-slate-800">Icon Calibrator (Eliminate Top/Bottom Empty Space)</div>
+                      <div className="font-bold text-slate-800 dark:text-slate-100">Icon Calibrator (Eliminate Top/Bottom Empty Space)</div>
 
                       {/* Fill vs Fit Toggle */}
                       <div className="grid grid-cols-2 gap-2">
@@ -1641,12 +1641,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           }}
                           className={`px-3 py-2 rounded-lg border text-left transition-all disabled:opacity-50 ${
                             iconFitMode === 'COVER'
-                              ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              ? 'border-brand-600 bg-brand-50 dark:bg-brand-950/60 text-brand-900 dark:text-brand-300 font-bold'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                           }`}
                         >
                           <div>Fill Square (No Gaps)</div>
-                          <div className="text-[10px] font-normal text-slate-500">Matches default Σ logo edge-to-edge</div>
+                          <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400">Matches default Σ logo edge-to-edge</div>
                         </button>
                         <button
                           type="button"
@@ -1659,20 +1659,20 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           }}
                           className={`px-3 py-2 rounded-lg border text-left transition-all disabled:opacity-50 ${
                             iconFitMode === 'CONTAIN'
-                              ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              ? 'border-brand-600 bg-brand-50 dark:bg-brand-950/60 text-brand-900 dark:text-brand-300 font-bold'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                           }`}
                         >
                           <div>Fit Full Image</div>
-                          <div className="text-[10px] font-normal text-slate-500">Shows entire wide logo without cropping</div>
+                          <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400">Shows entire wide logo without cropping</div>
                         </button>
                       </div>
 
                       {/* Zoom Slider */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <label className="font-semibold text-slate-700">Zoom Scale:</label>
-                          <span className="font-mono text-[11px] font-bold text-brand-700">{Math.round(iconZoom * 100)}%</span>
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">Zoom Scale:</label>
+                          <span className="font-mono text-[11px] font-bold text-brand-700 dark:text-brand-400">{Math.round(iconZoom * 100)}%</span>
                         </div>
                         <input
                           type="range"
@@ -1690,7 +1690,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <label className="font-semibold text-slate-700">Move Left / Right:</label>
+                            <label className="font-semibold text-slate-700 dark:text-slate-300">Move Left / Right:</label>
                             <span className="font-mono text-[10px] text-slate-500">{iconOffsetX}px</span>
                           </div>
                           <input
@@ -1706,7 +1706,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         </div>
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <label className="font-semibold text-slate-700">Move Up / Down:</label>
+                            <label className="font-semibold text-slate-700 dark:text-slate-300">Move Up / Down:</label>
                             <span className="font-mono text-[10px] text-slate-500">{iconOffsetY}px</span>
                           </div>
                           <input
@@ -1724,7 +1724,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                       {/* Corner Style & Background Fill */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                        <label className="inline-flex items-center space-x-2 text-slate-700 cursor-pointer">
+                        <label className="inline-flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                           <input
                             type="checkbox"
                             disabled={!iconSourceImg}
@@ -1736,7 +1736,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         </label>
 
                         <div className="flex items-center space-x-1.5">
-                          <span className="text-[11px] font-semibold text-slate-600">BG:</span>
+                          <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">BG:</span>
                           {[
                             { label: 'None', val: 'transparent' },
                             { label: 'White', val: '#ffffff' },
@@ -1750,8 +1750,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               onClick={() => setIconBgColor(bg.val)}
                               className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors disabled:opacity-40 ${
                                 iconBgColor === bg.val
-                                  ? 'border-brand-600 bg-brand-50 text-brand-800'
-                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                                  ? 'border-brand-600 bg-brand-50 dark:bg-brand-950/60 text-brand-800 dark:text-brand-300'
+                                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                               }`}
                             >
                               {bg.label}
@@ -1787,7 +1787,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               setIconRounded(true);
                               setIconBgColor('transparent');
                             }}
-                            className="px-3 py-2 border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold"
+                            className="px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold"
                           >
                             Reset Calibration
                           </button>
@@ -1798,8 +1798,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         <div
                           className={`p-2.5 rounded-lg text-xs font-semibold flex items-center space-x-2 border ${
                             iconStatus.type === 'success'
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                              : 'bg-rose-50 border-rose-200 text-rose-800'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                              : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
                           }`}
                         >
                           {iconStatus.type === 'success' ? (
@@ -1814,9 +1814,9 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   </div>
 
                   {/* Ideal Image Specifications Reference */}
-                  <div className="p-3.5 rounded-lg bg-sky-50/70 border border-sky-200 text-[11px] text-sky-900 space-y-1">
-                    <div className="font-bold text-sky-950">Recommended Image Configuration (Exact Match for Default Logo)</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5 text-sky-800">
+                  <div className="p-3.5 rounded-lg bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-[11px] text-sky-900 dark:text-sky-200 space-y-1">
+                    <div className="font-bold text-sky-950 dark:text-sky-100">Recommended Image Configuration (Exact Match for Default Logo)</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5 text-sky-800 dark:text-sky-300">
                       <div>• <strong>Dimensions:</strong> 256 × 256 px or 512 × 512 px (1:1 Square)</div>
                       <div>• <strong>File Format:</strong> PNG (transparent or solid) / JPG / WebP / SVG</div>
                       <div>• <strong>Framing:</strong> Crop tightly around your logo (no top/bottom blank margin)</div>
@@ -1829,40 +1829,40 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 4. Invoice Rules & Terms */}
             {activeCategory === 'Sales_Invoice_Rules' && companySettings && company && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
-                  <FileText className="w-4 h-4 text-brand-600" />
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center space-x-2">
+                  <FileText className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                   <span>Invoice Rules, Notes & Terms</span>
                 </h3>
 
                 <div className="space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Default Invoice Terms & Conditions (Prints on every invoice):</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Invoice Terms & Conditions (Prints on every invoice):</label>
                     <textarea
                       rows={6}
                       value={company.default_invoice_terms || ''}
                       onChange={(e) => updateCompanyField('default_invoice_terms', e.target.value)}
                       placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. charged after due date.&#10;3. Subject to local jurisdiction."
-                      className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded p-2.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                     />
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       All points entered here will automatically be pre-filled on every new invoice. You can add, edit, or renumber points anytime.
                     </p>
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Default Invoice Notes / Bank Remittance instructions:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Invoice Notes / Bank Remittance instructions:</label>
                     <textarea
                       rows={3}
                       value={companySettings.default_invoice_notes || ''}
                       onChange={(e) => updateCompanySetting('default_invoice_notes', e.target.value)}
                       placeholder="Please remit payment via NEFT/RTGS to Bank Account # ... IFSC ... or UPI business@upi"
-                      className="w-full border border-slate-300 rounded p-2.5 text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded p-2.5 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
                   <div className="pt-2">
-                    <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                    <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={Boolean(companySettings.default_tax_inclusive)}
@@ -1878,15 +1878,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 5. Quotation Defaults */}
             {activeCategory === 'Sales_Quotation_Defaults' && companySettings && company && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
-                  <FileCheck className="w-4 h-4 text-brand-600" />
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center space-x-2">
+                  <FileCheck className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                   <span>Quotation Policies & Defaults</span>
                 </h3>
 
                 <div className="space-y-4 text-xs">
                   <div className="w-48">
-                    <label className="block font-semibold text-slate-700 mb-1">Default Quotation Validity (Days):</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Quotation Validity (Days):</label>
                     <input
                       type="number"
                       placeholder="30"
@@ -1897,12 +1897,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           (e.target.value === '' ? '' : Number(e.target.value)) as any
                         )
                       }
-                      className="w-full border border-slate-300 rounded px-2.5 py-1 text-sm outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Default Quotation Terms & Conditions (Varun Systems):</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Quotation Terms & Conditions (Varun Systems):</label>
                     <textarea
                       rows={8}
                       value={
@@ -1917,21 +1917,21 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       }
                       onChange={(e) => updateCompanyField('default_quotation_terms', e.target.value)}
                       placeholder="Terms &Conditions: No warranty for burn / Physical Damage.&#10;1. Taxes: Inclusive of GST&#10;2. Payment: 100% Advance along with PO&#10;3. Validity: 7 Days&#10;4. Delivery: 1 week form the date of PO&#10;5. Installation and transport Included."
-                      className="w-full border border-slate-300 rounded p-2.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded p-2.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                     />
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       All points entered here will automatically be pre-filled on every new quotation. You can add, edit, or renumber points anytime. You can also edit them per quotation while preparing it.
                     </p>
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Default Quotation Notes / Scope of Supply:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Quotation Notes / Scope of Supply:</label>
                     <textarea
                       rows={3}
                       value={companySettings.default_quotation_notes || ''}
                       onChange={(e) => updateCompanySetting('default_quotation_notes', e.target.value)}
                       placeholder="Thank you for your inquiry. Please find our best commercial quotation as detailed above."
-                      className="w-full border border-slate-300 rounded p-2.5 text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded p-2.5 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
                 </div>
@@ -1940,22 +1940,22 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 6. Numbering Sequences */}
             {activeCategory === 'Sales_Numbering_Sequences' && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <h3 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                    <ListOrdered className="w-4 h-4 text-brand-600" />
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                    <ListOrdered className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                     <span>Document Numbering Sequences</span>
                   </h3>
-                  <span className="text-[11px] text-slate-500">Atomic anti-collision sequence tracking</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Atomic anti-collision sequence tracking</span>
                 </div>
 
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Configure prefix formats, fiscal year integration, and starting sequence counters for every document type.
                 </p>
 
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px]">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold uppercase text-[10px]">
                       <tr>
                         <th className="py-2.5 px-3">Document Type</th>
                         <th className="py-2.5 px-3">Prefix</th>
@@ -1965,12 +1965,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         <th className="py-2.5 px-3 text-center">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {sequences.map((seq) => {
                         const isEditing = editingSeqId === seq.id;
                         return (
-                          <tr key={seq.id} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-3 font-semibold text-slate-800">
+                          <tr key={seq.id}>
+                            <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
                               {seq.document_type.replace(/_/g, ' ')}
                             </td>
                             <td className="py-2.5 px-3 font-mono">
@@ -1979,7 +1979,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   type="text"
                                   value={seqFormData.prefix ?? seq.prefix}
                                   onChange={(e) => setSeqFormData({ ...seqFormData, prefix: e.target.value })}
-                                  className="w-24 border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono"
+                                  className="w-24 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                                 />
                               ) : (
                                 seq.prefix
@@ -1996,7 +1996,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                       current_number: (e.target.value === '' ? '' : Number(e.target.value)) as any,
                                     })
                                   }
-                                  className="w-20 border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono"
+                                  className="w-20 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                                 />
                               ) : (
                                 seq.current_number
@@ -2013,13 +2013,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                       padding_length: (e.target.value === '' ? '' : Number(e.target.value)) as any,
                                     })
                                   }
-                                  className="w-16 border border-slate-300 rounded px-1.5 py-0.5 text-xs"
+                                  className="w-16 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                                 />
                               ) : (
                                 `${seq.padding_length} digits`
                               )}
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-slate-500">
+                            <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-slate-400">
                               {seq.last_generated_number || '-'}
                             </td>
                             <td className="py-2.5 px-3 text-center">
@@ -2035,7 +2035,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   <button
                                     type="button"
                                     onClick={() => setEditingSeqId(null)}
-                                    className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px]"
+                                    className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[10px]"
                                   >
                                     Cancel
                                   </button>
@@ -2051,7 +2051,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                       padding_length: seq.padding_length,
                                     });
                                   }}
-                                  className="text-brand-600 hover:underline font-bold text-[11px]"
+                                  className="text-brand-600 dark:text-brand-400 hover:underline font-bold text-[11px]"
                                 >
                                   Edit
                                 </button>
@@ -2068,68 +2068,68 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 7. Saving Paths by Category */}
             {activeCategory === 'Category_Save_Paths' && companySettings && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center space-x-2">
-                  <FolderOpen className="w-4 h-4 text-brand-600" />
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center space-x-2">
+                  <FolderOpen className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                   <span>Local Drive Saving Paths by Document Category</span>
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Set designated folders on your local computer or network drive for automatic PDF archiving. Every generated invoice, quotation, or purchase bill can be automatically mirrored to its respective directory.
                 </p>
 
                 <div className="space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Invoices Save Folder Path:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Invoices Save Folder Path:</label>
                     <input
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Invoices"
                       value={companySettings.invoice_save_path || ''}
                       onChange={(e) => updateCompanySetting('invoice_save_path', e.target.value)}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Quotations Save Folder Path:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Quotations Save Folder Path:</label>
                     <input
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Quotations"
                       value={companySettings.quotation_save_path || ''}
                       onChange={(e) => updateCompanySetting('quotation_save_path', e.target.value)}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Purchase Orders & Bills Save Folder Path:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Orders & Bills Save Folder Path:</label>
                     <input
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Purchases"
                       value={companySettings.purchase_save_path || ''}
                       onChange={(e) => updateCompanySetting('purchase_save_path', e.target.value)}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Reports & Financial Statements Save Folder Path:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Reports & Financial Statements Save Folder Path:</label>
                     <input
                       type="text"
                       placeholder="e.g. C:\BusinessDocs\Reports"
                       value={companySettings.report_save_path || ''}
                       onChange={(e) => updateCompanySetting('report_save_path', e.target.value)}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Automated Backups Save Folder Path:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Automated Backups Save Folder Path:</label>
                     <input
                       type="text"
                       placeholder="e.g. D:\Backups\InvoiceManager"
                       value={companySettings.backup_save_path || ''}
                       onChange={(e) => updateCompanySetting('backup_save_path', e.target.value)}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-brand-500"
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
                     />
                   </div>
                 </div>
@@ -2138,24 +2138,24 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
             {/* 8. Inventory Rules */}
             {activeCategory === 'Inventory_Rules' && companySettings && (
-              <div className="border border-slate-200 rounded-lg p-5 space-y-4 bg-white shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">
                   Inventory Valuation & Control
                 </h3>
                 <div className="space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Inventory Valuation Costing Method:</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inventory Valuation Costing Method:</label>
                     <select
                       value={companySettings.inventory_valuation_method}
                       onChange={(e) => updateCompanySetting('inventory_valuation_method', e.target.value as any)}
-                      className="w-64 border border-slate-300 rounded px-3 py-1.5 text-sm bg-white"
+                      className="w-64 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                     >
                       <option value="FIFO">FIFO (First In First Out)</option>
                       <option value="WEIGHTED_AVERAGE">Weighted Average Costing</option>
                     </select>
                   </div>
 
-                  <label className="flex items-center space-x-2 text-slate-700 cursor-pointer pt-2">
+                  <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer pt-2">
                     <input
                       type="checkbox"
                       checked={companySettings.allow_negative_stock}
@@ -2172,24 +2172,24 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             {activeCategory === 'Deployment_Mode' && (
               <div className="space-y-5">
                 {/* Mode Selector Card */}
-                <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
-                  <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-white dark:bg-slate-800/60 shadow-sm space-y-4">
+                  <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-base text-slate-800 flex items-center space-x-2">
-                        <Server className="w-5 h-5 text-brand-600" />
+                      <h3 className="font-bold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                        <Server className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                         <span>Software Operating Mode</span>
                       </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         Select how you want to use Enterprise Invoice Manager in your office.
                       </p>
                     </div>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold border ${
                         lanRole === 'STANDALONE'
-                          ? 'bg-blue-50 border-blue-200 text-blue-700'
+                          ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
                           : lanRole === 'LAN_HOST'
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          : 'bg-purple-50 border-purple-200 text-purple-700'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-brand-50 dark:bg-brand-950/60 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300'
                       }`}
                     >
                       {lanRole === 'STANDALONE'
@@ -2202,19 +2202,19 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                   {/* Dedicated Quick Disconnect / Standalone Switch for Staff PC */}
                   {lanRole === 'LAN_CLIENT' && (
-                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                       <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-purple-600 text-white rounded-lg shrink-0 mt-0.5">
+                        <div className="p-2 bg-brand-600 text-white rounded-lg shrink-0 mt-0.5">
                           <Monitor className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="font-bold text-sm text-purple-950 flex items-center space-x-2">
+                          <div className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                             <span>Connected to Office Host: {lanHostIp || 'Office LAN'}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-200 text-purple-900">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-100 dark:bg-brand-950/80 text-brand-800 dark:text-brand-300">
                               Staff: {lanStaffName || 'Staff Member'}
                             </span>
                           </div>
-                          <p className="text-xs text-purple-700 mt-1">
+                          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                             Going home with your laptop or need offline access without the office network? Switch to Standalone Mode below.
                           </p>
                         </div>
@@ -2240,20 +2240,20 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       }}
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start space-x-3.5 ${
                         lanRole === 'STANDALONE'
-                          ? 'border-brand-600 bg-brand-50/60 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                          ? 'border-brand-600 bg-brand-50/60 dark:bg-brand-950/40 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/60'
                       }`}
                     >
                       <div
                         className={`p-2.5 rounded-lg shrink-0 ${
-                          lanRole === 'STANDALONE' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
+                          lanRole === 'STANDALONE' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                         }`}
                       >
                         <Monitor className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="font-bold text-sm text-slate-800">1. Standalone Mode</div>
-                        <div className="text-xs text-slate-500 mt-1">
+                        <div className="font-bold text-sm text-slate-800 dark:text-slate-100">1. Standalone Mode</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                           Single Computer mode. Zero network configuration, 100% offline data storage on this machine.
                         </div>
                       </div>
@@ -2266,22 +2266,22 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       }}
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start space-x-3.5 ${
                         lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT'
-                          ? 'border-brand-600 bg-brand-50/60 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                          ? 'border-brand-600 bg-brand-50/60 dark:bg-brand-950/40 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/60'
                       }`}
                     >
                       <div
                         className={`p-2.5 rounded-lg shrink-0 ${
                           lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT'
                             ? 'bg-brand-600 text-white'
-                            : 'bg-slate-100 text-slate-600'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                         }`}
                       >
                         <Users className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="font-bold text-sm text-slate-800">2. LAN Multi-User Mode</div>
-                        <div className="text-xs text-slate-500 mt-1">
+                        <div className="font-bold text-sm text-slate-800 dark:text-slate-100">2. LAN Multi-User Mode</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                           Office Network mode. Connect staff computers directly to the Main PC with per-staff menu permissions.
                         </div>
                       </div>
@@ -2292,8 +2292,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <div
                       className={`flex items-center space-x-2 text-xs font-semibold px-3.5 py-2.5 rounded-lg border ${
                         lanStatus.success
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : 'bg-rose-50 text-rose-800 border-rose-200'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                       }`}
                     >
                       {lanStatus.success ? (
@@ -2307,27 +2307,27 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                   {/* ================= 2. IF STANDALONE MODE ================= */}
                   {lanRole === 'STANDALONE' && (
-                    <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                    <div className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                          <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                             <CheckCircle className="w-4 h-4 text-emerald-600" />
                             <span>Standalone Mode is Active</span>
                           </h4>
-                          <p className="text-xs text-slate-600 mt-1">
+                          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                             The software runs completely offline on this computer. You can create invoices, manage quotations, inventory, and track payments without any network setup.
                           </p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-white p-3.5 rounded-lg border border-slate-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-white dark:bg-slate-800 p-3.5 rounded-lg border border-slate-200 dark:border-slate-700">
                         <div>
                           <span className="text-slate-400 font-medium block">Database Engine</span>
-                          <span className="font-bold text-slate-800">Local Embedded Database (Zero Setup)</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">Local Embedded Database (Zero Setup)</span>
                         </div>
                         <div>
                           <span className="text-slate-400 font-medium block">Access Port</span>
-                          <span className="font-bold text-slate-800">Localhost 127.0.0.1 (Port 4200)</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">Localhost 127.0.0.1 (Port 4200)</span>
                         </div>
                       </div>
 
@@ -2349,9 +2349,9 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   {(lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT') && (
                     <div className="space-y-5 pt-2">
                       {/* Host vs Staff Sub-Option */}
-                      <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
-                        <span className="text-xs font-bold text-slate-700">Choose Computer Role:</span>
-                        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-bold">
+                      <div className="flex items-center space-x-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Choose Computer Role:</span>
+                        <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 p-0.5 text-xs font-bold">
                           <button
                             type="button"
                             onClick={() => {
@@ -2360,8 +2360,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             }}
                             className={`px-4 py-1.5 rounded-md transition-all flex items-center space-x-1.5 ${
                               lanRole === 'LAN_HOST'
-                                ? 'bg-white text-brand-700 shadow-sm font-bold'
-                                : 'text-slate-600 hover:text-slate-900'
+                                ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-300 shadow-sm font-bold'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                             }`}
                           >
                             <Server className="w-3.5 h-3.5" />
@@ -2375,8 +2375,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             }}
                             className={`px-4 py-1.5 rounded-md transition-all flex items-center space-x-1.5 ${
                               lanRole === 'LAN_CLIENT'
-                                ? 'bg-white text-brand-700 shadow-sm font-bold'
-                                : 'text-slate-600 hover:text-slate-900'
+                                ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-300 shadow-sm font-bold'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                             }`}
                           >
                             <Users className="w-3.5 h-3.5" />
@@ -2389,31 +2389,31 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       {lanRole === 'LAN_HOST' && (
                         <div className="space-y-5">
                           {/* Host Network Configuration Card */}
-                          <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-200 space-y-3 text-xs">
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/60 pb-2">
+                          <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800 space-y-3 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/60 dark:border-emerald-800/60 pb-2">
                               <div>
-                                <h4 className="font-bold text-emerald-950 flex items-center space-x-1.5">
-                                  <Server className="w-4 h-4 text-emerald-700" />
+                                <h4 className="font-bold text-emerald-950 dark:text-emerald-200 flex items-center space-x-1.5">
+                                  <Server className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                                   <span>Main Office PC (Host) Network Info</span>
                                 </h4>
-                                <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                                <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
                                   Office staff will enter this IP Address and Port on their Staff PCs to connect.
                                 </p>
                               </div>
                               <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-emerald-900">Host Port:</span>
+                                <span className="font-semibold text-emerald-900 dark:text-emerald-200">Host Port:</span>
                                 <input
                                   type="number"
                                   value={lanPort}
                                   onChange={(e) => setLanPort(Number(e.target.value) || 4200)}
-                                  className="w-20 border border-emerald-300 rounded px-2 py-1 font-mono text-xs bg-white text-emerald-950 font-bold"
+                                  className="w-20 border border-emerald-300 dark:border-emerald-700 rounded px-2 py-1 font-mono text-xs bg-white dark:bg-slate-800 text-emerald-950 dark:text-emerald-200 font-bold"
                                 />
                               </div>
                             </div>
 
                             {/* Detected IP Addresses */}
                             <div>
-                              <span className="font-semibold text-emerald-900 block mb-1.5">
+                              <span className="font-semibold text-emerald-900 dark:text-emerald-200 block mb-1.5">
                                 Host IP Address (detected on office network):
                               </span>
                               {lanLocalIps.length > 0 ? (
@@ -2421,7 +2421,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   {lanLocalIps.map((ip) => (
                                     <div
                                       key={ip}
-                                      className="inline-flex items-center space-x-2 px-3 py-1.5 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-emerald-900 shadow-sm"
+                                      className="inline-flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 rounded-lg font-mono font-bold text-emerald-900 dark:text-emerald-200 shadow-sm"
                                     >
                                       <span>{ip}</span>
                                       <span className="text-slate-400 text-[11px] font-sans font-normal">Port {lanPort}</span>
@@ -2436,15 +2436,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   ))}
                                 </div>
                               ) : (
-                                <div className="text-slate-600">
-                                  Run <code className="px-1.5 py-0.5 bg-white rounded border">ipconfig</code> in Windows Command Prompt to view your office Wi-Fi/Ethernet IPv4 address.
+                                <div className="text-slate-600 dark:text-slate-400">
+                                  Run <code className="px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded border dark:border-slate-700">ipconfig</code> in Windows Command Prompt to view your office Wi-Fi/Ethernet IPv4 address.
                                 </div>
                               )}
                             </div>
 
                             {/* Background & Auto-start checkboxes */}
-                            <div className="pt-2 space-y-1.5 border-t border-emerald-200/70">
-                              <label className="flex items-center space-x-2 text-emerald-950 cursor-pointer">
+                            <div className="pt-2 space-y-1.5 border-t border-emerald-200/70 dark:border-emerald-800/70">
+                              <label className="flex items-center space-x-2 text-emerald-950 dark:text-emerald-200 cursor-pointer">
                                 <input
                                   type="checkbox"
                                   checked={lanMinimizeToTray}
@@ -2455,7 +2455,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   Run quietly in Windows System Tray when closing window (keeps staff PCs connected)
                                 </span>
                               </label>
-                              <label className="flex items-center space-x-2 text-emerald-950 cursor-pointer">
+                              <label className="flex items-center space-x-2 text-emerald-950 dark:text-emerald-200 cursor-pointer">
                                 <input
                                   type="checkbox"
                                   checked={lanAutoStartOnBoot}
@@ -2483,20 +2483,20 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           </div>
 
                           {/* Staff Member Creation Form */}
-                          <div className="p-5 bg-white rounded-xl border border-slate-200 space-y-4 shadow-sm">
-                            <div className="border-b border-slate-100 pb-2.5">
-                              <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                                <Plus className="w-4 h-4 text-brand-600" />
+                          <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                            <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                                <Plus className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                                 <span>Create Staff Member &amp; Assign Menu Permissions</span>
                               </h4>
-                              <p className="text-xs text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 Enter a staff name (e.g. Ramesh) and choose which menus they can access. When they enter this name on their computer, the software will automatically recognize and apply these permissions.
                               </p>
                             </div>
 
                             <div className="space-y-3">
                               <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                                   Staff Member Name *
                                 </label>
                                 <input
@@ -2504,13 +2504,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   placeholder="e.g. Ramesh, Priya, Billing Desk, Accounts"
                                   value={hostNewStaffName}
                                   onChange={(e) => setHostNewStaffName(e.target.value)}
-                                  className="w-full sm:w-80 border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                  className="w-full sm:w-80 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                                 />
                               </div>
 
                               <div>
                                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                                  <label className="text-xs font-bold text-slate-700">
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                     Allowed Menus for this Staff Member ({hostNewStaffMenus.length} selected):
                                   </label>
                                   <div className="flex items-center space-x-2 text-[11px]">
@@ -2525,7 +2525,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                           'products',
                                         ])
                                       }
-                                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold"
+                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
                                     >
                                       Billing Staff (No Dashboard/Reports)
                                     </button>
@@ -2544,7 +2544,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                           'payments',
                                         ])
                                       }
-                                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold"
+                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
                                     >
                                       Accounts &amp; Inventory
                                     </button>
@@ -2555,21 +2555,21 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                           permMenuCatalog.length > 0 ? permMenuCatalog.map((m) => m.id) : []
                                         )
                                       }
-                                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold"
+                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
                                     >
                                       Select All
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => setHostNewStaffMenus([])}
-                                      className="px-2 py-0.5 text-rose-600 hover:bg-rose-50 rounded font-semibold"
+                                      className="px-2 py-0.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded font-semibold"
                                     >
                                       Clear
                                     </button>
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
                                   {permMenuCatalog.map((m) => {
                                     const checked = hostNewStaffMenus.includes(m.id);
                                     return (
@@ -2577,8 +2577,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                         key={m.id}
                                         className={`flex items-center space-x-2 p-1.5 rounded border cursor-pointer transition-colors ${
                                           checked
-                                            ? 'bg-brand-50 border-brand-200 text-brand-950 font-semibold'
-                                            : 'bg-white border-slate-200 text-slate-500'
+                                            ? 'bg-brand-50 dark:bg-brand-950/60 border-brand-200 dark:border-brand-800 text-brand-950 dark:text-brand-300 font-semibold'
+                                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
                                         }`}
                                       >
                                         <input
@@ -2617,21 +2617,21 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           </div>
 
                           {/* Existing Staff Members List */}
-                          <div className="p-5 bg-white rounded-xl border border-slate-200 space-y-4 shadow-sm">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                          <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
                               <div>
-                                <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                                  <Users className="w-4 h-4 text-brand-600" />
+                                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                                  <Users className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                                   <span>Configured Office Staff Members ({permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').length})</span>
                                 </h4>
-                                <p className="text-xs text-slate-500 mt-0.5">
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                   Staff will automatically receive these permissions when they enter their name on their computer.
                                 </p>
                               </div>
                               <button
                                 type="button"
                                 onClick={loadWorkstationPermissions}
-                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold flex items-center space-x-1"
+                                className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded text-xs font-semibold flex items-center space-x-1"
                               >
                                 <RefreshCw className={`w-3 h-3 ${permLoading ? 'animate-spin' : ''}`} />
                                 <span>Refresh</span>
@@ -2639,7 +2639,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             </div>
 
                             {permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').length === 0 ? (
-                              <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                              <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
                                 No staff members created yet. Use the form above to add your office staff members by name.
                               </div>
                             ) : (
@@ -2649,27 +2649,27 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   return (
                                     <div
                                       key={ws.device_id}
-                                      className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/50 space-y-3 text-xs"
+                                      className="border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3 text-xs"
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex items-center space-x-2.5">
-                                          <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase">
+                                          <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300 flex items-center justify-center font-bold text-xs uppercase">
                                             {(ws.device_name || 'S').charAt(0)}
                                           </div>
                                           <div>
-                                            <div className="font-bold text-slate-800 flex items-center space-x-2">
+                                            <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                                               <span>{ws.device_name}</span>
                                               <span
                                                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                                   ws.is_admin
-                                                    ? 'bg-purple-100 text-purple-800'
-                                                    : 'bg-brand-100 text-brand-800'
+                                                    ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                                                    : 'bg-brand-100 dark:bg-brand-950/50 text-brand-800 dark:text-brand-300'
                                                 }`}
                                               >
                                                 {ws.is_admin ? 'MD / Full Admin' : 'Staff Member'}
                                               </span>
                                             </div>
-                                            <div className="text-[11px] text-slate-500">
+                                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
                                               {ws.is_admin
                                                 ? 'All menus allowed'
                                                 : `${ws.allowed_menus?.length || 0} menus allowed (Dashboard & Reports ${
@@ -2683,7 +2683,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                           <button
                                             type="button"
                                             onClick={() => setExpandedStaffId(isExpanded ? null : ws.device_id)}
-                                            className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold flex items-center space-x-1"
+                                            className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] font-semibold flex items-center space-x-1"
                                           >
                                             <span>{isExpanded ? 'Hide Permissions' : 'Edit Permissions'}</span>
                                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -2701,8 +2701,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                                       {/* Expanded Menu Editor */}
                                       {isExpanded && (
-                                        <div className="pt-2 border-t border-slate-200 space-y-2.5">
-                                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-3 rounded-lg border border-slate-200">
+                                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2.5">
+                                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
                                             {permMenuCatalog.map((m) => {
                                               const checked = ws.is_admin || ws.allowed_menus?.includes(m.id);
                                               return (
@@ -2710,8 +2710,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                                   key={m.id}
                                                   className={`flex items-center space-x-1.5 p-1 rounded border cursor-pointer ${
                                                     checked
-                                                      ? 'bg-brand-50/70 border-brand-200 text-brand-950 font-semibold'
-                                                      : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                      ? 'bg-brand-50/70 dark:bg-brand-950/60 border-brand-200 dark:border-brand-800 text-brand-950 dark:text-brand-300 font-semibold'
+                                                      : 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
                                                   }`}
                                                 >
                                                   <input
@@ -2747,21 +2747,21 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           </div>
 
                           {/* MD PIN Protection (Strict 4 Digits) */}
-                          <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2 text-xs">
-                            <div className="flex items-center justify-between font-bold text-amber-950">
+                          <div className="p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/80 rounded-xl space-y-2 text-xs">
+                            <div className="flex items-center justify-between font-bold text-amber-950 dark:text-amber-200">
                               <span className="flex items-center space-x-1.5">
-                                <Lock className="w-3.5 h-3.5 text-amber-700" />
+                                <Lock className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                                 <span>MD / Admin PIN Protection (4 Digits)</span>
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  permHasCustomPin ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                                  permHasCustomPin ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300'
                                 }`}
                               >
                                 {permHasCustomPin ? 'PIN Active (Custom 4-Digit PIN)' : 'PIN Active (Default: 1234)'}
                               </span>
                             </div>
-                            <p className="text-[11px] text-amber-900/80">
+                            <p className="text-[11px] text-amber-900/80 dark:text-amber-300/80">
                               A 4-digit PIN is strictly required before saving or changing any staff menu permissions. Default PIN is 1234. Change your 4-digit PIN below to keep it secret.
                             </p>
                             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -2772,7 +2772,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                   placeholder="Current PIN (4 digits)"
                                   value={permCurrentPin}
                                   onChange={(e) => setPermCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                                  className="border border-slate-300 rounded px-2.5 py-1 text-xs w-36 bg-white font-mono tracking-widest text-center"
+                                  className="border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-xs w-36 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono tracking-widest text-center"
                                 />
                               )}
                               <input
@@ -2781,7 +2781,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                 placeholder="New 4-digit PIN"
                                 value={permNewPin}
                                 onChange={(e) => setPermNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                                className="border border-slate-300 rounded px-2.5 py-1 text-xs w-36 bg-white font-mono tracking-widest text-center"
+                                className="border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-xs w-36 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono tracking-widest text-center"
                               />
                               <button
                                 type="button"
@@ -2798,20 +2798,20 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                       {/* ================= 5. IF STAFF (OFFICE STAFF PC) ================= */}
                       {lanRole === 'LAN_CLIENT' && (
-                        <div className="p-5 bg-white rounded-xl border border-slate-200 space-y-4 shadow-sm text-xs">
-                          <div className="border-b border-slate-100 pb-2.5">
-                            <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                              <Users className="w-4 h-4 text-brand-600" />
+                        <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm text-xs">
+                          <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                              <Users className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                               <span>Connect to Main Office PC</span>
                             </h4>
-                            <p className="text-slate-500 mt-0.5">
+                            <p className="text-slate-500 dark:text-slate-400 mt-0.5">
                               Enter the Main PC&apos;s IP address and the Staff Name given to you by the Host/MD. The software will connect and recognize your assigned menu permissions.
                             </p>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="sm:col-span-2">
-                              <label className="block font-bold text-slate-700 mb-1">
+                              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                                 Main Office PC IP Address *
                               </label>
                               <input
@@ -2819,24 +2819,24 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                 placeholder="e.g. 192.168.1.100"
                                 value={lanHostIp}
                                 onChange={(e) => setLanHostIp(e.target.value)}
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                               />
                             </div>
 
                             <div>
-                              <label className="block font-bold text-slate-700 mb-1">Port</label>
+                              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Port</label>
                               <input
                                 type="number"
                                 placeholder="4200"
                                 value={lanPort}
                                 onChange={(e) => setLanPort(Number(e.target.value) || 4200)}
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                               />
                             </div>
                           </div>
 
                           <div>
-                            <label className="block font-bold text-slate-700 mb-1">
+                            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                               Your Staff Member Name *
                             </label>
                             <input
@@ -2844,14 +2844,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               placeholder="e.g. Ramesh, Priya, Billing Desk 1"
                               value={lanStaffName}
                               onChange={(e) => setLanStaffName(e.target.value)}
-                              className="w-full sm:w-80 border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              className="w-full sm:w-80 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                             />
-                            <p className="text-[11px] text-slate-500 mt-1">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                               Must match the name created by the Host. Your allowed menus (e.g. Invoices, Quotations) will automatically apply, and restricted menus (Dashboard, Reports) will remain hidden.
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                             <div className="flex items-center space-x-2">
                               <button
                                 type="button"
@@ -2864,8 +2864,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               </button>
 
                               {lanConnectedUrl && (
-                                <span className="text-[11px] text-slate-500">
-                                  Active server: <code className="font-mono text-slate-700">{lanConnectedUrl}</code>
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  Active server: <code className="font-mono text-slate-700 dark:text-slate-300">{lanConnectedUrl}</code>
                                 </span>
                               )}
                             </div>
@@ -2893,46 +2893,46 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             {/* ================= SYSTEM DIAGNOSTICS & LOGS ================= */}
             {activeCategory === 'System_Diagnostics' && (
               <div className="space-y-5">
-                <div className="border-b border-slate-200 pb-3">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
-                    <Activity className="w-4 h-4 text-brand-600" />
+                <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                    <Activity className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                     <span>System Diagnostics, Health &amp; Rotating Local Logs</span>
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     View local application telemetry and download diagnostic packages for technical support.
                   </p>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
-                  <div className="font-bold text-sm text-slate-800">Local Telemetry Overview:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-white dark:bg-slate-800/60 shadow-sm space-y-4">
+                  <div className="font-bold text-sm text-slate-800 dark:text-slate-100">Local Telemetry Overview:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                     <div>
                       <span className="text-slate-400 font-medium block">Application Version</span>
-                      <span className="font-bold text-slate-800">Enterprise Invoice Manager v2.0.0</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">Enterprise Invoice Manager v2.0.0</span>
                     </div>
                     <div>
                       <span className="text-slate-400 font-medium block">Database Persistence Engine</span>
-                      <span className="font-bold text-slate-800 flex items-center space-x-1.5">
+                      <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
                         <span>{dbModeInfo?.type === 'postgres' ? 'PostgreSQL Local LAN' : 'SQLite WAL (Zero-Setup)'}</span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
                           Automatic
                         </span>
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 font-medium block">Operating Mode</span>
-                      <span className="font-bold text-slate-800">{lanRole || 'STANDALONE'}</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">{lanRole || 'STANDALONE'}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 font-medium block">Rotating Local Logs</span>
-                      <span className="font-bold text-slate-800">Active (Max 5 MB / 7-Day History)</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">Active (Max 5 MB / 7-Day History)</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <div className="font-bold text-xs text-slate-800">Export Diagnostics Package</div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className="font-bold text-xs text-slate-800 dark:text-slate-100">Export Diagnostics Package</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
                         Generates a secure, sanitized ZIP containing system health data and recent application logs for customer support.
                       </div>
                     </div>
@@ -2949,23 +2949,23 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 </div>
 
                 {/* OFFLINE SOFTWARE UPDATER & MULTI-PC SYNCHRONIZATION */}
-                <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
-                  <div className="border-b border-slate-100 pb-3">
-                    <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                      <RefreshCw className="w-4 h-4 text-brand-600" />
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-white dark:bg-slate-800/60 shadow-sm space-y-4">
+                  <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                      <RefreshCw className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                       <span>Offline Software Updates &amp; Client Sync (Zero Reinstall)</span>
                     </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       Install updated features without uninstalling. Invoices, customers, stock, and network connections are 100% preserved.
                     </p>
                   </div>
 
                   {/* Data Safety Assurance Banner */}
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start space-x-2.5 text-xs text-emerald-900">
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start space-x-2.5 text-xs text-emerald-900 dark:text-emerald-200">
                     <Shield className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
                       <span className="font-bold">Permanent Data &amp; Network Protection:</span>
-                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
                         Updating the software updates only application features and options. Your database (invoices, customers, numbering sequences) and office LAN settings will <strong>never</strong> be deleted or reset. A safety backup of your database is created automatically prior to applying any update.
                       </p>
                     </div>
@@ -2976,8 +2976,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <div
                       className={`p-3 rounded-lg border text-xs flex items-start space-x-2 ${
                         updateStatus.success
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                          : 'bg-red-50 border-red-200 text-red-900'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                          : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200'
                       }`}
                     >
                       {updateStatus.success ? (
@@ -2988,7 +2988,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       <div>
                         <div className="font-bold">{updateStatus.message}</div>
                         {updateStatus.backupPath && (
-                          <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
                             Safety Backup saved: {updateStatus.backupPath}
                           </div>
                         )}
@@ -3012,14 +3012,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   {/* Actions Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                     {/* Action 1: Install Update File */}
-                    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between space-y-3">
+                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900/40 flex flex-col justify-between space-y-3">
                       <div>
-                        <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
-                          <Upload className="w-3.5 h-3.5 text-brand-600" />
+                        <div className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
+                          <Upload className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
                           <span>Install Update Package (.asar)</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                          Select the updated <code className="bg-slate-200 px-1 rounded text-slate-700">app.asar</code> file from your pendrive or computer to upgrade this machine in 3 seconds.
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Select the updated <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-slate-700 dark:text-slate-300">app.asar</code> file from your pendrive or computer to upgrade this machine in 3 seconds.
                         </p>
                       </div>
                       <button
@@ -3051,14 +3051,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                     {/* Action 2: LAN Direct Update or Export Package */}
                     {lanRole === 'LAN_CLIENT' ? (
-                      <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between space-y-3">
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900/40 flex flex-col justify-between space-y-3">
                         <div>
-                          <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+                          <div className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
                             <Server className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Update Directly from Main PC</span>
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                            Connected to Main PC at <code className="bg-emerald-100 text-emerald-800 px-1 rounded font-bold">{lanHostIp || 'Office Host'}:{lanPort}</code>. Pull the newest version directly over your office network.
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            Connected to Main PC at <code className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-1 rounded font-bold">{lanHostIp || 'Office Host'}:{lanPort}</code>. Pull the newest version directly over your office network.
                           </p>
                         </div>
                         <button
@@ -3081,14 +3081,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         </button>
                       </div>
                     ) : (
-                      <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between space-y-3">
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900/40 flex flex-col justify-between space-y-3">
                         <div>
-                          <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+                          <div className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
                             <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
                             <span>Export Client Update Package</span>
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                            Generate a 1-click update folder containing <code className="bg-slate-200 px-1 rounded text-slate-700">1-Click-Update.bat</code> and <code className="bg-slate-200 px-1 rounded text-slate-700">app.asar</code> to copy to your other computer.
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            Generate a 1-click update folder containing <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-slate-700 dark:text-slate-300">1-Click-Update.bat</code> and <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-slate-700 dark:text-slate-300">app.asar</code> to copy to your other computer.
                           </p>
                         </div>
                         <button
@@ -3119,22 +3119,22 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             {/* DANGER ZONE: FACTORY RESET */}
             {activeCategory === 'Factory_Reset' && (
               <div className="space-y-4">
-                <div className="border-b border-slate-200 pb-3">
-                  <h3 className="text-sm font-bold text-red-700 flex items-center space-x-1.5">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
+                <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
+                  <h3 className="text-sm font-bold text-red-700 dark:text-red-400 flex items-center space-x-1.5">
+                    <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
                     <span>Danger Zone: Clear All Companies &amp; Data (Factory Reset)</span>
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Reset the local database to a completely clean slate.
                   </p>
                 </div>
 
-                <div className="bg-red-50/70 border border-red-200 rounded-xl p-5 shadow-sm space-y-3">
-                  <div className="flex items-center space-x-2 text-red-700 font-bold text-sm">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
+                <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900/60 rounded-xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center space-x-2 text-red-700 dark:text-red-400 font-bold text-sm">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
                     <span>Danger Zone: Clear All Companies &amp; Data (Factory Reset)</span>
                   </div>
-                  <p className="text-xs text-red-600/90">
+                  <p className="text-xs text-red-600/90 dark:text-red-400/90">
                     Permanently erase all companies, operating branches, invoices, customers, suppliers, inventory, and payment records. Preserves application settings in a pristine clean state.
                   </p>
                   <button
@@ -3155,10 +3155,10 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 flex items-center justify-between">
           <div>
             {savedSuccess && (
-              <div className="flex items-center space-x-1.5 text-emerald-600 text-xs font-bold">
+              <div className="flex items-center space-x-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                 <CheckCircle className="w-4 h-4" />
                 <span>All settings saved successfully!</span>
               </div>
@@ -3167,7 +3167,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
           <div className="flex items-center space-x-2">
             <button
               onClick={onClose}
-              className="px-4 py-1.5 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors"
+              className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               Cancel
             </button>
@@ -3186,18 +3186,18 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
       {/* 4-Digit MD PIN Authorization Modal */}
       {pinPromptState && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 border border-slate-200 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-sm w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4 text-slate-800 dark:text-slate-100">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                <Lock className="w-5 h-5 text-amber-700" />
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5 text-amber-700 dark:text-amber-400" />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-slate-900">{pinPromptState.title}</h3>
-                <p className="text-[11px] text-slate-500">MD / Admin PIN Authorization</p>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">{pinPromptState.title}</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">MD / Admin PIN Authorization</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               {pinPromptState.description}
             </p>
 
@@ -3218,24 +3218,24 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     }
                   }}
                   placeholder="• • • •"
-                  className="w-48 text-center text-2xl font-mono tracking-[0.5em] font-bold py-2 border-2 border-slate-300 focus:border-brand-600 rounded-xl outline-none transition-all shadow-inner bg-slate-50 focus:bg-white"
+                  className="w-48 text-center text-2xl font-mono tracking-[0.5em] font-bold py-2 border-2 border-slate-300 dark:border-slate-600 focus:border-brand-600 rounded-xl outline-none transition-all shadow-inner bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-700"
                 />
               </div>
 
               {!permHasCustomPin && (
-                <p className="text-[11px] text-amber-700 font-medium text-center">
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium text-center">
                   Default initial PIN is <strong>1234</strong>
                 </p>
               )}
 
               {pinPromptError && (
-                <p className="text-xs text-rose-600 font-semibold text-center animate-in fade-in">
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold text-center animate-in fade-in">
                   {pinPromptError}
                 </p>
               )}
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -3243,7 +3243,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   setPinPromptInput('');
                   setPinPromptError('');
                 }}
-                className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg font-semibold"
+                className="px-3.5 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-semibold"
               >
                 Cancel
               </button>

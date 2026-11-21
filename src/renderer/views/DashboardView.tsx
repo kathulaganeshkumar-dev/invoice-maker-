@@ -136,7 +136,7 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
   ];
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto">
+    <div className="p-6 space-y-6">
       {/* View Header with Date Filters */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>

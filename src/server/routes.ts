@@ -135,13 +135,14 @@ export function createApiRouter(db: Knex): Router {
     return false;
   };
 
-  const requireMenuAccess = (menuId: MenuId) => {
+  const requireMenuAccess = (menuId: MenuId | MenuId[]) => {
+    const ids = Array.isArray(menuId) ? menuId : [menuId];
     return async (req: Request, res: Response, next: any) => {
       try {
         const meta = getRequestDeviceMeta(req);
         if (!meta.deviceId) return next();
         const ws = await workstationService.getWorkstationPermission(meta.deviceId);
-        if (!ws || ws.is_admin || ws.allowed_menus.includes(menuId)) {
+        if (!ws || ws.is_admin || ids.some((id) => ws.allowed_menus.includes(id))) {
           return next();
         }
         // Allow MD override if valid Admin PIN header is provided
@@ -150,7 +151,7 @@ export function createApiRouter(db: Knex): Router {
           return next();
         }
         return res.status(403).json({
-          error: `Access to "${menuId}" is restricted on this PC by your MD / Administrator.`,
+          error: `Access to "${ids.join(' / ')}" is restricted on this PC by your MD / Administrator.`,
         });
       } catch {
         return next();
@@ -1658,6 +1659,16 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
+  router.put('/companies/:companyId/payments/customer/:paymentId', async (req: Request, res: Response) => {
+    try {
+      const { companyId, paymentId } = getParams(req);
+      const updated = await paymentService.updateCustomerPayment(companyId, paymentId, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   router.delete('/companies/:companyId/payments/customer/:paymentId', async (req: Request, res: Response) => {
     try {
       const { companyId, paymentId } = getParams(req);
@@ -1688,6 +1699,16 @@ export function createApiRouter(db: Knex): Router {
         created_by_device_name: meta.deviceName || undefined,
       });
       res.status(201).json(payment);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.put('/companies/:companyId/payments/supplier/:paymentId', async (req: Request, res: Response) => {
+    try {
+      const { companyId, paymentId } = getParams(req);
+      const updated = await paymentService.updateSupplierPayment(companyId, paymentId, req.body);
+      res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1731,7 +1752,7 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.get('/companies/:companyId/reports/staff-activity', requireMenuAccess('reports'), async (req: Request, res: Response) => {
+  router.get('/companies/:companyId/reports/staff-activity', requireMenuAccess(['work_summary', 'reports']), async (req: Request, res: Response) => {
     try {
       const { companyId } = getParams(req);
       const activity = await workstationService.getStaffActivityReport(
