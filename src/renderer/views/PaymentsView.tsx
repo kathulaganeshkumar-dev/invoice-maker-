@@ -787,9 +787,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <CreditCard className="w-5 h-5 text-brand-600" />
-            <span>Payments & Settlements (AR / AP)</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Payments & Settlements (AR / AP)
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {activeTab === 'customer'
@@ -805,13 +804,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
             loadMaster();
             setIsModalOpen(true);
           }}
-          className={`inline-flex items-center space-x-1.5 px-4 py-2 text-white rounded-lg text-xs font-bold shadow-sm transition-all ${
-            activeTab === 'customer'
-              ? 'bg-brand-600 hover:bg-brand-700'
-              : 'bg-rose-600 hover:bg-rose-700'
-          }`}
+          className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
           <span>{activeTab === 'customer' ? 'Record Customer Receipt' : 'Pay Supplier (Record Vendor Payment)'}</span>
         </button>
       </div>
@@ -824,11 +818,10 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
             onClick={() => handleTabSwitch('customer')}
             className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'customer'
-                ? 'bg-brand-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             }`}
           >
-            <ArrowDownLeft className={`w-4 h-4 ${activeTab === 'customer' ? 'text-emerald-300' : 'text-emerald-600'}`} />
             <span>Customer Receipts (Money In / AR)</span>
           </button>
           <button
@@ -836,11 +829,10 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
             onClick={() => handleTabSwitch('supplier')}
             className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'supplier'
-                ? 'bg-rose-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             }`}
           >
-            <ArrowUpRight className={`w-4 h-4 ${activeTab === 'supplier' ? 'text-rose-200' : 'text-rose-600'}`} />
             <span>Supplier Payments (Money Out / AP)</span>
           </button>
         </div>
@@ -863,11 +855,11 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           <>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 shadow-sm">
               <div className="text-slate-500 font-semibold">Total Collected from Customers (Money In)</div>
-              <div className="text-lg font-extrabold text-emerald-600 mt-1">{formatIndianCurrency(totalCustomerInflow)}</div>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-white mt-1">{formatIndianCurrency(totalCustomerInflow)}</div>
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 shadow-sm">
               <div className="text-slate-500 font-semibold">Total Customer Receivables Pending</div>
-              <div className="text-lg font-extrabold text-amber-600 mt-1">{formatIndianCurrency(totalReceivable)}</div>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-white mt-1">{formatIndianCurrency(totalReceivable)}</div>
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 shadow-sm">
               <div className="text-slate-500 font-semibold">Receipt Vouchers Recorded</div>
@@ -876,13 +868,13 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           </>
         ) : (
           <>
-            <div className="bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/50 rounded-xl p-3.5 shadow-sm">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 shadow-sm">
               <div className="text-slate-500 font-semibold">Total Paid to Suppliers (Money Out)</div>
-              <div className="text-lg font-extrabold text-rose-600 mt-1">{formatIndianCurrency(totalSupplierOutflow)}</div>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-white mt-1">{formatIndianCurrency(totalSupplierOutflow)}</div>
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 shadow-sm">
               <div className="text-slate-500 font-semibold">Total Owed to Suppliers (Payables Balance)</div>
-              <div className="text-lg font-extrabold text-amber-600 mt-1">{formatIndianCurrency(totalPayable)}</div>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-white mt-1">{formatIndianCurrency(totalPayable)}</div>
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 shadow-sm">
               <div className="text-slate-500 font-semibold">Vendor Payment Vouchers Issued</div>
@@ -942,7 +934,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                       </button>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
                         {p.payment_method}
                       </span>
                       {p.bank_account && (
@@ -1037,20 +1029,20 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                         {p.notes && <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{p.notes}</div>}
                       </td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
                           {p.payment_method}
                         </span>
                         {p.bank_account && (
                           <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium mt-0.5 flex items-center space-x-1">
-                            <Landmark className="w-3 h-3 shrink-0 text-brand-600" />
+                            <Landmark className="w-3 h-3 shrink-0 text-slate-500" />
                             <span className="truncate max-w-[190px]" title={`From: ${p.bank_account}`}>
                               From: {p.bank_account}
                             </span>
                           </div>
                         )}
                         {p.vendor_bank_account && (
-                          <div className="text-[10px] text-rose-700 dark:text-rose-300 font-medium mt-0.5 flex items-center space-x-1">
-                            <Landmark className="w-3 h-3 shrink-0 text-rose-600" />
+                          <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium mt-0.5 flex items-center space-x-1">
+                            <Landmark className="w-3 h-3 shrink-0 text-slate-500" />
                             <span className="truncate max-w-[190px]" title={`To Vendor: ${p.vendor_bank_account}`}>
                               To: {p.vendor_bank_account}
                             </span>
@@ -1065,7 +1057,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                         {hasAllocs ? (
                           <div className="inline-flex flex-col items-end">
                             <span
-                              className="px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 rounded font-bold text-[10px]"
+                              className="font-medium text-slate-700 dark:text-slate-300 text-xs"
                               title={p.allocations!.map((a) => `${a.document_number}: ₹${a.allocated_amount}`).join(', ')}
                             >
                               Settled {p.allocations!.length} Bill{p.allocations!.length > 1 ? 's' : ''}
@@ -1075,7 +1067,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                             </span>
                           </div>
                         ) : (
-                          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 rounded font-bold text-[10px]">
+                          <span className="font-medium text-amber-700 dark:text-amber-400 text-xs">
                             Vendor Advance ({formatIndianCurrency(unalloc.toFixed(2))})
                           </span>
                         )}
@@ -1106,11 +1098,6 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                {activeTab === 'customer' ? (
-                  <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
-                ) : (
-                  <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                )}
                 <span>
                   {editingPayment
                     ? activeTab === 'customer'
@@ -1582,7 +1569,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                           <button
                             type="button"
                             onClick={handleAutoAllocate}
-                            className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-semibold transition-colors"
                           >
                             <Wand2 className="w-3 h-3" />
                             <span>Auto-Allocate</span>
@@ -1721,7 +1708,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                           <button
                             type="button"
                             onClick={handleAutoAllocate}
-                            className="inline-flex items-center space-x-1 text-rose-600 font-bold hover:underline"
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-semibold transition-colors"
                           >
                             <Wand2 className="w-3 h-3" />
                             <span>Auto-Allocate</span>
@@ -1827,11 +1814,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                 type="button"
                 disabled={saving}
                 onClick={handleRecordPayment}
-                className={`px-4 py-1.5 text-white rounded text-xs font-bold shadow-sm disabled:opacity-50 ${
-                  activeTab === 'customer'
-                    ? 'bg-brand-600 hover:bg-brand-700'
-                    : 'bg-rose-600 hover:bg-rose-700'
-                }`}
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-xs font-bold shadow-sm disabled:opacity-50"
               >
                 {saving
                   ? 'Saving...'

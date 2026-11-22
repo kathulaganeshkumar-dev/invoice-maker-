@@ -20,16 +20,19 @@ import { ReportsView } from './views/ReportsView';
 import { WorkSummaryView } from './views/WorkSummaryView';
 import { ImportExportView } from './views/ImportExportView';
 import { BackupRestoreView } from './views/BackupRestoreView';
+import { QuickAddCustomerModal } from './components/QuickAddCustomerModal';
 import { RefreshCw, Building2, PlusCircle } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [activeBranch, setActiveBranch] = useState<Branch | null>(null);
+  const [hasEnteredCompany, setHasEnteredCompany] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState<boolean>(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
   const [isQuickInvoiceOpen, setIsQuickInvoiceOpen] = useState<boolean>(false);
   const [isQuickQuotationOpen, setIsQuickQuotationOpen] = useState<boolean>(false);
+  const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState<boolean>(false);
   const [allowedMenus, setAllowedMenus] = useState<string[] | null>(null);
   const [canOpenSettings, setCanOpenSettings] = useState<boolean>(true);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
@@ -244,26 +247,35 @@ export const App: React.FC = () => {
         const restoredCompId = sessionStorage.getItem('eim_restore_active_company_id');
         if (restoredCompId) {
           sessionStorage.removeItem('eim_restore_active_company_id');
-        }
-        const defaultComp =
-          (restoredCompId && companies.find((c) => c.id === restoredCompId)) ||
-          companies.find((c) => c.is_default) ||
-          companies[0];
-        setActiveCompany(defaultComp);
+          const defaultComp =
+            companies.find((c) => c.id === restoredCompId) ||
+            companies.find((c) => c.is_default) ||
+            companies[0];
+          setActiveCompany(defaultComp);
 
-        const branches = await api.getBranches(defaultComp.id);
-        const defaultBranch = branches.find((b) => b.is_default) || branches[0];
-        setActiveBranch(defaultBranch || null);
-
-        if (!restoredCompId && appSettings?.show_company_selector_on_startup) {
+          const branches = await api.getBranches(defaultComp.id);
+          const defaultBranch = branches.find((b) => b.is_default) || branches[0];
+          setActiveBranch(defaultBranch || null);
+          setHasEnteredCompany(true);
+        } else {
+          // On program startup: do not enter any company yet. Open company selection window.
+          setActiveCompany(null);
+          setActiveBranch(null);
+          setHasEnteredCompany(false);
           setIsCompanyModalOpen(true);
         }
       } else {
         // First run - force open company creation modal
+        setActiveCompany(null);
+        setActiveBranch(null);
+        setHasEnteredCompany(false);
         setIsCompanyModalOpen(true);
       }
     } catch (err) {
       console.error('Bootstrap error:', err);
+      setActiveCompany(null);
+      setActiveBranch(null);
+      setHasEnteredCompany(false);
       setIsCompanyModalOpen(true);
     } finally {
       setInitializing(false);
@@ -273,6 +285,9 @@ export const App: React.FC = () => {
   const handleSelectCompanyBranch = (company: Company | null, branch?: Branch | null) => {
     setActiveCompany(company);
     setActiveBranch(branch || null);
+    if (company) {
+      setHasEnteredCompany(true);
+    }
   };
 
   const toggleTheme = () => {
@@ -328,6 +343,7 @@ export const App: React.FC = () => {
         onOpenConfigModal={() => (activeCompany ? setIsConfigModalOpen(true) : setIsCompanyModalOpen(true))}
         onQuickNewInvoice={() => (activeCompany ? setIsQuickInvoiceOpen(true) : setIsCompanyModalOpen(true))}
         onQuickNewQuotation={() => (activeCompany ? setIsQuickQuotationOpen(true) : setIsCompanyModalOpen(true))}
+        onQuickNewCustomer={() => (activeCompany ? setIsQuickCustomerOpen(true) : setIsCompanyModalOpen(true))}
         onNavigate={(tab) => {
           if (!allowedMenus || allowedMenus.includes(tab)) setActiveTab(tab);
         }}
@@ -335,6 +351,7 @@ export const App: React.FC = () => {
         onToggleTheme={toggleTheme}
         allowedMenus={allowedMenus}
         canOpenSettings={canOpenSettings}
+        hasEnteredCompany={hasEnteredCompany && !isCompanyModalOpen}
       />
 
       {/* Top Critical Status Banners */}
@@ -345,7 +362,7 @@ export const App: React.FC = () => {
           </div>
           <button
             onClick={() => api.autoSyncDatabaseMode('STANDALONE').then(checkSystemStatus)}
-            className="bg-slate-900 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-black ml-4"
+            className="border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-1 rounded text-xs font-semibold ml-4 shadow-xs"
           >
             Auto-Switch to SQLite
           </button>
@@ -380,9 +397,8 @@ export const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsCompanyModalOpen(true)}
-                  className="mt-5 inline-flex items-center space-x-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-bold shadow-md transition-colors"
+                  className="mt-5 inline-flex items-center space-x-2 px-5 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-sm font-semibold shadow-xs transition-colors"
                 >
-                  <PlusCircle className="w-4 h-4" />
                   <span>Create or Select Company Profile</span>
                 </button>
               </div>
@@ -468,6 +484,10 @@ export const App: React.FC = () => {
           mode="sales"
           modalOnly
           onCloseModal={() => setIsQuickInvoiceOpen(false)}
+          onInvoiceCreated={() => {
+            setIsQuickInvoiceOpen(false);
+            setActiveTab('invoices');
+          }}
         />
       )}
 
@@ -477,6 +497,23 @@ export const App: React.FC = () => {
           companyId={activeCompany.id}
           modalOnly
           onCloseModal={() => setIsQuickQuotationOpen(false)}
+          onQuotationCreated={() => {
+            setIsQuickQuotationOpen(false);
+            setActiveTab('quotations');
+          }}
+        />
+      )}
+
+      {/* Quick Create Customer Modal (opens directly from Navbar) */}
+      {activeCompany && isQuickCustomerOpen && (
+        <QuickAddCustomerModal
+          isOpen={isQuickCustomerOpen}
+          companyId={activeCompany.id}
+          onClose={() => setIsQuickCustomerOpen(false)}
+          onCustomerCreated={() => {
+            setIsQuickCustomerOpen(false);
+            setActiveTab('customers');
+          }}
         />
       )}
     </div>

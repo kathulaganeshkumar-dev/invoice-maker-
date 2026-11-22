@@ -470,7 +470,7 @@ export const QuickAddSupplierModal: React.FC<QuickAddSupplierModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-sm flex items-center space-x-1.5 disabled:opacity-50 transition cursor-pointer"
+                className="px-5 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold rounded-xl shadow-xs flex items-center space-x-1.5 disabled:opacity-50 transition cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -478,10 +478,7 @@ export const QuickAddSupplierModal: React.FC<QuickAddSupplierModalProps> = ({
                     <span>Saving...</span>
                   </>
                 ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Save & Select Supplier</span>
-                  </>
+                  <span>Save &amp; Select Supplier</span>
                 )}
               </button>
             </div>

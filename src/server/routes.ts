@@ -30,6 +30,7 @@ import {
   validateSafeLocalSaveDir,
   sanitizeFilenameSegment,
   writePdfToSafeLocalDir,
+  writeExportFileToSafeLocalDir,
   isLoopbackRequest,
   validateSafeDatabaseHost,
   createSimpleRateLimiter,
@@ -274,6 +275,7 @@ export function createApiRouter(db: Knex): Router {
         'purchase_save_path',
         'report_save_path',
         'backup_save_path',
+        'excel_export_save_path',
         'software_icon',
       ]);
       const savePathCols = new Set([
@@ -282,6 +284,7 @@ export function createApiRouter(db: Knex): Router {
         'purchase_save_path',
         'report_save_path',
         'backup_save_path',
+        'excel_export_save_path',
       ]);
       const hostSensitiveCols = new Set([
         'operating_mode',
@@ -790,6 +793,7 @@ export function createApiRouter(db: Knex): Router {
         'purchase_save_path',
         'report_save_path',
         'backup_save_path',
+        'excel_export_save_path',
       ];
       const body = req.body || {};
       const touchesSavePath = savePathKeys.some((k) => Object.prototype.hasOwnProperty.call(body, k));
@@ -1886,10 +1890,24 @@ export function createApiRouter(db: Knex): Router {
   });
 
   // ===================== EXPORT & TEMPLATES =====================
+  const autoSaveExportFile = async (companyId: string, filename: string, buffer: Buffer | Uint8Array) => {
+    try {
+      const compSettings = await db('company_settings').where({ company_id: companyId }).first();
+      const appSettings = await db('app_settings').first();
+      const targetDir = compSettings?.excel_export_save_path || appSettings?.excel_export_save_path;
+      if (targetDir) {
+        writeExportFileToSafeLocalDir(targetDir, filename, buffer);
+      }
+    } catch (saveErr) {
+      console.warn(`[Export] Auto-save to local directory failed for ${filename}:`, saveErr);
+    }
+  };
+
   router.get('/companies/:companyId/export/customers', async (req: Request, res: Response) => {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportCustomersToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Customers.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Customers.xlsx"');
       res.send(buffer);
@@ -1902,6 +1920,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportProductsToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Products.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Products.xlsx"');
       res.send(buffer);
@@ -1914,6 +1933,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportSuppliersToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Suppliers.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Suppliers.xlsx"');
       res.send(buffer);
@@ -1926,6 +1946,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportPurchasesToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Purchases.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Purchases.xlsx"');
       res.send(buffer);
@@ -1938,6 +1959,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportInventoryToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Inventory_Stock.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Inventory_Stock.xlsx"');
       res.send(buffer);
@@ -1950,6 +1972,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportCustomerPaymentsToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Payments_Receivable.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Payments_Receivable.xlsx"');
       res.send(buffer);
@@ -1962,6 +1985,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const buffer = await importExportService.exportSupplierPaymentsToExcel(companyId);
+      await autoSaveExportFile(companyId, 'Payments_To_Suppliers.xlsx', buffer);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Payments_To_Suppliers.xlsx"');
       res.send(buffer);
@@ -2019,6 +2043,22 @@ export function createApiRouter(db: Knex): Router {
         uploaded.buffer,
         uploaded.originalname
       );
+
+      // Auto-save a safe copy of imported file to configured local directory
+      try {
+        const compSettings = await db('company_settings').where({ company_id: companyId }).first();
+        const appSettings = await db('app_settings').first();
+        const targetDir = compSettings?.excel_export_save_path || appSettings?.excel_export_save_path;
+        if (targetDir) {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const ext = path.extname(uploaded.originalname) || '.xlsx';
+          const baseName = path.basename(uploaded.originalname, ext);
+          const safeName = `imported_${baseName}_${timestamp}${ext}`;
+          writeExportFileToSafeLocalDir(targetDir, safeName, uploaded.buffer);
+        }
+      } catch (saveErr) {
+        console.warn('[Import] Auto-save imported file copy failed:', saveErr);
+      }
       res.json(result);
     } catch (err: any) {
       res.status(400).json({ error: err.message });

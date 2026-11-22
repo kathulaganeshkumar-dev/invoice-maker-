@@ -24,7 +24,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(currentCompanyId || '');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
-  const [showOnStartup, setShowOnStartup] = useState<boolean>(true);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editingCompany, setEditingCompany] = useState<Partial<Company>>({});
   const [loading, setLoading] = useState<boolean>(false);
@@ -76,15 +75,21 @@ export const CompanyBranchModal: React.FC<Props> = ({
     const gstin = val.toUpperCase();
     const prefix = gstin.substring(0, 2);
     const matched = INDIAN_STATES.find((s) => s.code === prefix);
+    const panFromGst = gstin.length >= 12 ? gstin.substring(2, 12) : undefined;
     if (matched && (!editingCompany.state || editingCompany.state === 'Madhya Pradesh')) {
       setEditingCompany((prev) => ({
         ...prev,
         gstin,
         state: matched.name,
         state_code: matched.code,
+        pan: prev.pan ? prev.pan : panFromGst,
       }));
     } else {
-      setEditingCompany((prev) => ({ ...prev, gstin }));
+      setEditingCompany((prev) => ({
+        ...prev,
+        gstin,
+        pan: prev.pan ? prev.pan : panFromGst,
+      }));
     }
   };
 
@@ -220,9 +225,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
       const comps = await api.getCompanies();
       setCompanies(comps);
 
-      const settings = await api.getAppSettings();
-      setShowOnStartup(settings?.show_company_selector_on_startup ?? true);
-
       const active =
         (preferredCompanyId && comps.find((c) => c.id === preferredCompanyId)) ||
         comps.find((c) => c.id === currentCompanyId) ||
@@ -347,12 +349,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
   };
 
   const handleOpenCompany = async (comp: Company) => {
-    try {
-      await api.updateAppSettings({ show_company_selector_on_startup: showOnStartup });
-    } catch {
-      // ignore
-    }
-
     let targetBranch: Branch | null = null;
     if (comp.id === selectedCompanyId && branches.length > 0) {
       targetBranch =
@@ -428,9 +424,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     });
                     setIsEditing(true);
                   }}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-sm font-semibold shadow-xs transition-all"
                 >
-                  <Plus className="w-4 h-4" />
                   <span>New</span>
                 </button>
                 <span className="text-xs text-slate-500">
@@ -526,10 +521,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       <button
                         type="button"
                         onClick={handleOpenAddBranch}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-md border border-emerald-200 dark:border-emerald-800 transition-colors"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-md border border-slate-300 dark:border-slate-600 transition-colors"
                         title="Add a new branch"
                       >
-                        <Plus className="w-3.5 h-3.5" />
                         <span>Add</span>
                       </button>
                       <button
@@ -537,7 +531,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                         onClick={handleToggleBranchesList}
                         className={`inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
                           showBranchesList || isBranchFormOpen
-                            ? 'bg-brand-600 text-white border-brand-700 shadow-sm'
+                            ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
                             : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'
                         }`}
                         title="View all branches table"
@@ -603,8 +597,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                                   >
                                     <span>{b.name}</span>
                                     {b.is_default && (
-                                      <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] rounded font-bold border border-blue-200 dark:border-blue-800">
-                                        Default
+                                      <span className="text-slate-500 text-[11px] font-normal">
+                                        (Default)
                                       </span>
                                     )}
                                   </button>
@@ -907,9 +901,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <button
                             type="button"
                             onClick={handleSaveBranch}
-                            className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold shadow-sm transition-all"
+                            className="inline-flex items-center space-x-1 px-3.5 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs transition-all"
                           >
-                            <Check className="w-3.5 h-3.5" />
                             <span>{editingBranchId ? 'Save Branch' : 'Create Branch'}</span>
                           </button>
                         </div>
@@ -930,7 +923,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline"
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-semibold"
                 >
                   Back to list
                 </button>
@@ -1162,9 +1155,8 @@ export const CompanyBranchModal: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={handleSaveCompany}
-                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-sm font-semibold shadow-xs transition-all"
                   >
-                    <Check className="w-4 h-4" />
                     <span>{editingCompany.id ? 'Save Changes' : 'Save Business'}</span>
                   </button>
                 </div>
@@ -1172,36 +1164,6 @@ export const CompanyBranchModal: React.FC<Props> = ({
             </div>
           )}
         </div>
-
-        {/* Modal Window Footer */}
-        {!isEditing && (
-          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 flex items-center justify-between">
-            <label className="flex items-center space-x-2 text-xs font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showOnStartup}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setShowOnStartup(checked);
-                  api.updateAppSettings({ show_company_selector_on_startup: checked }).catch(() => {});
-                }}
-                className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
-              />
-              <span>Show this window when program starts.</span>
-            </label>
-
-            <div className="flex items-center space-x-2.5">
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-lg text-sm font-semibold transition-all"
-              >
-                <X className="w-4 h-4" />
-                <span>Cancel</span>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
     </ModalPortal>

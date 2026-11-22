@@ -1,7 +1,7 @@
 // src/renderer/views/QuotationsView.tsx - Quotations Management, Template Selection & 1-Click Conversion
 import React, { useState, useEffect, useMemo } from 'react';
 import Decimal from 'decimal.js';
-import { Quotation, Customer, Product, LetterheadTemplate } from '../../shared/types';
+import { Quotation, Customer, Product, LetterheadTemplate, Company } from '../../shared/types';
 import { api } from '../services/api';
 import { formatIndianCurrency, calculateLineItem, calculateDocumentTotals } from '../../server/finance/decimalCalc';
 import { GST_RATES } from '../../shared/constants';
@@ -34,6 +34,7 @@ interface Props {
   onNavigateToInvoice?: () => void;
   modalOnly?: boolean;
   onCloseModal?: () => void;
+  onQuotationCreated?: (quotation: Quotation) => void;
 }
 
 export const DEFAULT_VARUN_TERMS = `Terms &Conditions: No warranty for burn / Physical Damage.
@@ -48,6 +49,7 @@ export const QuotationsView: React.FC<Props> = ({
   onNavigateToInvoice,
   modalOnly = false,
   onCloseModal,
+  onQuotationCreated,
 }) => {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -79,6 +81,7 @@ export const QuotationsView: React.FC<Props> = ({
   const [topMarginMm, setTopMarginMm] = useState<number>(55);
   const [bottomMarginMm, setBottomMarginMm] = useState<number>(32);
   const [companyDefaultTerms, setCompanyDefaultTerms] = useState<string>(DEFAULT_VARUN_TERMS);
+  const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
   const [termsAndConditions, setTermsAndConditions] = useState<string>(DEFAULT_VARUN_TERMS);
   const [customRoundOff, setCustomRoundOff] = useState<string>('0.00');
   const [items, setItems] = useState<any[]>([
@@ -215,6 +218,7 @@ export const QuotationsView: React.FC<Props> = ({
         setSelectedTemplateId(defTemplate.id);
         setActivePrintTemplateId(defTemplate.id);
       }
+      setCompanyInfo(comp);
       const loadedTerms =
         (comp?.default_quotation_terms && comp.default_quotation_terms.trim()) ||
         DEFAULT_VARUN_TERMS;
@@ -402,6 +406,9 @@ export const QuotationsView: React.FC<Props> = ({
 
       resetForm();
       window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'quotation' } }));
+      if (onQuotationCreated) {
+        onQuotationCreated(created);
+      }
       closeCreateModal();
       if (!modalOnly) {
         await loadQuotations();
@@ -600,9 +607,8 @@ export const QuotationsView: React.FC<Props> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <FileSpreadsheet className="w-5 h-5 text-brand-600" />
-            <span>Commercial Quotations &amp; Estimates</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Commercial Quotations &amp; Estimates
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Create professional price estimates, revisions, print with uploaded templates, and 1-click convert to Sales Invoices.
@@ -612,9 +618,8 @@ export const QuotationsView: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
+          className="inline-flex items-center space-x-1.5 px-3.5 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
           <span>New Quotation</span>
         </button>
       </div>
@@ -633,7 +638,7 @@ export const QuotationsView: React.FC<Props> = ({
 
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="text-slate-500 dark:text-slate-400 font-medium">Accepted / Converted</div>
-          <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+          <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
             {quotationStats.acceptedCount}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">Converted to Invoices</div>
@@ -651,7 +656,6 @@ export const QuotationsView: React.FC<Props> = ({
         >
           <div className="flex items-center justify-between">
             <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center space-x-1">
-              <Users className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
               <span>Created by Staff</span>
             </span>
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
@@ -671,9 +675,6 @@ export const QuotationsView: React.FC<Props> = ({
       {staffQuotations.length > 0 && (
         <div className="bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 bg-brand-600 text-white rounded-lg">
-              <Users className="w-4 h-4" />
-            </div>
             <div>
               <span className="font-bold text-slate-900 dark:text-slate-100">
                 Staff Activity: {staffQuotations.length} quotation{staffQuotations.length > 1 ? 's' : ''} created by office staff ({staffContributors.join(', ') || 'Staff Workstations'})
@@ -689,8 +690,8 @@ export const QuotationsView: React.FC<Props> = ({
             onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
               filterAuthor === 'STAFF'
-                ? 'bg-brand-600 text-white'
-                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             }`}
           >
             {filterAuthor === 'STAFF' ? 'Showing Staff Quotes (Show All)' : `View Only Staff Quotes (${staffQuotations.length})`}
@@ -706,8 +707,8 @@ export const QuotationsView: React.FC<Props> = ({
             onClick={() => setFilterAuthor('ALL')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               filterAuthor === 'ALL'
-                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             }`}
           >
             All Quotes ({quotations.length})
@@ -715,25 +716,23 @@ export const QuotationsView: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => setFilterAuthor('STAFF')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center ${
               filterAuthor === 'STAFF'
-                ? 'bg-brand-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             }`}
           >
-            <Users className="w-3.5 h-3.5 mr-1" />
             <span>Staff ({staffQuotations.length})</span>
           </button>
           <button
             type="button"
             onClick={() => setFilterAuthor('HOST')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center ${
               filterAuthor === 'HOST'
-                ? 'bg-slate-700 text-white'
-                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
             }`}
           >
-            <Shield className="w-3.5 h-3.5 mr-1" />
             <span>Host / MD ({hostQuotations.length})</span>
           </button>
         </div>
@@ -782,7 +781,7 @@ export const QuotationsView: React.FC<Props> = ({
                         setViewingQuotation(q);
                         setActivePrintTemplateId(q.letterhead_template_id || (templates[0]?.id || ''));
                       }}
-                      className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                      className="font-semibold text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white cursor-pointer"
                       title="Click to view full quotation"
                     >
                       {q.quotation_number}
@@ -800,19 +799,17 @@ export const QuotationsView: React.FC<Props> = ({
                   <td className="py-3 px-4">
                     {isStaffQuotation(q) ? (
                       <span
-                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                        className="text-slate-700 dark:text-slate-300 font-medium"
                         title={`Created on staff workstation: ${q.created_by_device_name || 'Staff'}`}
                       >
-                        <Users className="w-3 h-3 text-sky-600 dark:text-sky-400" />
-                        <span>Staff: {q.created_by_device_name || 'Staff PC'}</span>
+                        Staff: {q.created_by_device_name || 'Staff PC'}
                       </span>
                     ) : (
                       <span
-                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                        className="text-slate-600 dark:text-slate-400 font-medium"
                         title="Created on Host PC / MD Workstation"
                       >
-                        <Shield className="w-3 h-3 text-slate-500" />
-                        <span>Main PC / MD</span>
+                        Main PC / MD
                       </span>
                     )}
                   </td>
@@ -821,14 +818,14 @@ export const QuotationsView: React.FC<Props> = ({
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      className={`font-bold text-xs ${
                         q.status === 'ACCEPTED'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          ? 'text-emerald-700 dark:text-emerald-400'
                           : q.status === 'CONVERTED'
-                          ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 dark:border-sky-800'
+                          ? 'text-slate-800 dark:text-slate-200'
                           : q.status === 'REJECTED'
-                          ? 'bg-rose-100 text-rose-800'
-                          : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                          ? 'text-rose-700 dark:text-rose-400'
+                          : 'text-slate-600 dark:text-slate-400'
                       }`}
                     >
                       {q.status}
@@ -842,10 +839,10 @@ export const QuotationsView: React.FC<Props> = ({
                           e.stopPropagation();
                           handlePrintPdf(q.id, 'DIGITAL_LETTERHEAD');
                         }}
-                        className="inline-flex items-center space-x-1 px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 rounded text-xs font-bold border border-brand-200 dark:border-brand-800 transition-colors shadow-xs"
+                        className="inline-flex items-center space-x-1 px-2 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold transition-colors shadow-xs"
                         title="Open Quotation PDF immediately"
                       >
-                        <FileText className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                        <FileText className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
                         <span>PDF</span>
                       </button>
 
@@ -865,7 +862,7 @@ export const QuotationsView: React.FC<Props> = ({
                         <button
                           type="button"
                           onClick={() => handleConvertToInvoice(q.id)}
-                          className="inline-flex items-center space-x-1 px-2 py-0.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-[11px] font-bold shadow-sm"
+                          className="inline-flex items-center space-x-1 px-2 py-0.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-[11px] font-semibold shadow-xs"
                           title="Convert quotation to Sales Invoice"
                         >
                           <ArrowRightCircle className="w-3.5 h-3.5" />
@@ -899,10 +896,8 @@ export const QuotationsView: React.FC<Props> = ({
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
-              <div className="flex items-center space-x-3">
-                <FileSpreadsheet className="w-5 h-5 text-brand-600" />
-                <div>
-                  <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <div>
+                <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                     <span>Quotation: {viewingQuotation.quotation_number}</span>
                     <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300">
                       {viewingQuotation.status}
@@ -912,7 +907,6 @@ export const QuotationsView: React.FC<Props> = ({
                     Issued: {isoToDisplayDate(viewingQuotation.quotation_date) || viewingQuotation.quotation_date} | Valid Until: {isoToDisplayDate(viewingQuotation.valid_until_date) || viewingQuotation.valid_until_date}
                   </div>
                 </div>
-              </div>
               <button onClick={() => setViewingQuotation(null)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
@@ -942,7 +936,7 @@ export const QuotationsView: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={() => handlePrintPdf(viewingQuotation.id, 'DIGITAL_LETTERHEAD')}
-                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print / Download PDF</span>
@@ -1120,12 +1114,38 @@ export const QuotationsView: React.FC<Props> = ({
                   </div>
                 </div>
 
+                {/* Bank Details & PAN Series */}
+                <div className="pt-3 text-xs space-y-1 text-slate-800 dark:text-slate-200 font-sans">
+                  <div className="grid grid-cols-[120px_1fr] max-w-sm">
+                    <span className="font-bold">PAN Number :</span>
+                    <span className="font-mono">{companyInfo?.pan || (companyInfo?.gstin && companyInfo.gstin.length >= 12 ? companyInfo.gstin.slice(2, 12) : '') || ''}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] max-w-sm">
+                    <span className="font-bold">Bank Name :</span>
+                    <span>{companyInfo?.bank_name || ''}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] max-w-sm">
+                    <span className="font-bold">Account Number :</span>
+                    <span className="font-mono">{companyInfo?.bank_account_no || ''}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] max-w-sm">
+                    <span className="font-bold">IFSC Code :</span>
+                    <span className="font-mono">{companyInfo?.bank_ifsc || ''}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] max-w-sm">
+                    <span className="font-bold">Branch Number :</span>
+                    <span>{companyInfo?.bank_branch || ''}</span>
+                  </div>
+                </div>
+
                 {/* Sign-off */}
                 <div className="flex justify-end pt-4 pb-2 text-xs">
                   <div className="text-right space-y-8 min-w-[200px]">
                     <div>Yours truly,</div>
                     <div>
-                      <div className="font-extrabold text-sm text-slate-900 dark:text-slate-100 tracking-wide">For VARUN SYSTEMS.</div>
+                      <div className="font-extrabold text-sm text-slate-900 dark:text-slate-100 tracking-wide">
+                        {viewingQuotation.sign_off_company || (companyInfo?.name ? `For ${companyInfo.name.toUpperCase()}.` : 'For VARUN SYSTEMS.')}
+                      </div>
                       <div className="text-[10px] text-slate-400 font-sans">[ Authorized Signatory ]</div>
                     </div>
                   </div>
@@ -1149,7 +1169,7 @@ export const QuotationsView: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={() => handleConvertToInvoice(viewingQuotation.id)}
-                    className="inline-flex items-center space-x-1 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                    className="inline-flex items-center space-x-1 px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                   >
                     <ArrowRightCircle className="w-4 h-4" />
                     <span>Convert to Invoice Draft</span>
@@ -1177,7 +1197,6 @@ export const QuotationsView: React.FC<Props> = ({
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <FileSpreadsheet className="w-4 h-4 text-brand-600" />
                 <span>Create Commercial Quotation</span>
               </h2>
               <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600">
@@ -1193,9 +1212,8 @@ export const QuotationsView: React.FC<Props> = ({
                     <button
                       type="button"
                       onClick={() => setIsQuickAddCustomerOpen(true)}
-                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                      className="text-xs text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-semibold cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
                       <span>+ New Customer</span>
                     </button>
                   </div>
@@ -1475,19 +1493,10 @@ export const QuotationsView: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={() => handleAddItem(false)}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 border border-brand-200 dark:border-brand-800 rounded-lg text-xs font-bold transition-all shadow-sm"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Item Row</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddItem(true)}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold transition-all shadow-sm"
-                    title="Add custom or not-in-stock item"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Add Custom Item</span>
                   </button>
                 </div>
 
@@ -1561,7 +1570,7 @@ export const QuotationsView: React.FC<Props> = ({
                     <button
                       type="button"
                       onClick={() => setTermsAndConditions(companyDefaultTerms || DEFAULT_VARUN_TERMS)}
-                      className="text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
+                      className="text-[11px] text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-semibold cursor-pointer"
                       title="Reset terms to Settings defaults"
                     >
                       Reset to Settings Default
@@ -1605,7 +1614,7 @@ export const QuotationsView: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={handleCreateQuotation}
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
               >
                 Create Quotation
               </button>

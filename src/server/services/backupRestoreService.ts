@@ -803,6 +803,7 @@ export class BackupRestoreService {
               purchase_save_path: sanitizeSavePathForRestore(r.purchase_save_path),
               report_save_path: sanitizeSavePathForRestore(r.report_save_path),
               backup_save_path: sanitizeSavePathForRestore(r.backup_save_path),
+              excel_export_save_path: sanitizeSavePathForRestore(r.excel_export_save_path),
             })),
           ],
           [
@@ -1084,6 +1085,7 @@ export class BackupRestoreService {
           purchase_save_path: cleanSavePath(r.purchase_save_path),
           report_save_path: cleanSavePath(r.report_save_path),
           backup_save_path: cleanSavePath(r.backup_save_path),
+          excel_export_save_path: cleanSavePath(r.excel_export_save_path),
         }))
       );
     }
@@ -1097,6 +1099,7 @@ export class BackupRestoreService {
           purchase_save_path: cleanSavePath(r.purchase_save_path),
           report_save_path: cleanSavePath(r.report_save_path),
           backup_save_path: cleanSavePath(r.backup_save_path),
+          excel_export_save_path: cleanSavePath(r.excel_export_save_path),
         }))
       );
     }

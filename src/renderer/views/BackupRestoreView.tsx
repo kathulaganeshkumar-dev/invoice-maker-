@@ -123,9 +123,8 @@ export const BackupRestoreView: React.FC<Props> = ({ companyId, companyName }) =
     <div className="p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <Database className="w-5 h-5 text-brand-600" />
-            <span>Database Backup &amp; Point-in-Time Restore</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Database Backup &amp; Point-in-Time Restore
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Offline backup snapshots, USB/drive downloads, and direct one-step restore
@@ -147,7 +146,6 @@ export const BackupRestoreView: React.FC<Props> = ({ companyId, companyName }) =
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
             title="Upload a .sqlite3 backup file to restore directly"
           >
-            <Upload className="w-4 h-4 text-brand-600" />
             <span>{restoring ? 'Restoring Backup...' : 'Upload & Restore Backup'}</span>
           </button>
 
@@ -155,9 +153,8 @@ export const BackupRestoreView: React.FC<Props> = ({ companyId, companyName }) =
             type="button"
             onClick={handleCreateBackup}
             disabled={creating || restoring}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
           >
-            <HardDrive className="w-4 h-4" />
             <span>{creating ? 'Creating Backup...' : 'Create Backup Now'}</span>
           </button>
         </div>
@@ -165,7 +162,6 @@ export const BackupRestoreView: React.FC<Props> = ({ companyId, companyName }) =
 
       {message && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-lg flex items-center space-x-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>{message}</span>
         </div>
       )}

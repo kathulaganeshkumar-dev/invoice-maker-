@@ -755,6 +755,7 @@ export async function runMigrations(db: Knex): Promise<void> {
     { name: 'purchase_save_path', type: 'text' },
     { name: 'report_save_path', type: 'text' },
     { name: 'backup_save_path', type: 'text' },
+    { name: 'excel_export_save_path', type: 'text' },
     { name: 'default_invoice_notes', type: 'text' },
     { name: 'default_quotation_notes', type: 'text' },
     { name: 'quotation_validity_days', type: 'integer' },
@@ -778,6 +779,7 @@ export async function runMigrations(db: Knex): Promise<void> {
     'purchase_save_path',
     'report_save_path',
     'backup_save_path',
+    'excel_export_save_path',
   ];
   for (const col of appSettingsCols) {
     const exists = await db.schema.hasColumn('app_settings', col);

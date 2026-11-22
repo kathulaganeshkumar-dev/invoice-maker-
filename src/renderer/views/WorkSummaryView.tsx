@@ -5,7 +5,6 @@ import { formatIndianCurrency } from '../../server/finance/decimalCalc';
 import Decimal from 'decimal.js';
 import {
   Monitor,
-  RefreshCw,
   FileSpreadsheet,
   Receipt,
   ShoppingCart,
@@ -87,9 +86,8 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <Monitor className="w-5 h-5 text-brand-600" />
-            <span>Office Staff &amp; Workstation Work Summary</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Office Staff &amp; Workstation Work Summary
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Tracks how many invoices, quotations, purchase bills, and payments each office computer created.
@@ -113,7 +111,7 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
                 onClick={() => setActivityRange(opt.id)}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   activityRange === opt.id
-                    ? 'bg-brand-600 text-white shadow-sm font-bold'
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
                 }`}
               >
@@ -121,16 +119,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
               </button>
             ))}
           </div>
-
-          <button
-            type="button"
-            onClick={loadData}
-            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            title="Refresh Summary"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
         </div>
       </div>
 
@@ -139,7 +127,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-[11px] font-bold uppercase tracking-wider">Workstations</span>
-            <Users className="w-4 h-4 text-brand-600" />
           </div>
           <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
             {staffActivity.length} Active
@@ -149,7 +136,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-[11px] font-bold uppercase tracking-wider">Invoices</span>
-            <Receipt className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
             {totals.invoices_count}
@@ -162,7 +148,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-[11px] font-bold uppercase tracking-wider">Quotations</span>
-            <FileSpreadsheet className="w-4 h-4 text-sky-600" />
           </div>
           <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
             {totals.quotations_count}
@@ -172,7 +157,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-[11px] font-bold uppercase tracking-wider">Purchase Bills</span>
-            <ShoppingCart className="w-4 h-4 text-rose-600" />
           </div>
           <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
             {totals.purchases_count}
@@ -182,7 +166,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span className="text-[11px] font-bold uppercase tracking-wider">Payments</span>
-            <CreditCard className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-1">
             {totals.payments_count}
@@ -192,7 +175,6 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-brand-200 dark:border-brand-800 shadow-xs bg-brand-50/20">
           <div className="flex items-center justify-between text-brand-700 dark:text-brand-300">
             <span className="text-[11px] font-bold uppercase tracking-wider">Total Docs</span>
-            <Layers className="w-4 h-4 text-brand-600" />
           </div>
           <div className="text-lg font-extrabold text-brand-700 dark:text-brand-400 mt-1">
             {totals.total_documents}

@@ -1,23 +1,5 @@
-// src/renderer/components/Sidebar.tsx - Collapsible Modern Desktop Navigation Sidebar
+// src/renderer/components/Sidebar.tsx - Modern Text-First Desktop Navigation Sidebar
 import React from 'react';
-import {
-  LayoutDashboard,
-  Receipt,
-  FileText,
-  FileSpreadsheet,
-  Users,
-  Truck,
-  Package,
-  ShoppingCart,
-  Boxes,
-  CreditCard,
-  FileUp,
-  BarChart3,
-  Monitor,
-  FileDown,
-  Database,
-  Settings,
-} from 'lucide-react';
 
 interface Props {
   activeTab: string;
@@ -35,21 +17,21 @@ export const Sidebar: React.FC<Props> = ({
   canOpenSettings = true,
 }) => {
   const allMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'invoices', label: 'Invoices (Sales)', icon: Receipt },
-    { id: 'invoices_other', label: 'Invoices (Other)', icon: FileText },
-    { id: 'quotations', label: 'Quotations', icon: FileSpreadsheet },
-    { id: 'customers', label: 'Customers', icon: Users },
-    { id: 'suppliers', label: 'Suppliers', icon: Truck },
-    { id: 'products', label: 'Products & Services', icon: Package },
-    { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
-    { id: 'inventory', label: 'Inventory & Stock', icon: Boxes },
-    { id: 'payments', label: 'Payments (AR/AP)', icon: CreditCard },
-    { id: 'letterheads', label: 'Print Templates', icon: FileUp },
-    { id: 'reports', label: 'Reports & GST', icon: BarChart3 },
-    { id: 'work_summary', label: 'Work Summary', icon: Monitor },
-    { id: 'import_export', label: 'Excel Import/Export', icon: FileDown },
-    { id: 'backup_restore', label: 'Backup & Restore', icon: Database },
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'invoices', label: 'Invoices (Sales)' },
+    { id: 'invoices_other', label: 'Invoices (Other)' },
+    { id: 'quotations', label: 'Quotations' },
+    { id: 'customers', label: 'Customers' },
+    { id: 'suppliers', label: 'Suppliers' },
+    { id: 'products', label: 'Products & Services' },
+    { id: 'purchases', label: 'Purchases' },
+    { id: 'inventory', label: 'Inventory & Stock' },
+    { id: 'payments', label: 'Payments (AR/AP)' },
+    { id: 'letterheads', label: 'Print Templates' },
+    { id: 'reports', label: 'Reports & GST' },
+    { id: 'work_summary', label: 'Work Summary' },
+    { id: 'import_export', label: 'Excel Import/Export' },
+    { id: 'backup_restore', label: 'Backup & Restore' },
   ];
 
   const menuItems =
@@ -58,27 +40,22 @@ export const Sidebar: React.FC<Props> = ({
       : allMenuItems;
 
   return (
-    <aside className="w-56 border-r border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex flex-col py-3 select-none flex-shrink-0">
-      <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-        Navigation
-      </div>
-      <nav className="flex-1 space-y-0.5 px-2 overflow-y-auto">
+    <aside className="w-60 border-r border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 flex flex-col py-3 select-none flex-shrink-0">
+      <nav className="flex-1 space-y-1 px-2.5 overflow-y-auto">
         {menuItems.map((item) => {
-          const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
               type="button"
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`w-full text-left px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
                 isActive
-                  ? 'bg-brand-600 text-white shadow-sm shadow-brand-500/20'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold border border-slate-300 dark:border-slate-700 shadow-xs'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate block">{item.label}</span>
             </button>
           );
         })}
@@ -86,15 +63,14 @@ export const Sidebar: React.FC<Props> = ({
 
       {/* Settings Shortcut Button - Always accessible so staff can configure network or switch to Standalone mode */}
       {onOpenSettings && (
-        <div className="px-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="px-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 transition-all"
+            className="w-full text-left px-3.5 py-2.5 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
             title="Settings & Preferences (Deployment, Network, Business Rules)"
           >
-            <Settings className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-            <span className="truncate">Settings & Preferences</span>
+            <span className="truncate block">Settings &amp; Preferences</span>
           </button>
         </div>
       )}

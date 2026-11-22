@@ -12,7 +12,6 @@ import {
   Plus,
   Search,
   Filter,
-  FileDown,
   Edit2,
   Trash2,
   X,
@@ -346,9 +345,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <Package className="w-5 h-5 text-brand-600" />
-            <span>Products & Services Catalogue</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Products & Services Catalogue
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Manage inventory items, HSN/SAC codes, GST tax rates, and selling prices
@@ -356,22 +354,11 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <a
-            href={api.getProductsExportUrl(companyId)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700"
-          >
-            <FileDown className="w-4 h-4 text-slate-500" />
-            <span>Export to Excel</span>
-          </a>
-
           <button
             type="button"
             onClick={() => setIsCategoryModalOpen(true)}
             className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700"
           >
-            <Tags className="w-4 h-4 text-slate-500" />
             <span>Categories</span>
           </button>
 
@@ -396,9 +383,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
               setInlineCatName('');
               setIsModalOpen(true);
             }}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
             <span>New Item</span>
           </button>
         </div>
@@ -413,8 +399,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
               onClick={() => setItemTypeFilter(t)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 itemTypeFilter === t
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
               {t === 'ALL' ? 'All Items' : t === 'PRODUCT' ? 'Products' : 'Services'}
@@ -521,14 +507,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          p.item_type === 'PRODUCT'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
-                            : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600'
-                        }`}
-                      >
-                        {p.item_type}
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {p.item_type === 'SERVICE' ? 'Service' : 'Product'}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
@@ -585,7 +565,6 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <Package className="w-4 h-4 text-brand-600" />
                 <span>
                   {editingProduct.id
                     ? `${editingProduct.item_type === 'SERVICE' ? 'Service' : 'Product'} Details & Settings`
@@ -620,12 +599,11 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                       onClick={handleToggleNotesSection}
                       className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-colors ${
                         showNotesSection
-                          ? 'bg-brand-600 text-white border-brand-700 hover:bg-brand-700'
-                          : 'text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 border-brand-200 dark:border-brand-700'
+                          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100'
+                          : 'text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-600'
                       }`}
                       title={showNotesSection ? 'Save & close notes section' : 'Add or edit custom notes for this item'}
                     >
-                      <StickyNote className="w-3 h-3" />
                       <span>
                         {(() => {
                           const filledCount = (editingProduct.custom_notes || []).filter((n) => n.trim().length > 0).length;
@@ -676,9 +654,8 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                         <button
                           type="button"
                           onClick={handleAddNote}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-[11px] font-semibold shadow-xs transition-colors"
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-[11px] font-semibold shadow-xs transition-colors"
                         >
-                          <Plus className="w-3 h-3" />
                           <span>Add Note</span>
                         </button>
                         <button
@@ -789,7 +766,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                         type="button"
                         disabled={creatingInlineCat || !inlineCatName.trim()}
                         onClick={handleCreateInlineCategory}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold disabled:opacity-50 transition-colors shrink-0"
+                        className="px-2.5 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-[11px] font-bold disabled:opacity-50 transition-colors shrink-0"
                       >
                         {creatingInlineCat ? 'Saving...' : 'Add'}
                       </button>
@@ -976,7 +953,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                  className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                 >
                   Save Item
                 </button>
@@ -994,7 +971,6 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <Tags className="w-4 h-4 text-brand-600" />
                 <span>Manage Product Categories</span>
               </h2>
               <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -1017,7 +993,7 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
                   <button
                     type="button"
                     onClick={handleCreateCategory}
-                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded font-bold"
+                    className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded font-bold cursor-pointer"
                   >
                     Add
                   </button>

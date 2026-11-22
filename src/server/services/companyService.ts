@@ -495,6 +495,7 @@ export class CompanyService {
       'purchase_save_path',
       'report_save_path',
       'backup_save_path',
+      'excel_export_save_path',
       'default_invoice_notes',
       'default_quotation_notes',
       'quotation_validity_days',
@@ -506,6 +507,7 @@ export class CompanyService {
       'purchase_save_path',
       'report_save_path',
       'backup_save_path',
+      'excel_export_save_path',
     ]);
     const updateData: Record<string, any> = { updated_at: now };
     for (const [k, v] of Object.entries(data || {})) {

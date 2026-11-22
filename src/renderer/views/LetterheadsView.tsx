@@ -144,9 +144,8 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <FileUp className="w-5 h-5 text-brand-600" />
-            <span>Print Templates (Invoices &amp; Quotations)</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Print Templates (Invoices &amp; Quotations)
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Upload your custom PDF, Word (.docx), PNG, or JPG templates to control how invoices and quotations are printed.
@@ -155,7 +154,6 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
 
         {companies.length > 1 && (
           <div className="flex items-center space-x-2">
-            <Building2 className="w-4 h-4 text-slate-400" />
             <select
               value={viewingCompanyId}
               onChange={(e) => {
@@ -263,9 +261,8 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
           <button
             type="submit"
             disabled={uploading || !templateFile}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
           >
-            <FileUp className="w-4 h-4" />
             <span>{uploading ? 'Uploading Template...' : 'Upload Print Template'}</span>
           </button>
         </div>
@@ -345,7 +342,7 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
                           href={api.getLetterheadFileUrl(viewingCompanyId, tpl.id)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center space-x-1 text-[11px] font-semibold text-brand-600 hover:underline truncate max-w-[170px]"
+                          className="inline-flex items-center space-x-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white truncate max-w-[170px]"
                           title={tpl.file_path}
                         >
                           <span className="truncate">{tpl.file_path.split(/[\\/]/).pop()}</span>
@@ -364,7 +361,7 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
                     <button
                       type="button"
                       onClick={() => handleSetDefault(tpl)}
-                      className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline"
+                      className="text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                     >
                       Set as Default
                     </button>

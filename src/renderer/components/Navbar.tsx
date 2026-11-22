@@ -8,9 +8,9 @@ import {
   PlusCircle,
   FilePlus,
   Users,
+  UserPlus,
   Moon,
   Sun,
-  ShieldCheck,
 } from 'lucide-react';
 import { getIndianFinancialYear } from '../../server/services/numberingService';
 import { NotificationsBell } from './NotificationsBell';
@@ -23,11 +23,13 @@ interface Props {
   onOpenConfigModal: () => void;
   onQuickNewInvoice: () => void;
   onQuickNewQuotation: () => void;
+  onQuickNewCustomer?: () => void;
   onNavigate: (tab: string) => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
   allowedMenus?: string[] | null;
   canOpenSettings?: boolean;
+  hasEnteredCompany?: boolean;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -38,11 +40,13 @@ export const Navbar: React.FC<Props> = ({
   onOpenConfigModal,
   onQuickNewInvoice,
   onQuickNewQuotation,
+  onQuickNewCustomer,
   onNavigate,
   isDarkMode,
   onToggleTheme,
   allowedMenus,
   canOpenSettings = true,
+  hasEnteredCompany = false,
 }) => {
   const currentFy = getIndianFinancialYear();
   const canAccess = (menuId: string) => !allowedMenus || allowedMenus.length === 0 || allowedMenus.includes(menuId);
@@ -80,7 +84,6 @@ export const Navbar: React.FC<Props> = ({
           className="flex items-center space-x-2 px-3 py-1 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-100 transition-colors border border-slate-200 dark:border-slate-700"
           title="Click to switch Company or Branch"
         >
-          <Building2 className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
           <span className="max-w-[140px] truncate">{company?.name || 'Select Business'}</span>
           {branch && (
             <>
@@ -91,7 +94,7 @@ export const Navbar: React.FC<Props> = ({
         </button>
 
         {/* Financial Year Badge */}
-        <span className="px-2 py-0.5 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 rounded text-[11px] font-mono font-bold">
+        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] font-mono font-bold">
           FY {currentFy}
         </span>
       </div>
@@ -102,9 +105,9 @@ export const Navbar: React.FC<Props> = ({
           <button
             type="button"
             onClick={onQuickNewInvoice}
-            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-xs font-bold shadow-sm transition-all"
+            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+            title="Create New Invoice"
           >
-            <PlusCircle className="w-3.5 h-3.5" />
             <span>New Invoice</span>
           </button>
         )}
@@ -114,33 +117,31 @@ export const Navbar: React.FC<Props> = ({
             type="button"
             onClick={onQuickNewQuotation}
             className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+            title="Create New Quotation"
           >
-            <FilePlus className="w-3.5 h-3.5 text-slate-500" />
-            <span className="hidden md:inline">Quotation</span>
+            <span className="hidden md:inline">New Quotation</span>
           </button>
         )}
 
         {canAccess('customers') && (
           <button
             type="button"
-            onClick={() => onNavigate('customers')}
+            onClick={onQuickNewCustomer || (() => onNavigate('customers'))}
             className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-md text-xs font-semibold transition-all"
+            title="Create New Customer"
           >
-            <Users className="w-3.5 h-3.5 text-slate-500" />
-            <span className="hidden md:inline">Customer</span>
+            <span className="hidden md:inline">New Customer</span>
           </button>
         )}
 
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
 
-        {/* Offline Security Status */}
-        <div className="flex items-center space-x-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 rounded border border-emerald-200 dark:border-emerald-800">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Offline & Local</span>
-        </div>
-
         {/* Notifications Bell */}
-        <NotificationsBell companyId={company?.id} onNavigate={onNavigate} />
+        <NotificationsBell
+          companyId={company?.id}
+          onNavigate={onNavigate}
+          hasEnteredCompany={hasEnteredCompany}
+        />
 
         {/* Dark/Light toggle */}
         <button

@@ -21,6 +21,7 @@ export interface AppSettings {
   purchase_save_path?: string;
   report_save_path?: string;
   backup_save_path?: string;
+  excel_export_save_path?: string;
   software_icon?: string | null;
   created_at: string;
   updated_at: string;
@@ -109,6 +110,7 @@ export interface CompanySettings {
   purchase_save_path?: string;
   report_save_path?: string;
   backup_save_path?: string;
+  excel_export_save_path?: string;
   default_invoice_notes?: string;
   default_quotation_notes?: string;
   quotation_validity_days?: number;

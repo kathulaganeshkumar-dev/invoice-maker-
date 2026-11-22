@@ -180,6 +180,40 @@ export function writePdfToSafeLocalDir(
 }
 
 /**
+ * Securely writes an exported Excel/CSV or imported backup data file into a validated user-configured local folder.
+ * Returns the written file path, or null if dirPath is empty.
+ */
+export function writeExportFileToSafeLocalDir(
+  dirPath: string | null | undefined,
+  baseFilename: string,
+  buffer: Uint8Array | Buffer
+): string | null {
+  const validDir = validateSafeLocalSaveDir(dirPath);
+  if (!validDir) return null;
+
+  if (!fs.existsSync(validDir)) {
+    fs.mkdirSync(validDir, { recursive: true });
+  }
+
+  const realDir = fs.realpathSync(validDir);
+  assertPathNotForbidden(realDir);
+  if (!fs.statSync(realDir).isDirectory()) {
+    throw new Error('Configured save path is not a directory.');
+  }
+
+  const ext = path.extname(baseFilename) || '.xlsx';
+  const rawBase = path.basename(baseFilename, ext);
+  const safeName = `${sanitizeFilenameSegment(rawBase, 'export')}${ext}`;
+  const targetPath = path.resolve(realDir, safeName);
+  if (!targetPath.startsWith(realDir + path.sep)) {
+    throw new Error('Resolved export output path escaped target directory.');
+  }
+
+  fs.writeFileSync(targetPath, Buffer.from(buffer));
+  return targetPath;
+}
+
+/**
  * Checks whether an incoming HTTP request originated directly from the local machine (loopback).
  * Uses socket.remoteAddress rather than spoofable X-Forwarded-For headers.
  */

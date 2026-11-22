@@ -86,9 +86,16 @@ interface Props {
   mode?: 'sales' | 'other';
   modalOnly?: boolean;
   onCloseModal?: () => void;
+  onInvoiceCreated?: (invoice: Invoice) => void;
 }
 
-export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modalOnly = false, onCloseModal }) => {
+export const InvoicesView: React.FC<Props> = ({
+  companyId,
+  mode = 'sales',
+  modalOnly = false,
+  onCloseModal,
+  onInvoiceCreated,
+}) => {
   const isOtherMode = mode === 'other';
   const allowedDocTypes = isOtherMode ? OTHER_DOC_TYPES : SALES_DOC_TYPES;
   const defaultDocType: DocumentType = isOtherMode ? 'STANDARD_INVOICE' : 'TAX_INVOICE';
@@ -550,6 +557,9 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
       resetForm();
       window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'invoice' } }));
+      if (onInvoiceCreated) {
+        onInvoiceCreated(created);
+      }
       closeCreateModal();
       if (!modalOnly) {
         await loadInvoices();
@@ -805,17 +815,29 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
   const invoiceStats = useMemo(() => {
     let totRev = new Decimal(0);
     let totBal = new Decimal(0);
+    let totUnpaid = new Decimal(0);
+    let unpaidCount = 0;
     let finalizedCount = 0;
     for (const inv of modeInvoices) {
       if (inv.status !== 'CANCELLED') {
         totRev = totRev.plus(new Decimal(inv.grand_total || '0'));
         totBal = totBal.plus(new Decimal(inv.balance_amount || '0'));
-        if (inv.status === 'FINALIZED') finalizedCount++;
+        if (inv.status === 'FINALIZED') {
+          finalizedCount++;
+          const bal = new Decimal(inv.balance_amount || '0');
+          const paid = new Decimal(inv.paid_amount || '0');
+          if (paid.lte(0) && bal.gt(0)) {
+            totUnpaid = totUnpaid.plus(bal);
+            unpaidCount++;
+          }
+        }
       }
     }
     return {
       revenue: totRev.toFixed(2),
       balance: totBal.toFixed(2),
+      unpaidAmount: totUnpaid.toFixed(2),
+      unpaidCount,
       finalizedCount,
     };
   }, [modeInvoices]);
@@ -860,13 +882,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            {isOtherMode ? (
-              <FileText className="w-5 h-5 text-brand-600" />
-            ) : (
-              <Receipt className="w-5 h-5 text-brand-600" />
-            )}
-            <span>{isOtherMode ? 'Invoices (Other)' : 'Sales & Tax Invoices'}</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            {isOtherMode ? 'Invoices (Other)' : 'Sales & Tax Invoices'}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             {isOtherMode
@@ -881,10 +898,9 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
             setDocType(defaultDocType);
             setIsCreateModalOpen(true);
           }}
-          className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
+          className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
-          <span>{isOtherMode ? 'New Other Document' : 'New Invoice'}</span>
+          <span>New Invoice</span>
         </button>
       </div>
 
@@ -902,7 +918,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="text-slate-500 dark:text-slate-400 font-medium">Finalized</div>
-          <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+          <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
             {invoiceStats.finalizedCount}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">Ready & Active</div>
@@ -910,36 +926,28 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
 
         <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="text-slate-500 dark:text-slate-400 font-medium">Pending Balance</div>
-          <div className="text-lg font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">
+          <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
             Rs. {formatIndianCurrency(invoiceStats.balance)}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">To be collected</div>
         </div>
 
-        {/* Staff Created Files Card */}
+        {/* Unpaid Amount Card */}
         <div
-          onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
+          onClick={() => setFilterStatus((prev) => (prev === 'UNPAID' ? 'ALL' : 'UNPAID'))}
           className={`p-3.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
-            filterAuthor === 'STAFF'
-              ? 'bg-sky-100 dark:bg-sky-950/60 border-sky-400 dark:border-sky-600'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+            filterStatus === 'UNPAID'
+              ? 'bg-slate-200 dark:bg-slate-700 border-slate-400 dark:border-slate-500'
+              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
           }`}
-          title="Click to filter invoices created by staff"
+          title="Click to filter unpaid invoices"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center space-x-1">
-              <Users className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-              <span>Created by Staff</span>
-            </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-              {staffInvoices.length} Files
-            </span>
+          <div className="text-slate-500 dark:text-slate-400 font-medium">Unpaid Amount</div>
+          <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
+            Rs. {formatIndianCurrency(invoiceStats.unpaidAmount)}
           </div>
-          <div className="text-lg font-extrabold text-slate-900 dark:text-slate-100 mt-0.5">
-            Rs. {formatIndianCurrency(staffTotalAmount)}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-            {staffContributors.length > 0 ? staffContributors.join(', ') : 'No staff files yet'}
+          <div className="text-[11px] text-slate-400 mt-0.5">
+            {invoiceStats.unpaidCount} Unpaid Invoice{invoiceStats.unpaidCount === 1 ? '' : 's'}
           </div>
         </div>
       </div>
@@ -948,9 +956,6 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
       {staffInvoices.length > 0 && (
         <div className="bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 bg-brand-600 text-white rounded-lg">
-              <Users className="w-4 h-4" />
-            </div>
             <div>
               <span className="font-bold text-slate-900 dark:text-slate-100">
                 Staff Activity: {staffInvoices.length} file{staffInvoices.length > 1 ? 's' : ''} created by office staff ({staffContributors.join(', ') || 'Staff Workstations'})
@@ -964,10 +969,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           <button
             type="button"
             onClick={() => setFilterAuthor((prev) => (prev === 'STAFF' ? 'ALL' : 'STAFF'))}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm ${
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shadow-xs ${
               filterAuthor === 'STAFF'
-                ? 'bg-brand-600 text-white'
-                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-400 dark:border-slate-500 font-bold'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'
             }`}
           >
             {filterAuthor === 'STAFF' ? 'Showing Staff Invoices (Show All)' : `View Only Staff Invoices (${staffInvoices.length})`}
@@ -976,33 +981,46 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
       )}
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filters */}
-          {['ALL', 'FINALIZED', 'PAID', 'PARTIAL PAY', 'UNPAID', 'DRAFT'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                filterStatus === st
-                  ? 'bg-brand-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-              }`}
-            >
-              {st === 'ALL' ? 'All Invoices' : st}
-            </button>
-          ))}
+      <div className="flex flex-col gap-2.5 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Status Filters */}
+            {['ALL', 'FINALIZED', 'PAID', 'PARTIAL PAY', 'UNPAID', 'DRAFT'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setFilterStatus(st)}
+                className={`px-3 py-1 rounded-lg text-xs transition-all ${
+                  filterStatus === st
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium'
+                }`}
+              >
+                {st === 'ALL' ? 'All Invoices' : st}
+              </button>
+            ))}
+          </div>
 
-          <div className="h-4 w-px bg-slate-300 dark:bg-slate-600 mx-1 hidden sm:block" />
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search invoice #, customer..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-slate-400"
+            />
+          </div>
+        </div>
 
-          {/* Author Filters */}
+        {/* Author Filters - On the line below the status filters */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
             type="button"
             onClick={() => setFilterAuthor('ALL')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+            className={`px-2.5 py-1 rounded-lg text-xs transition-all ${
               filterAuthor === 'ALL'
-                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium'
             }`}
           >
             All Authors ({modeInvoices.length})
@@ -1010,38 +1028,25 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           <button
             type="button"
             onClick={() => setFilterAuthor('STAFF')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+            className={`px-2.5 py-1 rounded-lg text-xs transition-all flex items-center ${
               filterAuthor === 'STAFF'
-                ? 'bg-brand-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium'
             }`}
           >
-            <Users className="w-3 h-3 mr-1" />
             <span>Staff ({staffInvoices.length})</span>
           </button>
           <button
             type="button"
             onClick={() => setFilterAuthor('HOST')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+            className={`px-2.5 py-1 rounded-lg text-xs transition-all flex items-center ${
               filterAuthor === 'HOST'
-                ? 'bg-slate-700 text-white'
-                : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium'
             }`}
           >
-            <Shield className="w-3 h-3 mr-1" />
             <span>Host / MD ({hostInvoices.length})</span>
           </button>
-        </div>
-
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search invoice #, customer..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-          />
         </div>
       </div>
 
@@ -1081,7 +1086,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                           setViewingInvoice(inv);
                           setActivePrintTemplateId(inv.letterhead_template_id || (templates[0]?.id || ''));
                         }}
-                        className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                        className="font-semibold text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white cursor-pointer"
                         title="Click to view full invoice details"
                       >
                         {inv.invoice_number}
@@ -1099,18 +1104,16 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     <td className="py-3 px-4">
                       {isStaffInvoice(inv) ? (
                         <span
-                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
                           title={`Created on staff workstation: ${inv.created_by_device_name || 'Staff'}`}
                         >
-                          <Users className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                           <span>Staff: {inv.created_by_device_name || 'Staff PC'}</span>
                         </span>
                       ) : (
                         <span
-                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                           title="Created on Host PC / MD Workstation"
                         >
-                          <Shield className="w-3 h-3 text-slate-500" />
                           <span>Main PC / MD</span>
                         </span>
                       )}
@@ -1118,10 +1121,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                       {formatIndianCurrency(inv.grand_total)}
                     </td>
-                    <td className="py-3 px-4 text-right text-emerald-600 font-semibold">
+                    <td className="py-3 px-4 text-right text-slate-900 dark:text-white font-semibold">
                       {formatIndianCurrency(inv.paid_amount)}
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-rose-600">
+                    <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
                       <div>{formatIndianCurrency(inv.balance_amount)}</div>
                       {inv.status === 'FINALIZED' && Number(inv.balance_amount) > 0 && (() => {
                         const cust = customers.find((c) => c.id === inv.customer_id);
@@ -1130,12 +1133,12 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                         return (
                           <div className="mt-0.5 flex justify-end">
                             <span
-                              className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                              className={`inline-flex items-center space-x-1 font-medium text-[11px] ${
                                 cd.daysLeft <= 0
-                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                  ? 'text-rose-600 dark:text-rose-400 font-semibold'
                                   : cd.daysLeft <= 7
-                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                    : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-slate-600 dark:text-slate-400'
                               }`}
                               title={`Payment Due Date: ${cd.dueDateStr}`}
                             >
@@ -1157,33 +1160,33 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                         if (inv.status === 'FINALIZED') {
                           if (new Decimal(inv.balance_amount || 0).lte(0)) {
                             return (
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              <span className="font-bold text-xs text-emerald-700 dark:text-emerald-400">
                                 PAID
                               </span>
                             );
                           }
                           if (new Decimal(inv.paid_amount || 0).gt(0)) {
                             return (
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
                                 PARTIAL PAY
                               </span>
                             );
                           }
                           return (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                            <span className="font-bold text-xs text-amber-700 dark:text-amber-400">
                               UNPAID
                             </span>
                           );
                         }
                         if (inv.status === 'CANCELLED') {
                           return (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                            <span className="font-bold text-xs text-rose-700 dark:text-rose-400">
                               CANCELLED
                             </span>
                           );
                         }
                         return (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                          <span className="font-bold text-xs text-slate-600 dark:text-slate-400">
                             DRAFT
                           </span>
                         );
@@ -1195,7 +1198,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                           <button
                             type="button"
                             onClick={() => handleFinalize(inv.id)}
-                            className="px-2 py-0.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-[11px] font-bold"
+                            className="px-2 py-0.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-[11px] font-semibold shadow-xs"
                             title="Finalize Invoice"
                           >
                             Finalize
@@ -1206,7 +1209,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                           <button
                             type="button"
                             onClick={() => handleOpenMarkPaid(inv, Number(inv.paid_amount) > 0 ? 'PARTIAL' : 'FULL')}
-                            className="inline-flex items-center space-x-1 px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-sm"
+                            className="inline-flex items-center space-x-1 px-2.5 py-0.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-[11px] font-semibold shadow-xs"
                             title="Record full or partial customer payment"
                           >
                             <CheckCircle2 className="w-3 h-3" />
@@ -1220,10 +1223,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                             e.stopPropagation();
                             handlePrintPdf(inv.id, 'DIGITAL_LETTERHEAD');
                           }}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60 rounded text-xs font-bold border border-brand-200 dark:border-brand-800 transition-colors shadow-xs"
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold transition-colors shadow-xs"
                           title="Open Invoice PDF immediately (Browser / PDF viewer)"
                         >
-                          <FileText className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                          <FileText className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
                           <span>PDF</span>
                         </button>
 
@@ -1279,10 +1282,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
-              <div className="flex items-center space-x-3">
-                <Receipt className="w-5 h-5 text-brand-600" />
-                <div>
-                  <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <div>
+                <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                     <span>{viewingInvoice.document_type.replace(/_/g, ' ')}: {viewingInvoice.invoice_number}</span>
                     <span
                       className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
@@ -1310,7 +1311,6 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     Date: {isoToDisplayDate(viewingInvoice.invoice_date) || viewingInvoice.invoice_date} | Due Date: {isoToDisplayDate(viewingInvoice.due_date) || viewingInvoice.due_date}
                   </div>
                 </div>
-              </div>
               <button onClick={() => setViewingInvoice(null)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
@@ -1429,7 +1429,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                   <button
                     type="button"
                     onClick={() => handlePrintPdf(viewingInvoice.id, 'DIGITAL_LETTERHEAD')}
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                    className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print / Download PDF</span>
@@ -1458,7 +1458,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                   <button
                     type="button"
                     onClick={() => handleFinalize(viewingInvoice.id)}
-                    className="inline-flex items-center space-x-1 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                    className="inline-flex items-center space-x-1 px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                   >
                     <span>Finalize & Issue</span>
                   </button>
@@ -1473,7 +1473,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                         Number(viewingInvoice.paid_amount) > 0 ? 'PARTIAL' : 'FULL'
                       )
                     }
-                    className="inline-flex items-center space-x-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
+                    className="inline-flex items-center space-x-1 px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>
@@ -1519,11 +1519,6 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-[96vw] max-w-[90rem] max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                {isOtherMode ? (
-                  <FileText className="w-4 h-4 text-brand-600" />
-                ) : (
-                  <Receipt className="w-4 h-4 text-brand-600" />
-                )}
                 <span>{isOtherMode ? 'Create Other Invoice / Document' : 'Create Sales Document'}</span>
               </h2>
               <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600">
@@ -1556,9 +1551,8 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     <button
                       type="button"
                       onClick={() => setIsQuickAddCustomerOpen(true)}
-                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                      className="text-xs text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-semibold cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
                       <span>+ New Customer</span>
                     </button>
                   </div>
@@ -2015,7 +2009,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                                       <button
                                         type="button"
                                         onClick={() => handleUpdateItemNotes(idx, [...(item.custom_notes || []), ''])}
-                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-brand-600 hover:bg-brand-700 text-white"
+                                        className="text-[10px] font-semibold px-2 py-0.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
                                       >
                                         + Add
                                       </button>
@@ -2088,19 +2082,10 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                   <button
                     type="button"
                     onClick={() => handleAddItem(false)}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 border border-brand-200 dark:border-brand-800 rounded-lg text-xs font-bold transition-all shadow-sm"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Item Row</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddItem(true)}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold transition-all shadow-sm"
-                    title="Add custom or not-in-stock item"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Add Custom Item</span>
                   </button>
                 </div>
 
@@ -2120,7 +2105,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                     <button
                       type="button"
                       onClick={() => setNotes(companyDefaultTerms)}
-                      className="text-[11px] text-brand-600 dark:text-brand-400 hover:underline"
+                      className="text-[11px] text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-semibold cursor-pointer"
                     >
                       Reset to Settings Default
                     </button>
@@ -2150,11 +2135,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               <button
                 type="button"
                 onClick={handleCreateInvoice}
-                className={`px-4 py-1.5 rounded-lg font-bold text-xs shadow-sm text-white ${
-                  invoicePaymentStatus === 'PAID'
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
-                    : 'bg-brand-600 hover:bg-brand-700'
-                }`}
+                className="px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
               >
                 {invoicePaymentStatus === 'PAID'
                   ? 'Finalize & Mark as Paid'
@@ -2218,7 +2199,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                 }}
                 className={`flex-1 py-1.5 px-2 text-center text-xs font-bold rounded-md transition-all ${
                   markPaidType === 'FULL'
-                    ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 shadow-sm'
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                 }`}
               >
@@ -2235,7 +2216,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                 }}
                 className={`flex-1 py-1.5 px-2 text-center text-xs font-bold rounded-md transition-all ${
                   markPaidType === 'PARTIAL'
-                    ? 'bg-brand-600 text-white shadow-sm'
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                 }`}
               >
@@ -2249,7 +2230,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
                 }}
                 className={`flex-1 py-1.5 px-2 text-center text-xs font-bold rounded-md transition-all ${
                   markPaidType === 'CLOSE'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                 }`}
               >
@@ -2420,11 +2401,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               <button
                 type="button"
                 onClick={handleConfirmMarkPaid}
-                className={`px-4 py-1.5 text-white rounded text-xs font-bold shadow-sm ${
-                  markPaidType === 'CLOSE'
-                    ? 'bg-indigo-600 hover:bg-indigo-700'
-                    : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
               >
                 {markPaidType === 'CLOSE'
                   ? `Close Invoice & Move to PAID (${formatIndianCurrency(markPaidInvoice.paid_amount)})`
@@ -2473,7 +2450,7 @@ export const InvoicesView: React.FC<Props> = ({ companyId, mode = 'sales', modal
               <button
                 type="button"
                 onClick={handleCancelSubmit}
-                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold"
+                className="px-3 py-1.5 border border-rose-300 dark:border-rose-700 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-300 rounded text-xs font-semibold shadow-xs"
               >
                 Confirm Cancellation
               </button>

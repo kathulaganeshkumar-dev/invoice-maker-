@@ -9,11 +9,9 @@ import {
   ShoppingCart,
   Users,
   AlertTriangle,
-  CreditCard,
   Package,
   ArrowUpRight,
   ArrowDownLeft,
-  Calendar,
   RefreshCw,
 } from 'lucide-react';
 
@@ -69,11 +67,23 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
   }, [companyId, fromDate, toDate]);
 
   useEffect(() => {
+    if (!companyId) return;
     const onDataChanged = () => {
-      if (companyId) loadMetrics();
+      loadMetrics(true);
     };
+    // Automatically keep dashboard figures freshly updated in the background
+    const timer = setInterval(() => {
+      loadMetrics(true);
+    }, 4000);
     window.addEventListener('eim-data-changed', onDataChanged);
-    return () => window.removeEventListener('eim-data-changed', onDataChanged);
+    window.addEventListener('eim-data-sync', onDataChanged);
+    window.addEventListener('focus', onDataChanged);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('eim-data-changed', onDataChanged);
+      window.removeEventListener('eim-data-sync', onDataChanged);
+      window.removeEventListener('focus', onDataChanged);
+    };
   }, [companyId, fromDate, toDate]);
 
   const handlePresetClick = (preset: string) => {
@@ -83,15 +93,15 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
     setToDate(to);
   };
 
-  const loadMetrics = async () => {
-    setLoading(true);
+  const loadMetrics = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await api.getDashboardMetrics(companyId, fromDate || undefined, toDate || undefined);
       setMetrics(data);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -109,29 +119,21 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
       title: 'Total Sales Revenue',
       value: formatIndianCurrency(metrics?.totalSales || 0),
       subtitle: `${metrics?.totalInvoicesCount || 0} Invoices Generated`,
-      icon: TrendingUp,
-      color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
     },
     {
       title: 'Customer Receivables',
       value: formatIndianCurrency(metrics?.outstandingReceivables || 0),
       subtitle: `Unpaid: ${formatIndianCurrency(metrics?.unpaidInvoicesAmount || 0)}`,
-      icon: ArrowDownLeft,
-      color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
     },
     {
       title: 'Total Purchases',
       value: formatIndianCurrency(metrics?.totalPurchases || 0),
       subtitle: `Payables: ${formatIndianCurrency(metrics?.outstandingPayables || 0)}`,
-      icon: ShoppingCart,
-      color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
     },
     {
       title: 'Current Inventory Value',
       value: formatIndianCurrency(metrics?.currentStockValue || 0),
       subtitle: `${metrics?.lowStockCount || 0} Products Low in Stock`,
-      icon: Package,
-      color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800',
     },
   ];
 
@@ -151,7 +153,6 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
         <div className="flex flex-wrap items-center gap-2">
           {/* Custom From Date & To Date Pickers */}
           <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 shadow-sm text-xs">
-            <Calendar className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
             <span className="font-semibold text-slate-500 dark:text-slate-400">From:</span>
             <div className="w-32">
               <DateInput
@@ -190,9 +191,10 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
                 key={key}
                 type="button"
                 onClick={() => handlePresetClick(key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                aria-pressed={dateRange === key}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
                   dateRange === key
-                    ? 'bg-brand-600 text-white shadow-sm'
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                 }`}
               >
@@ -200,54 +202,39 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
               </button>
             );
           })}
-          <button
-            type="button"
-            onClick={loadMetrics}
-            className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
-            title="Refresh figures"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
       {/* 4 Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card, idx) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={idx}
-              className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{card.title}</span>
-                <div className={`p-2 rounded-lg border ${card.color}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-              </div>
-              <div>
-                <div className="text-xl font-extrabold text-slate-900 dark:text-white">{card.value}</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">{card.subtitle}</div>
-              </div>
+        {statCards.map((card, idx) => (
+          <div
+            key={idx}
+            className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm flex flex-col justify-between"
+          >
+            <div className="mb-2">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{card.title}</span>
             </div>
-          );
-        })}
+            <div>
+              <div className="text-xl font-extrabold text-slate-900 dark:text-white">{card.value}</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">{card.subtitle}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Financial Health Summary Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cashflow & Collections */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
-          <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center justify-between">
-            <span>Cashflow & Collections</span>
-            <CreditCard className="w-4 h-4 text-slate-400" />
+          <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100">
+            Cashflow & Collections
           </h2>
 
           <div className="space-y-3 text-xs">
             <div className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
               <span className="text-slate-600 dark:text-slate-400">Total Customer Collections:</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">
                 {formatIndianCurrency(metrics?.totalPaymentsReceived || 0)}
               </span>
             </div>
@@ -278,23 +265,26 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
         {/* Monthly Performance Visualizer */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-              <TrendingUp className="w-4 h-4 text-brand-600" />
-              <span>Financial Year Monthly Trajectory (FY 2026-27)</span>
+            <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100">
+              Financial Year Monthly Trajectory (FY 2026-27)
             </h2>
             <div className="flex items-center space-x-3 text-xs">
-              <span className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-600 inline-block" />
-                <span className="text-slate-600 dark:text-slate-400">Sales</span>
+              <span className="flex items-center space-x-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-700 dark:bg-slate-300 inline-block" />
+                <span className="text-slate-600 dark:text-slate-400 font-medium">Sales</span>
               </span>
-              <span className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" />
-                <span className="text-slate-600 dark:text-slate-400">Purchases</span>
+              <span className="flex items-center space-x-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500 inline-block" />
+                <span className="text-slate-600 dark:text-slate-400 font-medium">Purchases</span>
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-12 gap-1.5 h-36 items-end pt-4 border-b border-slate-100 dark:border-slate-700">
+          <div
+            className="grid grid-cols-12 gap-1.5 h-36 items-end pt-4 border-b border-slate-100 dark:border-slate-700"
+            role="region"
+            aria-label="Financial Year Monthly Trajectory chart"
+          >
             {metrics?.monthlySales?.map((m: any, i: number) => {
               const seriesMax = Math.max(
                 ...(metrics?.monthlySales?.map((x: any) => Math.max(Number(x.sales) || 0, Number(x.purchases) || 0)) || [0]),
@@ -306,20 +296,26 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
               const purchasesHeight = purchasesVal > 0 ? Math.min(100, Math.max(8, (purchasesVal / seriesMax) * 100)) : 2;
 
               return (
-                <div key={i} className="flex flex-col items-center h-full justify-end group relative">
+                <div
+                  key={i}
+                  tabIndex={0}
+                  role="group"
+                  aria-label={`${m.month}: Sales ${formatIndianCurrency(salesVal)}, Purchases ${formatIndianCurrency(purchasesVal)}`}
+                  className="flex flex-col items-center h-full justify-end group relative focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded p-0.5"
+                >
                   <div className="flex items-end space-x-0.5 w-full justify-center h-full">
                     <div
                       style={{ height: `${salesHeight}%` }}
-                      className={`w-2 sm:w-3 rounded-t transition-all ${salesVal > 0 ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-200 dark:bg-slate-700'}`}
-                      title={`${m.month} Sales: ₹ ${m.sales}`}
+                      className={`w-2 sm:w-3 rounded-t transition-all ${salesVal > 0 ? 'bg-slate-700 dark:bg-slate-300 hover:bg-slate-900' : 'bg-slate-200 dark:bg-slate-700'}`}
+                      title={`${m.month} Sales: ${formatIndianCurrency(salesVal)}`}
                     />
                     <div
                       style={{ height: `${purchasesHeight}%` }}
-                      className={`w-2 sm:w-3 rounded-t transition-all ${purchasesVal > 0 ? 'bg-sky-400 hover:bg-sky-500' : 'bg-slate-200 dark:bg-slate-700'}`}
-                      title={`${m.month} Purchases: ₹ ${m.purchases}`}
+                      className={`w-2 sm:w-3 rounded-t transition-all ${purchasesVal > 0 ? 'bg-slate-400 dark:bg-slate-500 hover:bg-slate-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                      title={`${m.month} Purchases: ${formatIndianCurrency(purchasesVal)}`}
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-medium">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-semibold">
                     {m.month}
                   </span>
                 </div>
@@ -336,7 +332,7 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
             </span>
             <button
               onClick={() => onNavigate('reports')}
-              className="text-brand-600 dark:text-brand-400 font-bold hover:underline"
+              className="text-slate-800 dark:text-slate-200 font-bold hover:text-slate-900 dark:hover:text-white"
             >
               View Full GST & Business Reports →
             </button>

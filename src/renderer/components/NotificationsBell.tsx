@@ -6,19 +6,7 @@ import { ModalPortal } from './ModalPortal';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
 import {
   Bell,
-  BellRing,
-  Truck,
-  Receipt,
-  Package,
-  RefreshCw,
   X,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  CalendarClock,
-  ArrowRight,
-  Trash2,
-  RotateCcw,
 } from 'lucide-react';
 
 export type NotificationCategory = 'VENDOR_DUE' | 'CUSTOMER_DUE' | 'INVENTORY';
@@ -40,6 +28,7 @@ export interface AppNotification {
 interface Props {
   companyId?: string;
   onNavigate: (tab: string) => void;
+  hasEnteredCompany?: boolean;
 }
 
 const REMINDER_WINDOW_DAYS = 7; // Notify 1 week before due date (and when overdue)
@@ -144,7 +133,7 @@ function writeDeletedForToday(companyId: string, deletedIds: string[]) {
   }
 }
 
-export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) => {
+export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate, hasEnteredCompany = true }) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [showDailyPopup, setShowDailyPopup] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -157,9 +146,17 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
   const containerRef = useRef<HTMLDivElement>(null);
   const lastAutoPopupKeyRef = useRef<string>('');
 
+  // When companyId changes or company is exited/entered, reset notifications and popup immediately
+  useEffect(() => {
+    lastAutoPopupKeyRef.current = '';
+    setNotifications([]);
+    setShowDailyPopup(false);
+  }, [companyId, hasEnteredCompany]);
+
   const loadNotifications = useCallback(async () => {
-    if (!companyId) {
+    if (!companyId || !hasEnteredCompany) {
       setNotifications([]);
+      setShowDailyPopup(false);
       return;
     }
     setLoading(true);
@@ -335,13 +332,18 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, hasEnteredCompany]);
 
   useEffect(() => {
-    loadNotifications();
-    const timer = setInterval(loadNotifications, 60000);
-    return () => clearInterval(timer);
-  }, [loadNotifications]);
+    if (companyId && hasEnteredCompany) {
+      loadNotifications();
+      const timer = setInterval(loadNotifications, 60000);
+      return () => clearInterval(timer);
+    } else {
+      setNotifications([]);
+      setShowDailyPopup(false);
+    }
+  }, [companyId, hasEnteredCompany, loadNotifications]);
 
   // Close popover on outside click or Escape key
   useEffect(() => {
@@ -481,17 +483,6 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
     }
   };
 
-  const renderCategoryIcon = (cat: NotificationCategory) => {
-    switch (cat) {
-      case 'VENDOR_DUE':
-        return <Truck className="w-4 h-4 text-rose-600 dark:text-rose-400" />;
-      case 'CUSTOMER_DUE':
-        return <Receipt className="w-4 h-4 text-sky-600 dark:text-sky-400" />;
-      case 'INVENTORY':
-        return <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />;
-    }
-  };
-
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -525,12 +516,11 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
           {/* Header */}
           <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Bell className="w-4 h-4 text-brand-600 dark:text-brand-400" />
               <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
                 Notifications &amp; Reminders
               </h3>
               {visibleNotifications.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200">
                   {visibleNotifications.length}
                 </span>
               )}
@@ -540,22 +530,12 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                 <button
                   type="button"
                   onClick={handleDeleteAllForToday}
-                  className="inline-flex items-center space-x-1 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors"
-                  title="Delete all notifications in this tab for today (they will return tomorrow if still pending)"
+                  className="px-2 py-1 text-[10px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 rounded transition-colors"
+                  title="Clear all notifications in this tab for today (they will return tomorrow if still pending)"
                 >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Clear Today</span>
+                  Clear Today
                 </button>
               )}
-              <button
-                type="button"
-                onClick={loadNotifications}
-                disabled={loading}
-                className="p-1 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
-                title="Refresh notifications"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -585,7 +565,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                   onClick={() => setActiveCategory(tab.key)}
                   className={`px-2.5 py-1 rounded-md font-semibold whitespace-nowrap transition-colors ${
                     isActive
-                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                      ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold border border-slate-400 dark:border-slate-500 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
@@ -603,7 +583,6 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
               </div>
             ) : filtered.length === 0 ? (
               <div className="py-10 px-4 text-center space-y-2">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto opacity-80" />
                 <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
                   {deletedTodayActiveCount > 0 ? 'Cleared for today!' : 'All caught up!'}
                 </div>
@@ -616,10 +595,9 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                   <button
                     type="button"
                     onClick={handleRestoreDeletedToday}
-                    className="mt-1 inline-flex items-center space-x-1 text-[11px] font-bold text-brand-600 hover:underline"
+                    className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Restore deleted today ({deletedTodayActiveCount})</span>
+                    Restore deleted today ({deletedTodayActiveCount})
                   </button>
                 )}
               </div>
@@ -627,7 +605,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
               filtered.map((n) => (
                 <div
                   key={n.id}
-                  className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-start space-x-3 group"
+                  className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-start justify-between gap-3 group"
                 >
                   <button
                     type="button"
@@ -635,61 +613,43 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                       setIsOpen(false);
                       onNavigate(n.targetTab);
                     }}
-                    className="flex-1 min-w-0 text-left flex items-start space-x-3"
+                    className="flex-1 min-w-0 text-left"
                   >
-                    <div
-                      className={`mt-0.5 p-2 rounded-lg shrink-0 ${
-                        n.category === 'VENDOR_DUE'
-                          ? 'bg-rose-50 dark:bg-rose-950/40'
-                          : n.category === 'CUSTOMER_DUE'
-                            ? 'bg-sky-50 dark:bg-sky-950/40'
-                            : 'bg-amber-50 dark:bg-amber-950/40'
-                      }`}
-                    >
-                      {renderCategoryIcon(n.category)}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                        {n.title}
+                      </div>
+                      <span
+                        className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          n.severity === 'critical'
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            : 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                        }`}
+                      >
+                        {n.badge}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                          {n.title}
-                        </div>
-                        <span
-                          className={`shrink-0 inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                            n.severity === 'critical'
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                          }`}
-                        >
-                          {n.severity === 'critical' ? (
-                            <AlertTriangle className="w-2.5 h-2.5" />
-                          ) : (
-                            <Clock className="w-2.5 h-2.5" />
-                          )}
-                          <span>{n.badge}</span>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                      {n.subtitle}
+                    </div>
+                    {n.amount && (
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <span className="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 font-mono">
+                          Due Amount: {n.amount}
+                        </span>
+                        <span className="text-[9px] font-semibold text-slate-400">
+                          Daily until cleared
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                        {n.subtitle}
-                      </div>
-                      {n.amount && (
-                        <div className="flex items-center justify-between gap-2 mt-1">
-                          <span className="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 font-mono">
-                            Due Amount: {n.amount}
-                          </span>
-                          <span className="text-[9px] font-semibold text-slate-400">
-                            Daily until cleared
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={(e) => handleDeleteForToday(n.id, e)}
-                    className="mt-0.5 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-md transition-colors shrink-0"
+                    className="mt-0.5 px-2 py-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px] font-medium rounded transition-colors shrink-0"
                     title="Delete for today (will come back tomorrow if not cleared)"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    Dismiss
                   </button>
                 </div>
               ))
@@ -704,7 +664,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                 <button
                   type="button"
                   onClick={handleRestoreDeletedToday}
-                  className="text-slate-600 dark:text-slate-300 hover:text-brand-600 hover:underline font-semibold"
+                  className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-semibold"
                   title="Restore alerts deleted earlier today"
                 >
                   Restore ({deletedTodayActiveCount})
@@ -714,7 +674,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                 <button
                   type="button"
                   onClick={handleEnableDesktopAlerts}
-                  className="text-brand-600 hover:underline font-bold"
+                  className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-semibold"
                   title="Enable local Windows desktop reminder popups"
                 >
                   Desktop Alerts
@@ -727,7 +687,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                     setIsOpen(false);
                     setShowDailyPopup(true);
                   }}
-                  className="text-brand-600 hover:underline font-bold"
+                  className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-semibold"
                 >
                   Daily Summary
                 </button>
@@ -743,25 +703,17 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/55 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl max-h-[86vh] flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-amber-50/90 via-white to-rose-50/70 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800 flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
-                  <BellRing className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                    <span>Daily Payment &amp; Stock Reminders</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white">
-                      {visibleNotifications.length} Pending
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center space-x-1 mt-0.5">
-                    <CalendarClock className="w-3 h-3" />
-                    <span>
-                      {formatDateDdMmYyyy(new Date())} • Reminds every day from 7 days before due date until cleared manually
-                    </span>
-                  </p>
-                </div>
+            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                  <span>Daily Payment &amp; Stock Reminders</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                    {visibleNotifications.length} Pending
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  {formatDateDdMmYyyy(new Date())} • Reminds every day from 7 days before due date until cleared manually
+                </p>
               </div>
               <button
                 type="button"
@@ -802,57 +754,39 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                   key={n.id}
                   className="px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between gap-3"
                 >
-                  <div className="flex items-start space-x-3 min-w-0 flex-1">
-                    <div
-                      className={`mt-0.5 p-2 rounded-lg shrink-0 ${
-                        n.category === 'VENDOR_DUE'
-                          ? 'bg-rose-50 dark:bg-rose-950/40'
-                          : n.category === 'CUSTOMER_DUE'
-                            ? 'bg-sky-50 dark:bg-sky-950/40'
-                            : 'bg-amber-50 dark:bg-amber-950/40'
-                      }`}
-                    >
-                      {renderCategoryIcon(n.category)}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                        {n.title}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          n.severity === 'critical'
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            : 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                        }`}
+                      >
+                        {n.badge}
+                      </span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center flex-wrap gap-1.5">
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                          {n.title}
-                        </span>
-                        <span
-                          className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                            n.severity === 'critical'
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                          }`}
-                        >
-                          {n.severity === 'critical' ? (
-                            <AlertTriangle className="w-2.5 h-2.5" />
-                          ) : (
-                            <Clock className="w-2.5 h-2.5" />
-                          )}
-                          <span>{n.badge}</span>
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                        {n.subtitle}
-                      </div>
-                      {n.amount && (
-                        <div className="text-xs font-extrabold text-slate-900 dark:text-white mt-0.5 font-mono">
-                          Pending: {n.amount}
-                        </div>
-                      )}
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                      {n.subtitle}
                     </div>
+                    {n.amount && (
+                      <div className="text-xs font-extrabold text-slate-900 dark:text-white mt-0.5 font-mono">
+                        Pending: {n.amount}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center space-x-1.5 shrink-0">
+                  <div className="flex items-center space-x-2 shrink-0">
                     <button
                       type="button"
                       onClick={(e) => handleDeleteForToday(n.id, e)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
-                      title="Delete for today (will come back tomorrow)"
+                      className="px-2 py-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-xs font-semibold rounded transition-colors"
+                      title="Dismiss for today (will come back tomorrow)"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      Dismiss
                     </button>
                     <button
                       type="button"
@@ -860,10 +794,9 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                         handleDismissForToday();
                         onNavigate(n.targetTab);
                       }}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors"
+                      className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-[11px] font-bold shadow-xs transition-colors"
                     >
-                      <span>{n.category === 'INVENTORY' ? 'Check Stock' : 'Clear Payment'}</span>
-                      <ArrowRight className="w-3 h-3" />
+                      {n.category === 'INVENTORY' ? 'Check Stock' : 'Clear Payment'}
                     </button>
                   </div>
                 </div>
@@ -877,15 +810,13 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
                   <button
                     type="button"
                     onClick={handleEnableDesktopAlerts}
-                    className="inline-flex items-center space-x-1.5 text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:underline"
+                    className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <Bell className="w-3.5 h-3.5" />
-                    <span>Enable Daily Desktop Notifications</span>
+                    Enable Daily Desktop Notifications
                   </button>
                 ) : desktopNotifStatus === 'granted' ? (
-                  <span className="inline-flex items-center space-x-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Daily Desktop Alerts Active</span>
+                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    Daily Desktop Alerts Active
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-400">
@@ -897,7 +828,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate }) =>
               <button
                 type="button"
                 onClick={handleDismissForToday}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg text-xs font-bold shadow-sm transition-colors"
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded-lg text-xs font-bold shadow-sm transition-colors"
               >
                 Remind Me Tomorrow
               </button>

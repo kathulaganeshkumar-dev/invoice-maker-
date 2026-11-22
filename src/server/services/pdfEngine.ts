@@ -1550,7 +1550,31 @@ export class PdfEngine {
 
     // Courtesy line
     let courtesyY = itemTermsY + 6;
-    if (courtesyY + 40 > height - bottomMarginPt) {
+
+    // Resolve Bank & PAN details (options.company / options.branch / quotation)
+    const branchBank =
+      options.branch &&
+      !options.branch.use_company_bank &&
+      (options.branch.bank_name || options.branch.bank_account_no);
+    const bankSource: any = branchBank ? options.branch : options.company;
+
+    const companyPan = (
+      options.company?.pan ||
+      (quotation as any).company_pan ||
+      (options.company?.gstin && options.company.gstin.length >= 12
+        ? options.company.gstin.slice(2, 12)
+        : '') ||
+      ''
+    ).trim();
+
+    const bankName = (bankSource?.bank_name || (quotation as any).bank_name || '').trim();
+    const bankAccountNo = (bankSource?.bank_account_no || (quotation as any).bank_account_no || '').trim();
+    const bankIfsc = (bankSource?.bank_ifsc || (quotation as any).bank_ifsc || '').trim().toUpperCase();
+    const bankBranch = (bankSource?.bank_branch || (quotation as any).bank_branch || '').trim();
+
+    // Total vertical height required for footer: Courtesy (~14pt) + Bank Details (5 rows * 12.5pt = ~63pt) + Sign-off (~45pt) = ~122pt
+    const totalFooterHeight = 122;
+    if (courtesyY + totalFooterHeight > height - bottomMarginPt) {
       page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
       courtesyY = topMarginPt + 20;
     }
@@ -1566,7 +1590,47 @@ export class PdfEngine {
       color: rgb(0, 0, 0),
     });
 
+    // Bank details in requested series:
+    // 1. PAN Number of the company
+    // 2. Bank Name
+    // 3. Account Number
+    // 4. IFSC Code
+    // 5. Branch Number
+    const bankDetailsList = [
+      { label: 'PAN Number', value: companyPan },
+      { label: 'Bank Name', value: bankName },
+      { label: 'Account Number', value: bankAccountNo },
+      { label: 'IFSC Code', value: bankIfsc },
+      { label: 'Branch Number', value: bankBranch },
+    ];
+
+    let bankItemY = courtesyY + 16;
+    const colonX = leftX + 88;
+
+    for (const bItem of bankDetailsList) {
+      page.drawText(`${bItem.label} :`, {
+        x: leftX,
+        y: toPdfY(bankItemY),
+        size: 8.5,
+        font: fontBold,
+        color: rgb(0, 0, 0),
+      });
+
+      if (bItem.value) {
+        page.drawText(bItem.value, {
+          x: colonX,
+          y: toPdfY(bankItemY),
+          size: 8.5,
+          font: fontRegular,
+          color: rgb(0, 0, 0),
+        });
+      }
+
+      bankItemY += 12.5;
+    }
+
     // Sign-Off Block (Yours truly, For VARUN SYSTEMS.)
+    // Positioned on the same side (right side) but below the bank details
     const rawSignCompany =
       quotation.sign_off_company ||
       (options.company?.name ? options.company.name.toUpperCase() : 'VARUN SYSTEMS');
@@ -1586,7 +1650,12 @@ export class PdfEngine {
     const totalSignW = forW + compW;
     const signX = Math.max(leftX + 150, rightX - Math.max(totalSignW, 140));
 
-    const signY = courtesyY + 20;
+    // Position signY below bank details (with dynamic adjustment if space is tight)
+    let signY = bankItemY + 6;
+    if (signY + 42 > height - bottomMarginPt) {
+      signY = Math.max(bankItemY + 2, height - bottomMarginPt - 42);
+    }
+
     page.drawText('Yours truly,', {
       x: signX,
       y: toPdfY(signY),
@@ -1595,18 +1664,18 @@ export class PdfEngine {
       color: rgb(0, 0, 0),
     });
 
-    // Space for physical rubber stamp and signature (~38 pt)
+    // Space for physical rubber stamp and signature (~36 pt)
     if (fontHandwriting) {
       page.drawText(forPrefix, {
         x: signX,
-        y: toPdfY(signY + 38),
+        y: toPdfY(signY + 36),
         size: 9.5,
         font: fontBold,
         color: rgb(0, 0, 0),
       });
       page.drawText(companyClean, {
         x: signX + forW,
-        y: toPdfY(signY + 38),
+        y: toPdfY(signY + 36),
         size: 11,
         font: fontHandwriting,
         color: rgb(0, 0, 0),
@@ -1614,7 +1683,7 @@ export class PdfEngine {
     } else {
       page.drawText(`For ${companyClean}`, {
         x: signX,
-        y: toPdfY(signY + 38),
+        y: toPdfY(signY + 36),
         size: 9.5,
         font: fontBold,
         color: rgb(0, 0, 0),

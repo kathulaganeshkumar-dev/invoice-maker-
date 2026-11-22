@@ -18,7 +18,6 @@ import {
   Edit2,
   Trash2,
   X,
-  FileDown,
   Clock,
 } from 'lucide-react';
 
@@ -264,9 +263,8 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <Users className="w-5 h-5 text-brand-600" />
-            <span>Customers & Accounts Receivable</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Customers & Accounts Receivable
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Manage corporate clients and retail buyers with live balance tracking
@@ -274,16 +272,6 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <a
-            href={api.getCustomersExportUrl(companyId)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700"
-          >
-            <FileDown className="w-4 h-4 text-slate-500" />
-            <span>Export to Excel</span>
-          </a>
-
           <button
             type="button"
             onClick={() => {
@@ -297,9 +285,8 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
               setReminderDaysInput('');
               setIsModalOpen(true);
             }}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
             <span>Add Customer</span>
           </button>
         </div>
@@ -335,9 +322,9 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
       </div>
 
       {/* Customer Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto shadow-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto shadow-xs">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+          <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px] z-10">
             <tr>
               <th className="py-3 px-4">Customer Name</th>
               <th className="py-3 px-4">Type</th>
@@ -349,11 +336,11 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
               <th className="py-3 px-4">City</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-400">
-                  No customers found. Click "+ Add Customer" to create your first client.
+                <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                  No customers found. Click &quot;+ Add Customer&quot; to create your first client.
                 </td>
               </tr>
             ) : (
@@ -373,12 +360,13 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                   .sort((a, b) => a.countdown.daysLeft - b.countdown.daysLeft);
 
                 const urgent = pendingInvoices[0];
+                const badge = getCustomerTypeBadge(c.customer_type);
 
                 return (
                 <tr
                   key={c.id}
                   onClick={() => handleOpenEdit(c)}
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group"
                   title="Click to view and edit customer details"
                 >
                   <td className="py-3 px-4">
@@ -388,50 +376,58 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                         e.stopPropagation();
                         handleOpenEdit(c);
                       }}
-                      className="text-left font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+                      className="text-left font-bold text-slate-900 dark:text-slate-100 hover:text-slate-700 dark:hover:text-white focus:outline-none cursor-pointer"
                       title="Click to view and edit customer details"
                     >
                       {c.name}
                     </button>
                     {c.company_name && (
-                      <div className="text-[10px] text-slate-400">{c.company_name}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-normal">{c.company_name}</div>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">
-                    {getCustomerTypeBadge(c.customer_type).label}
+                  <td className="py-3 px-4">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      {badge.label}
+                    </span>
                   </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                    <div>{c.mobile}</div>
-                    {c.email && <div className="text-[10px] text-slate-400">{c.email}</div>}
+                  <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                    <div className="font-medium text-slate-800 dark:text-slate-200">{c.mobile || '-'}</div>
+                    {c.email && <div className="text-[11px] text-slate-400 truncate max-w-[160px]">{c.email}</div>}
                   </td>
-                  <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                  <td className="py-3 px-4 font-mono text-[11px] tracking-wide text-slate-700 dark:text-slate-300">
                     <div>{c.gstin || '-'}</div>
                     {c.pan && <div className="text-[10px] text-slate-400">PAN: {c.pan}</div>}
                     {c.registration_year && (
-                      <div className="text-[10px] text-slate-400 font-sans">Reg. Year: {c.registration_year}</div>
+                      <div className="text-[10px] text-slate-400 font-sans">Reg: {c.registration_year}</div>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                  <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
                     <div>{c.state || '-'}</div>
                     {c.bank_name && (
                       <div
                         className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5"
                         title={`Bank: ${c.bank_name}${c.bank_account_no ? ` | A/c: ${c.bank_account_no}` : ''}${c.bank_ifsc ? ` | IFSC: ${c.bank_ifsc}` : ''}`}
                       >
-                        <Building className="w-2.5 h-2.5 text-slate-400" />
+                        <Building className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                         <span className="truncate max-w-[130px]">{c.bank_name}</span>
                         {c.additional_bank_accounts && c.additional_bank_accounts.length > 0 && (
                           <span className="px-1 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[9px] font-semibold">
-                            +{c.additional_bank_accounts.length} more
+                            +{c.additional_bank_accounts.length}
                           </span>
                         )}
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
+                  <td className="py-3 px-4 whitespace-nowrap">
                     {urgent ? (
                       <span
-                        className="font-medium"
+                        className={`font-medium ${
+                          urgent.countdown.daysLeft < 0
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : urgent.countdown.daysLeft === 0
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-slate-600 dark:text-slate-400'
+                        }`}
                         title={pendingInvoices
                           .map(
                             (p) =>
@@ -439,20 +435,24 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                           )
                           .join('\n')}
                       >
-                        {urgent.countdown.daysLeft < 0
-                          ? `Overdue by ${Math.abs(urgent.countdown.daysLeft)}d`
-                          : urgent.countdown.daysLeft === 0
-                            ? 'Due Today'
-                            : `${urgent.countdown.daysLeft}d left`}
+                        <span>
+                          {urgent.countdown.daysLeft < 0
+                            ? `Overdue by ${Math.abs(urgent.countdown.daysLeft)}d`
+                            : urgent.countdown.daysLeft === 0
+                              ? 'Due Today'
+                              : `${urgent.countdown.daysLeft}d left`}
+                        </span>
                       </span>
                     ) : (
-                      <span className="text-slate-400">-</span>
+                      <span className="text-slate-400 font-mono text-xs">-</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
-                    {formatIndianCurrency(c.current_balance)}
+                  <td className="py-3 px-4 text-right">
+                    <span className={`font-mono text-xs font-bold tabular-nums ${Number(c.current_balance || 0) > 0 ? 'text-slate-900 dark:text-white' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                      {formatIndianCurrency(c.current_balance)}
+                    </span>
                   </td>
-                  <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
+                  <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">
                     {c.city || '-'}
                   </td>
                 </tr>
@@ -470,7 +470,6 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <Users className="w-4 h-4 text-brand-600" />
                 <span>{editingCustomer.id ? 'Customer Details & Settings' : 'Add New Customer'}</span>
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -654,7 +653,7 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                   <button
                     type="button"
                     onClick={handleAddBankAccount}
-                    className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-700 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap"
+                    className="inline-flex items-center space-x-1 px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Another Bank Account</span>
@@ -820,7 +819,7 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm"
+                  className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                 >
                   Save Customer
                 </button>

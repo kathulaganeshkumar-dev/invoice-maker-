@@ -1,5 +1,5 @@
 // src/renderer/views/ImportExportView.tsx - Full Excel & CSV Backup / Import Portability Engine
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../services/api';
 import {
   FileDown,
@@ -96,7 +96,27 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
   const [importingId, setImportingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<ImportFeedback | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [excelSavePath, setExcelSavePath] = useState<string>('');
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchSettings = async () => {
+      try {
+        if (!companyId) return;
+        const s = await api.getCompanySettings(companyId);
+        if (isMounted && s?.excel_export_save_path) {
+          setExcelSavePath(s.excel_export_save_path);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [companyId]);
 
   const handleFileChange = async (cat: DataCategory, file: File | null) => {
     if (!file) return;
@@ -128,9 +148,8 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
   return (
     <div className="p-6 space-y-5">
       <div>
-        <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-          <FileDown className="w-5 h-5 text-brand-600" />
-          <span>Excel &amp; CSV Import / Export Engine</span>
+        <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+          Excel &amp; CSV Import / Export Engine
         </h1>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
           Export full company Excel backups or import previous data across all categories with automatic Notes capture
@@ -152,6 +171,23 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
         </div>
       </div>
 
+      {/* Configured Local Drive Saving Folder Banner */}
+      {excelSavePath ? (
+        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0">Local Drive Export &amp; Import Folder:</span>
+            <span className="font-mono font-bold text-slate-800 dark:text-slate-100 truncate">{excelSavePath}</span>
+          </div>
+          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
+            Auto-mirror enabled on download &amp; import
+          </span>
+        </div>
+      ) : (
+        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between gap-3">
+          <span>Local drive auto-saving folder is not set. You can configure a designated save folder in <strong>Settings &gt; Local Drive Saving Paths</strong>.</span>
+        </div>
+      )}
+
       {/* Import Success / Error Summary Banner */}
       {feedback && (
         <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs space-y-2">
@@ -168,7 +204,7 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
             <button
               type="button"
               onClick={() => setFeedback(null)}
-              className="text-[11px] font-semibold text-emerald-700 hover:underline"
+              className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             >
               Dismiss
             </button>
@@ -205,7 +241,7 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
       {errorMsg && (
         <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold flex items-center justify-between">
           <span>{errorMsg}</span>
-          <button type="button" onClick={() => setErrorMsg('')} className="text-[11px] underline ml-3">
+          <button type="button" onClick={() => setErrorMsg('')} className="text-[11px] font-semibold text-rose-700 hover:text-rose-900 ml-3">
             Close
           </button>
         </div>
@@ -215,7 +251,6 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
         {/* Export Data Box */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
           <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
             <span>Export Company Data (Excel Backups)</span>
           </div>
           <p className="text-xs text-slate-500">
@@ -235,7 +270,7 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
                   <div className="font-bold text-xs text-slate-800 dark:text-slate-100">{cat.title}</div>
                   <div className="text-[11px] text-slate-400 truncate">{cat.exportDesc}</div>
                 </div>
-                <span className="text-xs font-bold text-brand-600 shrink-0">Download .xlsx</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 shrink-0">Download .xlsx</span>
               </a>
             ))}
           </div>
@@ -244,7 +279,6 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
         {/* Import Data & Templates Box */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
           <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
-            <FileUp className="w-5 h-5 text-brand-600" />
             <span>Import Data &amp; Standard Excel Templates</span>
           </div>
           <p className="text-xs text-slate-500">
@@ -257,7 +291,7 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
               return (
                 <div
                   key={`import-${cat.id}`}
-                  className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+                  className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-xs text-slate-800 dark:text-slate-100">{cat.title}</div>
@@ -288,19 +322,16 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
                       type="button"
                       disabled={importingId !== null}
                       onClick={() => fileInputRefs.current[cat.id]?.click()}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold shadow-xs disabled:opacity-50 transition-colors cursor-pointer"
+                      className="inline-flex items-center justify-center px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-[11px] font-semibold shadow-xs disabled:opacity-50 transition-colors cursor-pointer"
                       title={`Upload .xlsx or .csv file to import ${cat.title}`}
                     >
                       {isBusy ? (
                         <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
                           <span>Importing...</span>
                         </>
                       ) : (
-                        <>
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Import</span>
-                        </>
+                        <span>Import</span>
                       )}
                     </button>
                   </div>

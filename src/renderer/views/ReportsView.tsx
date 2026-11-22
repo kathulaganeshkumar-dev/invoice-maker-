@@ -8,7 +8,6 @@ import {
   FileSpreadsheet,
   Download,
   Building,
-  RefreshCw,
 } from 'lucide-react';
 
 interface Props {
@@ -41,25 +40,13 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <BarChart3 className="w-5 h-5 text-brand-600" />
-            <span>Business Intelligence & Indian GST Reports</span>
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            GSTR-1, GSTR-3B supporting summaries, tax breakdown, and HSN/SAC table
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={loadReport}
-          className="inline-flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Data</span>
-        </button>
+      <div>
+        <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+          Business Intelligence &amp; Indian GST Reports
+        </h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          GSTR-1, GSTR-3B supporting summaries, tax breakdown, and HSN/SAC table
+        </p>
       </div>
 
       {/* Tax Breakdown Metric Cards */}

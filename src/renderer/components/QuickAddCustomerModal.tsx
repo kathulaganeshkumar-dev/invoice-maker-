@@ -428,12 +428,10 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading || !name.trim()}
-                  className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold shadow-md flex items-center space-x-1.5 disabled:opacity-50 transition-colors"
+                  className="px-5 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg font-semibold shadow-xs flex items-center space-x-1.5 disabled:opacity-50 transition-colors"
                 >
-                  {loading ? (
+                  {loading && (
                     <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4" />
                   )}
                   <span>Save &amp; Select Customer</span>
                 </button>

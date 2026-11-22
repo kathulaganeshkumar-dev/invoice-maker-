@@ -690,9 +690,8 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-            <ShoppingCart className="w-5 h-5 text-brand-600" />
-            <span>Purchases & Vendor Invoices</span>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+            Purchases & Vendor Invoices
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Record supplier bills, inward stock movements, and accounts payable
@@ -720,9 +719,8 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
               setOverallDiscountValue('');
               setIsModalOpen(true);
             }}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
             <span>New Purchase Bill</span>
           </button>
         </div>
@@ -778,7 +776,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     <button
                       type="button"
                       onClick={() => setViewingBill(b)}
-                      className="text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                      className="font-semibold text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white cursor-pointer"
                       title="Click to view purchase bill details"
                     >
                       {b.bill_number}
@@ -825,12 +823,12 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       return (
                         <div className="mt-0.5 flex justify-end">
                           <span
-                            className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                            className={`inline-flex items-center space-x-1 font-medium text-[11px] ${
                               cd.daysLeft <= 0
-                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                ? 'text-rose-600 dark:text-rose-400 font-semibold'
                                 : cd.daysLeft <= 5
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                  : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-slate-600 dark:text-slate-400'
                             }`}
                             title={`Payment Due Date: ${isoToDisplayDate(cd.dueDateStr) || cd.dueDateStr}`}
                           >
@@ -849,10 +847,10 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      className={`font-bold text-xs ${
                         b.is_finalized
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-amber-700 dark:text-amber-400'
                       }`}
                     >
                       {b.is_finalized ? 'RECEIVED & POSTED' : 'DRAFT'}
@@ -864,7 +862,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                         <button
                           type="button"
                           onClick={() => handleFinalizeBill(b.id)}
-                          className="inline-flex items-center space-x-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-sm"
+                          className="inline-flex items-center space-x-1 px-3 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-[11px] font-bold shadow-sm"
                           title="Confirm Goods Inward into Warehouse"
                         >
                           <PackageCheck className="w-3.5 h-3.5" />
@@ -896,7 +894,6 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-[96vw] max-w-7xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <ShoppingCart className="w-4 h-4 text-brand-600" />
                 <span>Record Supplier Purchase Bill</span>
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -912,10 +909,9 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     <button
                       type="button"
                       onClick={() => setIsQuickAddSupplierOpen(true)}
-                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                      className="text-xs text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-semibold cursor-pointer"
                       title="Quickly create a new vendor"
                     >
-                      <Plus className="w-3.5 h-3.5" />
                       <span>+ New Supplier</span>
                     </button>
                   </div>
@@ -941,7 +937,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                         setWhForm({ name: '', code: `WH${String(warehouses.length + 1).padStart(2, '0')}`, address: '', is_default: warehouses.length === 0 });
                         setIsWarehouseManagerOpen(true);
                       }}
-                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 font-bold flex items-center space-x-1 hover:underline cursor-pointer"
+                      className="text-xs text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-semibold cursor-pointer"
                     >
                       <span>+ Manage / New</span>
                     </button>
@@ -1156,10 +1152,9 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   <button
                     type="button"
                     onClick={handleAddItem}
-                    className="inline-flex items-center space-x-1 text-brand-600 font-bold hover:underline"
+                    className="inline-flex items-center space-x-1 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-bold"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Item Row</span>
+                    <span>+ Add Item Row</span>
                   </button>
                 </div>
 
@@ -1198,7 +1193,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                             }}
                             className={`px-2 py-1 text-[11px] font-bold transition-colors ${
                               overallDiscountType === 'AMOUNT'
-                                ? 'bg-brand-600 text-white'
+                                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold'
                                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                             }`}
                             title="Flat discount amount in ₹"
@@ -1213,7 +1208,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                             }}
                             className={`px-2 py-1 text-[11px] font-bold transition-colors ${
                               overallDiscountType === 'PERCENTAGE'
-                                ? 'bg-brand-600 text-white'
+                                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold'
                                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                             }`}
                             title="Percentage discount on overall bill"
@@ -1289,7 +1284,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   type="button"
                   disabled={saving}
                   onClick={handleCreateBill}
-                  className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-bold shadow-sm disabled:opacity-50"
+                  className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-xs font-bold shadow-sm disabled:opacity-50"
                 >
                   {saving
                     ? 'Saving...'
@@ -1389,7 +1384,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       <button
                         type="button"
                         onClick={handleCreateQuickInlineCategory}
-                        className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold"
+                        className="px-2 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-[10px] font-semibold shadow-xs"
                       >
                         Add
                       </button>
@@ -1500,7 +1495,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
               <button
                 type="button"
                 onClick={handleSaveQuickProduct}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
               >
                 Save Product &amp; Add to Bill
               </button>
@@ -1516,10 +1511,8 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
-              <div className="flex items-center space-x-3">
-                <ShoppingCart className="w-5 h-5 text-brand-600" />
-                <div>
-                  <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <div>
+                <h2 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                     <span>Purchase Bill: {viewingBill.bill_number}</span>
                     <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300">
                       {viewingBill.is_finalized ? 'RECEIVED & POSTED' : 'DRAFT'}
@@ -1529,7 +1522,6 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     Bill Date: {isoToDisplayDate(viewingBill.bill_date) || viewingBill.bill_date} | Due Date: {isoToDisplayDate(viewingBill.due_date) || viewingBill.due_date}
                   </div>
                 </div>
-              </div>
               <button onClick={() => setViewingBill(null)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
@@ -1648,7 +1640,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                       await handleFinalizeBill(viewingBill.id);
                       setViewingBill(null);
                     }}
-                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-sm"
+                    className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
                   >
                     Receive Stock & Post Inward
                   </button>
@@ -1745,7 +1737,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                     <button
                       type="button"
                       onClick={handleSaveWarehouse}
-                      className="px-3.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded font-bold"
+                      className="px-3.5 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded font-semibold text-xs shadow-xs"
                     >
                       Save Warehouse
                     </button>
@@ -1763,7 +1755,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                         is_default: warehouses.length === 0,
                       })
                     }
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded font-bold"
+                    className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded font-bold cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>New Warehouse</span>
@@ -1807,7 +1799,7 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                                   await api.updateWarehouse(companyId, w.id, { is_default: true });
                                   await loadMaster();
                                 }}
-                                className="text-brand-600 hover:underline font-semibold"
+                                className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-semibold"
                               >
                                 Make Default
                               </button>
