@@ -3,10 +3,23 @@ import { Knex } from 'knex';
 import { v4 as uuidv4 } from 'uuid';
 import { NumberingSequence } from '../../shared/types';
 
-export function getIndianFinancialYear(dateStr?: string, format: 'YYYY-YY' | 'YY-YY' | 'YYYY' = 'YYYY-YY'): string {
-  const d = dateStr ? new Date(dateStr) : new Date();
-  const year = d.getFullYear();
-  const month = d.getMonth() + 1; // 1-12
+export function getIndianFinancialYear(dateInput?: string | Date, format: 'YYYY-YY' | 'YY-YY' | 'YYYY' = 'YYYY-YY'): string {
+  let year: number;
+  let month: number;
+
+  if (!dateInput) {
+    const now = new Date();
+    year = now.getFullYear();
+    month = now.getMonth() + 1;
+  } else if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateInput)) {
+    const parts = dateInput.split('T')[0].split('-').map(Number);
+    year = parts[0];
+    month = parts[1];
+  } else {
+    const d = new Date(dateInput);
+    year = isNaN(d.getFullYear()) ? new Date().getFullYear() : d.getFullYear();
+    month = isNaN(d.getMonth()) ? new Date().getMonth() + 1 : d.getMonth() + 1;
+  }
 
   // In India, Financial Year starts on April 1 (month 4)
   const startYear = month >= 4 ? year : year - 1;

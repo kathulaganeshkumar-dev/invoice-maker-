@@ -243,11 +243,32 @@ export const api = {
       menu_catalog: { id: string; label: string; group: string }[];
       presets: Record<string, { label: string; is_admin: boolean; can_open_settings: boolean; allowed_menus: string[] }>;
     }>('/workstations'),
-  createStaffMember: (staff_name: string, allowed_menus: string[], can_open_settings?: boolean, admin_pin?: string) =>
-    request<{ success: boolean; workstation: any }>('/workstations/staff', {
+  createStaffMember: (
+    staff_name: string,
+    allowed_menus: string[],
+    can_open_settings?: boolean,
+    admin_pin?: string,
+    is_admin?: boolean,
+    staff_names?: string[]
+  ) =>
+    request<{ success: boolean; workstation?: any; workstations?: any[]; count?: number }>('/workstations/staff', {
       method: 'POST',
       headers: admin_pin ? { 'X-EIM-Admin-Pin': admin_pin } : undefined,
-      body: JSON.stringify({ staff_name, allowed_menus, can_open_settings, admin_pin }),
+      body: JSON.stringify({ staff_name, allowed_menus, can_open_settings, admin_pin, is_admin, staff_names }),
+    }),
+  createStaffMembersBatch: (
+    staff_list: Array<{
+      staff_name: string;
+      allowed_menus?: string[];
+      can_open_settings?: boolean;
+      is_admin?: boolean;
+    }>,
+    admin_pin?: string
+  ) =>
+    request<{ success: boolean; count: number; workstations: any[] }>('/workstations/staff/batch', {
+      method: 'POST',
+      headers: admin_pin ? { 'X-EIM-Admin-Pin': admin_pin } : undefined,
+      body: JSON.stringify({ staff_list, admin_pin }),
     }),
   updateWorkstationPermission: (
     deviceId: string,
@@ -400,6 +421,11 @@ export const api = {
     request<Invoice>(`/companies/${companyId}/invoices/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   deleteInvoice: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/invoices/${id}`, { method: 'DELETE' }),
+  updateInvoiceCreator: (companyId: string, id: string, creatorName: string) =>
+    request<Invoice>(`/companies/${companyId}/invoices/${id}/creator`, {
+      method: 'PATCH',
+      body: JSON.stringify({ creator_name: creatorName }),
+    }),
   getInvoicePdfUrl: (companyId: string, id: string, mode = 'DIGITAL_LETTERHEAD', templateId?: string) =>
     `${getBaseUrl()}/companies/${companyId}/invoices/${id}/pdf?mode=${mode}${templateId ? `&template_id=${encodeURIComponent(templateId)}` : ''}`,
 
@@ -418,6 +444,11 @@ export const api = {
     request<Invoice>(`/companies/${companyId}/quotations/${id}/convert-to-invoice`, { method: 'POST' }),
   deleteQuotation: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/quotations/${id}`, { method: 'DELETE' }),
+  updateQuotationCreator: (companyId: string, id: string, creatorName: string) =>
+    request<Quotation>(`/companies/${companyId}/quotations/${id}/creator`, {
+      method: 'PATCH',
+      body: JSON.stringify({ creator_name: creatorName }),
+    }),
   getQuotationPdfUrl: (companyId: string, id: string, options?: { mode?: string; templateId?: string; overlay?: boolean; top_margin_mm?: number; bottom_margin_mm?: number }) => {
     const params = new URLSearchParams();
     if (options?.mode) params.append('mode', options.mode);

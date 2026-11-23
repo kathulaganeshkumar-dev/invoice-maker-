@@ -308,7 +308,7 @@ export async function startServer(port = 4200): Promise<express.Express> {
   return new Promise((resolve, reject) => {
     function tryListen(p: number, maxAttempts = 10) {
       const server = app.listen(p, host, () => {
-        logger.info(`[Server] Enterprise Invoice Backend running on http://127.0.0.1:${p} (host: ${host})`);
+        logger.info(`[Server] Enterprise Management Backend running on http://127.0.0.1:${p} (host: ${host})`);
         process.env.ACTUAL_SERVER_PORT = String(p);
         activeHttpServer = server;
         (app as any).httpServer = server;

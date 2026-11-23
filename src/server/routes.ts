@@ -66,7 +66,7 @@ export function createApiRouter(db: Knex): Router {
 
   const adminRateLimiter = createSimpleRateLimiter({
     windowMs: 60 * 1000,
-    max: 15,
+    max: 1000,
     message: 'Too many administrative requests. Please wait a moment and try again.',
   });
   const dbTestRateLimiter = createSimpleRateLimiter({
@@ -100,7 +100,7 @@ export function createApiRouter(db: Knex): Router {
     const effectiveName = rawStaff || rawName;
     return {
       deviceId: sanitizeDeviceId(rawId) || (isLocal ? 'local-host-pc' : ''),
-      deviceName: sanitizeDeviceName(effectiveName, isLocal ? 'Main Office PC' : `Staff PC (${remoteIp || 'LAN'})`),
+      deviceName: sanitizeDeviceName(effectiveName, isLocal ? 'Admin / Owner' : `Staff PC (${remoteIp || 'LAN'})`),
       staffName: rawStaff ? sanitizeDeviceName(rawStaff, '') : undefined,
       remoteIp,
       isLocal,
@@ -109,16 +109,24 @@ export function createApiRouter(db: Knex): Router {
 
   const requireAdminAuthorization = async (req: Request, res: Response): Promise<boolean> => {
     const suppliedPin = String(req.headers['x-eim-admin-pin'] || req.body?.admin_pin || '').trim();
-    if (!suppliedPin || !/^\d{4}$/.test(suppliedPin)) {
-      res.status(403).json({ error: 'A valid 4-digit MD / Admin PIN must be entered to save permissions.' });
-      return false;
+    if (suppliedPin) {
+      if (!/^\d{4}$/.test(suppliedPin)) {
+        res.status(403).json({ error: 'A valid 4-digit MD / Admin PIN must be entered.' });
+        return false;
+      }
+      const ok = await workstationService.checkAdminPin(suppliedPin);
+      if (!ok) {
+        res.status(403).json({ error: 'Incorrect 4-digit MD / Admin PIN. Permissions cannot be changed.' });
+        return false;
+      }
+      return true;
     }
-    const ok = await workstationService.checkAdminPin(suppliedPin);
-    if (!ok) {
-      res.status(403).json({ error: 'Incorrect 4-digit MD / Admin PIN. Permissions cannot be changed.' });
-      return false;
+    // Allow local host server when factory default PIN (1234) is active without custom PIN set
+    if (isLoopbackRequest(req) && !(await workstationService.isCustomAdminPinSet())) {
+      return true;
     }
-    return true;
+    res.status(403).json({ error: 'A valid 4-digit MD / Admin PIN must be entered to save permissions.' });
+    return false;
   };
 
   const requireAdminReadAuthorization = async (req: Request, res: Response): Promise<boolean> => {
@@ -442,7 +450,7 @@ export function createApiRouter(db: Knex): Router {
       res.json({
         success: true,
         version,
-        appName: 'Enterprise Invoice Manager',
+        appName: 'Enterprise Management',
         hasUpdateBundle,
         dataDir: getDefaultDataDir(),
         serverHost: process.env.SERVER_HOST || '0.0.0.0',
@@ -1038,20 +1046,54 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/workstations/staff', adminRateLimiter, async (req: Request, res: Response) => {
+  router.post('/workstations/staff', async (req: Request, res: Response) => {
     try {
       const authorized = await requireAdminAuthorization(req, res);
       if (!authorized) return;
-      const staffName = String(req.body?.staff_name || '').trim();
-      if (!staffName) {
-        return res.status(400).json({ error: 'Please enter a staff member name.' });
+      const rawName = String(req.body?.staff_name || '').trim();
+      const staffNames = Array.isArray(req.body?.staff_names) && req.body.staff_names.length > 0
+        ? req.body.staff_names
+        : rawName.split(/[\r\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+
+      if (staffNames.length === 0) {
+        return res.status(400).json({ error: 'Please enter at least one staff member name.' });
       }
       const allowedMenus = req.body?.allowed_menus;
-      const canOpenSettings = Boolean(req.body?.can_open_settings);
-      const ws = await workstationService.createStaffMember(staffName, allowedMenus, canOpenSettings);
-      res.status(201).json({ success: true, workstation: ws });
+      const canOpenSettings = req.body?.can_open_settings !== undefined ? Boolean(req.body?.can_open_settings) : true;
+      const isAdmin = Boolean(req.body?.is_admin);
+
+      const createdList = [];
+      for (const sName of staffNames) {
+        const ws = await workstationService.createStaffMember(sName, allowedMenus, canOpenSettings, isAdmin);
+        createdList.push(ws);
+      }
+      res.status(201).json({
+        success: true,
+        count: createdList.length,
+        workstation: createdList[0],
+        workstations: createdList,
+      });
     } catch (err: any) {
-      res.status(400).json({ error: err.message || 'Failed to create staff member.' });
+      res.status(400).json({ error: err.message || 'Failed to create staff member(s).' });
+    }
+  });
+
+  router.post('/workstations/staff/batch', async (req: Request, res: Response) => {
+    try {
+      const authorized = await requireAdminAuthorization(req, res);
+      if (!authorized) return;
+      const staffList = Array.isArray(req.body?.staff_list) ? req.body.staff_list : [];
+      if (staffList.length === 0) {
+        return res.status(400).json({ error: 'Staff list cannot be empty.' });
+      }
+      const created = await workstationService.createStaffMembersBatch(staffList);
+      res.status(201).json({
+        success: true,
+        count: created.length,
+        workstations: created,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Failed to create staff members in batch.' });
     }
   });
 
@@ -1180,14 +1222,36 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const meta = getRequestDeviceMeta(req);
+      const creatorName =
+        String(req.body?.created_by_device_name || req.body?.created_by_staff_name || '').trim() ||
+        meta.staffName ||
+        meta.deviceName ||
+        undefined;
       const invoice = await invoiceService.createInvoice(companyId, {
         ...req.body,
-        created_by_device_id: meta.deviceId || undefined,
-        created_by_device_name: meta.deviceName || undefined,
+        created_by_device_id: req.body?.created_by_device_id || meta.deviceId || undefined,
+        created_by_device_name: creatorName,
       });
       res.status(201).json(invoice);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/companies/:companyId/invoices/:invoiceId/creator', async (req: Request, res: Response) => {
+    try {
+      const { companyId, invoiceId } = getParams(req);
+      const creatorName = String(req.body?.creator_name || req.body?.created_by_device_name || '').trim();
+      if (!creatorName) {
+        return res.status(400).json({ error: 'Creator name cannot be empty.' });
+      }
+      await db('invoices')
+        .where({ company_id: companyId, id: invoiceId })
+        .update({ created_by_device_name: creatorName, updated_at: new Date().toISOString() });
+      const updated = await invoiceService.getInvoiceById(companyId, invoiceId);
+      res.json(updated);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to update invoice creator.');
     }
   });
 
@@ -1364,14 +1428,36 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const meta = getRequestDeviceMeta(req);
+      const creatorName =
+        String(req.body?.created_by_device_name || req.body?.created_by_staff_name || '').trim() ||
+        meta.staffName ||
+        meta.deviceName ||
+        undefined;
       const q = await quotationService.createQuotation(companyId, {
         ...req.body,
-        created_by_device_id: meta.deviceId || undefined,
-        created_by_device_name: meta.deviceName || undefined,
+        created_by_device_id: req.body?.created_by_device_id || meta.deviceId || undefined,
+        created_by_device_name: creatorName,
       });
       res.status(201).json(q);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/companies/:companyId/quotations/:quotationId/creator', async (req: Request, res: Response) => {
+    try {
+      const { companyId, quotationId } = getParams(req);
+      const creatorName = String(req.body?.creator_name || req.body?.created_by_device_name || '').trim();
+      if (!creatorName) {
+        return res.status(400).json({ error: 'Creator name cannot be empty.' });
+      }
+      await db('quotations')
+        .where({ company_id: companyId, id: quotationId })
+        .update({ created_by_device_name: creatorName, updated_at: new Date().toISOString() });
+      const updated = await quotationService.getQuotationById(companyId, quotationId);
+      res.json(updated);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to update quotation creator.');
     }
   });
 

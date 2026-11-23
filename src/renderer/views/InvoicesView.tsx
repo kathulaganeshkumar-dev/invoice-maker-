@@ -33,6 +33,9 @@ import {
   StickyNote,
   Users,
   Shield,
+  User,
+  Edit2,
+  Check,
 } from 'lucide-react';
 
 const SALES_DOC_TYPES: { value: DocumentType; label: string }[] = [
@@ -164,6 +167,14 @@ export const InvoicesView: React.FC<Props> = ({
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
   const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState<boolean>(false);
+
+  // Staff and Creator state
+  const [availableStaffNames, setAvailableStaffNames] = useState<string[]>(['Admin / Owner']);
+  const [creatorName, setCreatorName] = useState<string>(() => {
+    return localStorage.getItem('eim_workstation_name') || 'Admin / Owner';
+  });
+  const [editingCreatorInvoiceId, setEditingCreatorInvoiceId] = useState<string | null>(null);
+  const [editingCreatorValue, setEditingCreatorValue] = useState<string>('');
 
   const customerOptions = useMemo(() => {
     return [
@@ -310,11 +321,12 @@ export const InvoicesView: React.FC<Props> = ({
 
   const loadMasterData = async () => {
     try {
-      const [cList, pList, tList, comp] = await Promise.all([
+      const [cList, pList, tList, comp, wsRes] = await Promise.all([
         api.getCustomers(companyId),
         api.getProducts(companyId),
         api.getLetterheads(companyId),
         api.getCompany(companyId).catch(() => null),
+        api.getWorkstations().catch(() => ({ workstations: [] })),
       ]);
       setCustomers(cList);
       setProducts(pList);
@@ -327,6 +339,12 @@ export const InvoicesView: React.FC<Props> = ({
       const loadedTerms = comp?.default_invoice_terms || '';
       setCompanyDefaultTerms(loadedTerms);
       setNotes((prev) => (!prev ? loadedTerms : prev));
+
+      const staffList = ((wsRes as any)?.workstations || [])
+        .map((w: any) => (w.name || w.device_name || '').trim())
+        .filter((name: string) => name && name !== 'local-host-pc' && name !== 'Office PC');
+      const uniqueNames = Array.from(new Set(['Admin / Owner', ...staffList]));
+      setAvailableStaffNames(uniqueNames);
     } catch (err) {
       console.error(err);
     }
@@ -357,44 +375,6 @@ export const InvoicesView: React.FC<Props> = ({
     }
   };
 
-  const formatItemNotesToDescription = (notes?: string[]): string => {
-    const cleaned = (notes || []).map((n) => n.trim()).filter((n) => n.length > 0);
-    if (cleaned.length === 0) return '';
-    if (cleaned.length === 1) return cleaned[0];
-    return cleaned.map((n, i) => `#${i + 1}: ${n}`).join('\n');
-  };
-
-  const handleUpdateItemNotes = (index: number, nextNotes: string[]) => {
-    const copy = [...items];
-    const formattedNotes = formatItemNotesToDescription(nextNotes);
-    copy[index] = {
-      ...copy[index],
-      custom_notes: nextNotes,
-      description: formattedNotes || copy[index].description || '',
-    };
-    setItems(copy);
-  };
-
-  const handleMatchItemNotesToQty = (index: number) => {
-    const row = items[index];
-    const qtyCount = Math.max(1, Math.min(200, Math.round(Number(row.quantity) || 1)));
-    const current = [...(row.custom_notes || [])];
-    if (qtyCount > current.length) {
-      while (current.length < qtyCount) current.push('');
-    } else {
-      current.length = qtyCount;
-    }
-    const formattedNotes = formatItemNotesToDescription(current);
-    const copy = [...items];
-    copy[index] = {
-      ...copy[index],
-      custom_notes: current,
-      show_notes: true,
-      description: formattedNotes || copy[index].description || '',
-    };
-    setItems(copy);
-  };
-
   const handleProductSelect = (index: number, productId: string) => {
     const newItems = [...items];
     if (!productId) {
@@ -412,15 +392,12 @@ export const InvoicesView: React.FC<Props> = ({
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
 
-    const prodNotes = Array.isArray(prod.custom_notes) ? [...prod.custom_notes] : [];
     newItems[index] = {
       ...newItems[index],
       item_id: prod.id,
       item_type: prod.item_type,
       item_name: prod.name,
-      custom_notes: prodNotes,
-      show_notes: prodNotes.length > 0,
-      description: prodNotes.length > 0 ? formatItemNotesToDescription(prodNotes) : (prod.description || ''),
+      description: prod.description || '',
       hsn_or_sac: prod.hsn_or_sac,
       rate: Number(prod.selling_price) > 0 ? prod.selling_price : '',
       min_selling_price: prod.min_selling_price || null,
@@ -517,7 +494,7 @@ export const InvoicesView: React.FC<Props> = ({
     }
 
     try {
-      await api.createInvoice(companyId, {
+      const created = await api.createInvoice(companyId, {
         document_type: docType,
         customer_id: cust.id,
         customer_name: cust.name,
@@ -529,6 +506,7 @@ export const InvoicesView: React.FC<Props> = ({
         invoice_date: invoiceDate,
         due_date: dueDate,
         letterhead_template_id: selectedTemplateId || undefined,
+        created_by_device_name: creatorName.trim() || undefined,
         finalize_on_create: invoicePaymentStatus !== 'DRAFT',
         mark_as_paid: invoicePaymentStatus === 'PAID' || invoicePaymentStatus === 'PARTIAL',
         payment_amount: invoicePaymentStatus === 'PARTIAL' ? invoicePartialAmount : undefined,
@@ -771,12 +749,37 @@ export const InvoicesView: React.FC<Props> = ({
   );
   const previewDocTotals = calculateDocumentTotals({ items: previewCalculatedLines });
 
+  const getCreatorDisplay = (inv: { created_by_device_name?: string | null; created_by_device_id?: string | null }) => {
+    const raw = (inv.created_by_device_name || '').trim();
+    if (!raw || raw === 'Office PC' || raw === 'Main Office PC' || raw === 'local-host-pc' || raw === 'Staff PC') {
+      return 'Admin / Owner';
+    }
+    return raw;
+  };
+
   const isStaffInvoice = (inv: Invoice) => {
-    const devName = (inv.created_by_device_name || '').trim();
-    const devId = (inv.created_by_device_id || '').trim();
-    if (!devName && !devId) return false;
-    if (devName === 'Main Office PC' || devId === 'local-host-pc') return false;
-    return true;
+    const name = getCreatorDisplay(inv);
+    return name !== 'Admin / Owner';
+  };
+
+  const handleSaveCreator = async (invId: string) => {
+    const val = editingCreatorValue.trim();
+    if (!val) {
+      setEditingCreatorInvoiceId(null);
+      return;
+    }
+    try {
+      await api.updateInvoiceCreator(companyId, invId, val);
+      setInvoices((prev) =>
+        prev.map((item) => (item.id === invId ? { ...item, created_by_device_name: val } : item))
+      );
+      if (viewingInvoice?.id === invId) {
+        setViewingInvoice((prev) => (prev ? { ...prev, created_by_device_name: val } : null));
+      }
+      setEditingCreatorInvoiceId(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update creator name');
+    }
   };
 
   const modeInvoices = useMemo(() => {
@@ -797,7 +800,8 @@ export const InvoicesView: React.FC<Props> = ({
   const staffContributors = useMemo(() => {
     const names = new Set<string>();
     for (const inv of staffInvoices) {
-      if (inv.created_by_device_name) names.add(inv.created_by_device_name);
+      const disp = getCreatorDisplay(inv);
+      if (disp && disp !== 'Admin / Owner') names.add(disp);
     }
     return Array.from(names);
   }, [staffInvoices]);
@@ -1102,20 +1106,63 @@ export const InvoicesView: React.FC<Props> = ({
                       {inv.customer_name}
                     </td>
                     <td className="py-3 px-4">
-                      {isStaffInvoice(inv) ? (
-                        <span
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
-                          title={`Created on staff workstation: ${inv.created_by_device_name || 'Staff'}`}
-                        >
-                          <span>Staff: {inv.created_by_device_name || 'Staff PC'}</span>
-                        </span>
+                      {editingCreatorInvoiceId === inv.id ? (
+                        <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            list="staff-creators-list"
+                            value={editingCreatorValue}
+                            onChange={(e) => setEditingCreatorValue(e.target.value)}
+                            className="w-28 text-xs px-2 py-0.5 border border-brand-500 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveCreator(inv.id);
+                              if (e.key === 'Escape') setEditingCreatorInvoiceId(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveCreator(inv.id)}
+                            className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded cursor-pointer"
+                            title="Save creator"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingCreatorInvoiceId(null)}
+                            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ) : (
-                        <span
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                          title="Created on Host PC / MD Workstation"
-                        >
-                          <span>Main PC / MD</span>
-                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                              getCreatorDisplay(inv) === 'Admin / Owner'
+                                ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                : 'bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                            }`}
+                            title={`Created by: ${getCreatorDisplay(inv)} (Click pencil to edit)`}
+                          >
+                            <User className="w-3 h-3 mr-1 opacity-70" />
+                            <span>{getCreatorDisplay(inv)}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCreatorInvoiceId(inv.id);
+                              setEditingCreatorValue(getCreatorDisplay(inv));
+                            }}
+                            className="p-1 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            title="Change creator name"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
@@ -1339,6 +1386,13 @@ export const InvoicesView: React.FC<Props> = ({
                   <div className="mt-2 text-slate-600 dark:text-slate-400">
                     <div>Balance Due: <span className="font-bold text-rose-600">{formatIndianCurrency(viewingInvoice.balance_amount)}</span></div>
                     <div>Paid to Date: <span className="font-bold text-emerald-600">{formatIndianCurrency(viewingInvoice.paid_amount)}</span></div>
+                    <div className="mt-1.5 flex items-center space-x-1.5">
+                      <span className="font-semibold text-slate-400 uppercase text-[10px]">Created By:</span>
+                      <span className="font-bold text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-[11px] inline-flex items-center">
+                        <User className="w-3 h-3 mr-1 opacity-70" />
+                        {getCreatorDisplay(viewingInvoice)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1605,7 +1659,7 @@ export const InvoicesView: React.FC<Props> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 {/* Print Template Selector */}
                 <div>
                   <div className="flex items-center justify-between h-6 mb-1.5">
@@ -1640,6 +1694,29 @@ export const InvoicesView: React.FC<Props> = ({
                     <option value="PAID">Paid in Full (Finalize & Record Full Payment Now)</option>
                     <option value="DRAFT">Save as Draft (Edit Later)</option>
                   </select>
+                </div>
+
+                {/* Created By (Staff / Owner) */}
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <User className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Created By (Staff / Owner)</span>
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    list="staff-creators-list"
+                    value={creatorName}
+                    onChange={(e) => setCreatorName(e.target.value)}
+                    placeholder="e.g. Veer, Sandhya, Admin / Owner"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-semibold outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                  />
+                  <datalist id="staff-creators-list">
+                    {availableStaffNames.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -1723,7 +1800,6 @@ export const InvoicesView: React.FC<Props> = ({
                       <th className="p-2 w-32">Rate (₹)</th>
                       <th className="p-2 w-24">GST %</th>
                       <th className="p-2 w-16 text-center">Incl. GST</th>
-                      <th className="p-2 w-20 text-center">Note</th>
                       <th className="p-2 w-28 text-right">Total (₹)</th>
                       <th className="p-2 w-16 text-center">Actions</th>
                     </tr>
@@ -1732,45 +1808,43 @@ export const InvoicesView: React.FC<Props> = ({
                     {items.map((item, idx) => {
                       const lineCalc = previewCalculatedLines[idx];
                       const isCustomRow = !item.item_id;
-                      const activeNotesCount = item.custom_notes?.filter((n: string) => n.trim()).length || 0;
                       return (
-                        <React.Fragment key={idx}>
-                          <tr className="bg-white dark:bg-slate-800">
-                            <td className="p-2 align-top">
-                              <SearchableSelect
-                                options={catalogItemOptions}
-                                value={item.item_id || ''}
-                                freeTextValue={item.item_name || ''}
-                                hideSelectedMeta
-                                onChange={(val) => handleProductSelect(idx, val)}
-                                onFreeTextChange={(text) => {
-                                  const copy = [...items];
-                                  copy[idx] = {
-                                    ...copy[idx],
-                                    item_id: undefined,
-                                    item_name: text,
-                                    item_type: copy[idx].item_type || (docType === 'SERVICE_INVOICE' ? 'SERVICE' : 'PRODUCT'),
-                                    min_selling_price: null,
-                                    max_selling_price: null,
-                                    is_custom: true,
-                                  };
-                                  setItems(copy);
-                                }}
-                                placeholder="Search product or enter custom item..."
-                                size="sm"
-                              />
-                              <textarea
-                                rows={2}
-                                placeholder="Specifications / warranty details (e.g. 1 Year Warranty, Intel i5, 16GB RAM...)"
-                                value={item.description || ''}
-                                onChange={(e) => {
-                                  const copy = [...items];
-                                  copy[idx].description = e.target.value;
-                                  setItems(copy);
-                                }}
-                                className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700/60 mt-1 font-sans text-slate-900 dark:text-slate-100"
-                              />
-                            </td>
+                        <tr key={idx} className="bg-white dark:bg-slate-800">
+                          <td className="p-2 align-top">
+                            <SearchableSelect
+                              options={catalogItemOptions}
+                              value={item.item_id || ''}
+                              freeTextValue={item.item_name || ''}
+                              hideSelectedMeta
+                              onChange={(val) => handleProductSelect(idx, val)}
+                              onFreeTextChange={(text) => {
+                                const copy = [...items];
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  item_id: undefined,
+                                  item_name: text,
+                                  item_type: copy[idx].item_type || (docType === 'SERVICE_INVOICE' ? 'SERVICE' : 'PRODUCT'),
+                                  min_selling_price: null,
+                                  max_selling_price: null,
+                                  is_custom: true,
+                                };
+                                setItems(copy);
+                              }}
+                              placeholder="Search product or enter custom item..."
+                              size="sm"
+                            />
+                            <textarea
+                              rows={2}
+                              placeholder="Specifications / details (write serial numbers, warranty, or details directly here)..."
+                              value={item.description || ''}
+                              onChange={(e) => {
+                                const copy = [...items];
+                                copy[idx].description = e.target.value;
+                                setItems(copy);
+                              }}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700/60 mt-1 font-sans text-slate-900 dark:text-slate-100"
+                            />
+                          </td>
                             <td className="p-2 align-top pt-2.5">
                               <input
                                 type="text"
@@ -1933,34 +2007,6 @@ export const InvoicesView: React.FC<Props> = ({
                                 className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
                               />
                             </td>
-                            <td className="p-2 align-top pt-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const copy = [...items];
-                                  const nextShow = !copy[idx].show_notes;
-                                  let currentNotes = Array.isArray(copy[idx].custom_notes) ? [...copy[idx].custom_notes] : [];
-                                  if (nextShow && currentNotes.length === 0) {
-                                    const qtyCount = Math.max(1, Math.min(200, Math.round(Number(copy[idx].quantity) || 1)));
-                                    for (let i = 0; i < qtyCount; i++) currentNotes.push('');
-                                  } else if (!nextShow) {
-                                    currentNotes = currentNotes.map((n: string) => n.trim()).filter((n: string) => n.length > 0);
-                                  }
-                                  copy[idx] = {
-                                    ...copy[idx],
-                                    show_notes: nextShow,
-                                    custom_notes: currentNotes,
-                                    description: formatItemNotesToDescription(currentNotes) || copy[idx].description || '',
-                                  };
-                                  setItems(copy);
-                                }}
-                                className="inline-flex items-center space-x-1 text-[10px] font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 px-2 py-1 rounded border border-brand-200 dark:border-brand-700 transition-colors whitespace-nowrap"
-                                title="Add custom notes per item (e.g. warranty, serial/hard disk numbers)"
-                              >
-                                <StickyNote className="w-3 h-3" />
-                                <span>{activeNotesCount > 0 ? `Notes (${activeNotesCount})` : '+ Note'}</span>
-                              </button>
-                            </td>
                             <td className="p-2 align-top pt-3 text-right font-mono font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
                               {formatIndianCurrency(lineCalc.lineTotal)}
                             </td>
@@ -1988,89 +2034,6 @@ export const InvoicesView: React.FC<Props> = ({
                               </div>
                             </td>
                           </tr>
-
-                          {item.show_notes && (
-                            <tr className="bg-slate-50/70 dark:bg-slate-900/40">
-                              <td colSpan={10} className="px-3 py-2">
-                                <div className="p-2 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded space-y-1.5">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">
-                                      Item Notes — {item.item_name || `Row #${idx + 1}`} ({(item.custom_notes || []).length})
-                                    </span>
-                                    <div className="flex items-center space-x-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleMatchItemNotesToQty(idx)}
-                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100"
-                                        title="Create one note row per quantity"
-                                      >
-                                        Match Qty ({Math.max(1, Math.round(Number(item.quantity) || 1))})
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateItemNotes(idx, [...(item.custom_notes || []), ''])}
-                                        className="text-[10px] font-semibold px-2 py-0.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
-                                      >
-                                        + Add
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const copy = [...items];
-                                          const cleaned = (copy[idx].custom_notes || [])
-                                            .map((n: string) => n.trim())
-                                            .filter((n: string) => n.length > 0);
-                                          copy[idx] = {
-                                            ...copy[idx],
-                                            show_notes: false,
-                                            custom_notes: cleaned,
-                                            description: formatItemNotesToDescription(cleaned),
-                                          };
-                                          setItems(copy);
-                                        }}
-                                        className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded"
-                                        title="Save & close notes"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto pr-0.5">
-                                    {(item.custom_notes || []).map((noteVal: string, nIdx: number) => (
-                                      <div key={nIdx} className="flex items-center space-x-1">
-                                        <span className="text-[10px] font-mono font-bold text-slate-500 w-6 shrink-0">
-                                          #{nIdx + 1}
-                                        </span>
-                                        <input
-                                          type="text"
-                                          placeholder={`Warranty / Serial No. for item #${nIdx + 1}`}
-                                          value={noteVal}
-                                          onChange={(e) => {
-                                            const next = [...(item.custom_notes || [])];
-                                            next[nIdx] = e.target.value;
-                                            handleUpdateItemNotes(idx, next);
-                                          }}
-                                          className="flex-1 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 text-[11px] bg-white dark:bg-slate-800"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const next = (item.custom_notes || []).filter((_: string, i: number) => i !== nIdx);
-                                            handleUpdateItemNotes(idx, next);
-                                          }}
-                                          className="text-slate-400 hover:text-rose-600 p-0.5"
-                                          title="Remove note"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
                       );
                     })}
                   </tbody>

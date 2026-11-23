@@ -5,6 +5,7 @@ import { INDIAN_STATES } from '../../shared/constants';
 import { api } from '../services/api';
 import { SearchableSelect } from './SearchableSelect';
 import { ModalPortal } from './ModalPortal';
+import { getIndianFinancialYear } from '../../server/services/numberingService';
 import { Plus, Edit2, Trash2, Check, Building2, GitBranch, X, Globe, Phone, Mail, Landmark, ChevronDown } from 'lucide-react';
 
 interface Props {
@@ -39,6 +40,18 @@ export const CompanyBranchModal: React.FC<Props> = ({
       label: s.name,
       code: s.code,
     }));
+  }, []);
+
+  const dynamicFyList = useMemo(() => {
+    const current = getIndianFinancialYear();
+    const [startYear] = current.split('-').map(Number);
+    const list: string[] = [];
+    for (let offset = -2; offset <= 2; offset++) {
+      const sy = startYear + offset;
+      const ey = String((sy + 1) % 100).padStart(2, '0');
+      list.push(`${sy}-${ey}`);
+    }
+    return list.reverse();
   }, []);
 
   useEffect(() => {
@@ -101,7 +114,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
       state_code: comp?.state_code || '23',
       code: `BR0${branches.length + 1}`,
       email: comp?.email || '',
-      financial_year: comp?.financial_year || '2026-27',
+      financial_year: comp?.financial_year || getIndianFinancialYear(),
       tan: comp?.tan || '',
       cin: comp?.cin || '',
       iso: comp?.iso || '',
@@ -121,7 +134,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
     setBranchFormData({
       ...branch,
       email: branch.email || '',
-      financial_year: branch.financial_year || comp?.financial_year || '2026-27',
+      financial_year: branch.financial_year || comp?.financial_year || getIndianFinancialYear(),
       tan: branch.tan || '',
       cin: branch.cin || '',
       iso: branch.iso || '',
@@ -420,7 +433,7 @@ export const CompanyBranchModal: React.FC<Props> = ({
                       state: 'Madhya Pradesh',
                       state_code: '23',
                       pin_code: '452001',
-                      financial_year: '2026-27',
+                      financial_year: getIndianFinancialYear(),
                     });
                     setIsEditing(true);
                   }}
@@ -754,17 +767,16 @@ export const CompanyBranchModal: React.FC<Props> = ({
                           <input
                             type="text"
                             list="fy-branch-list"
-                            placeholder="e.g. 2026-27"
+                            placeholder={`Auto: ${getIndianFinancialYear()} (Dynamic Rollover)`}
                             value={branchFormData.financial_year || ''}
                             onChange={(e) => setBranchFormData({ ...branchFormData, financial_year: e.target.value })}
                             className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                           />
                           <datalist id="fy-branch-list">
-                            <option value="2026-27" />
-                            <option value="2025-26" />
-                            <option value="2027-28" />
-                            <option value="2024-25" />
-                            <option value="2023-24" />
+                            <option value="" label="Auto: Dynamic Rollover (Follows System Date)" />
+                            {dynamicFyList.map((fy) => (
+                              <option key={fy} value={fy} label={fy === getIndianFinancialYear() ? `${fy} (Current Active FY)` : fy} />
+                            ))}
                           </datalist>
                         </div>
                         <div className="col-span-2">
@@ -1017,15 +1029,14 @@ export const CompanyBranchModal: React.FC<Props> = ({
                     list="fy-company-list"
                     value={editingCompany.financial_year || ''}
                     onChange={(e) => setEditingCompany({ ...editingCompany, financial_year: e.target.value })}
-                    placeholder="e.g. 2026-27"
+                    placeholder={`Auto: ${getIndianFinancialYear()} (Dynamic Rollover)`}
                     className="w-full border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
                   />
                   <datalist id="fy-company-list">
-                    <option value="2026-27" />
-                    <option value="2025-26" />
-                    <option value="2027-28" />
-                    <option value="2024-25" />
-                    <option value="2023-24" />
+                    <option value="" label="Auto: Dynamic Rollover (Follows System Date)" />
+                    {dynamicFyList.map((fy) => (
+                      <option key={fy} value={fy} label={fy === getIndianFinancialYear() ? `${fy} (Current Active FY)` : fy} />
+                    ))}
                   </datalist>
                 </div>
                 <div>

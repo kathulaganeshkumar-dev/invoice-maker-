@@ -36,6 +36,7 @@ import {
   HardDrive,
   Download,
   Copy,
+  Pencil,
 } from 'lucide-react';
 
 interface Props {
@@ -93,6 +94,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
   // Host Staff Creation & Permissions state
   const [hostNewStaffName, setHostNewStaffName] = useState<string>('');
+  const [hostNewStaffIsAdmin, setHostNewStaffIsAdmin] = useState<boolean>(false);
   const [hostNewStaffMenus, setHostNewStaffMenus] = useState<string[]>([
     'invoices',
     'invoices_other',
@@ -107,6 +109,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [hostNewStaffCanSettings, setHostNewStaffCanSettings] = useState<boolean>(false);
   const [hostCreatingStaff, setHostCreatingStaff] = useState<boolean>(false);
   const [expandedStaffId, setExpandedStaffId] = useState<string | null>(null);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
 
   // MD / Admin Menu Permissions state
   const [permLoading, setPermLoading] = useState<boolean>(false);
@@ -123,9 +126,22 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [permStatus, setPermStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [permSavingId, setPermSavingId] = useState<string | null>(null);
 
+  // Simultaneous Multi-Role Batch Creator state
+  const [staffCreationMode, setStaffCreationMode] = useState<'quick' | 'multi_role'>('quick');
+  const [batchStaffRows, setBatchStaffRows] = useState<
+    Array<{
+      id: string;
+      name: string;
+      role: 'OWNER' | 'MANAGER' | 'BILLING' | 'ACCOUNTS' | 'INVENTORY' | 'AUDIT';
+    }>
+  >([
+    { id: '1', name: '', role: 'OWNER' },
+    { id: '2', name: '', role: 'OWNER' },
+  ]);
+
   // 4-Digit PIN Authorization Modal state
   const [pinPromptState, setPinPromptState] = useState<{
-    type: 'CREATE_STAFF' | 'SAVE_STAFF' | 'DELETE_STAFF';
+    type: 'CREATE_STAFF' | 'SAVE_STAFF' | 'DELETE_STAFF' | 'BATCH_STAFF';
     title: string;
     description: string;
     data?: any;
@@ -608,7 +624,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
       } else {
         setLanStatus({
           success: false,
-          message: 'Direct Desktop LAN test is available inside the installed Enterprise Invoice Manager desktop app.',
+          message: 'Direct Desktop LAN test is available inside the installed Enterprise Management desktop app.',
         });
       }
     } catch (err: any) {
@@ -787,32 +803,190 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     }
   };
 
-  const handleInitiateCreateStaff = () => {
+  const handleInitiateCreateStaff = async () => {
     const clean = hostNewStaffName.trim();
     if (!clean) {
-      setPermStatus({ success: false, message: 'Please enter a name for the staff member.' });
+      setPermStatus({ success: false, message: 'Please enter a name for the worker.' });
       return;
     }
+    const detectedNames = clean.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+    if (detectedNames.length === 0) {
+      setPermStatus({ success: false, message: 'Please enter at least one valid name.' });
+      return;
+    }
+
+    const pinToTry = sessionAdminPin || (!permHasCustomPin ? '1234' : '');
+    const allowedMenus = hostNewStaffIsAdmin ? [...permMenuCatalog.map((m) => m.id)] : [...hostNewStaffMenus];
+    const canOpenSettings = hostNewStaffIsAdmin || hostNewStaffCanSettings;
+    const isAdmin = hostNewStaffIsAdmin;
+
+    // Fast path: if session PIN or default PIN (no custom PIN set) is available, create immediately
+    if (pinToTry) {
+      setHostCreatingStaff(true);
+      try {
+        await api.createStaffMember(clean, allowedMenus, canOpenSettings, pinToTry, isAdmin, detectedNames);
+        setSessionAdminPin(pinToTry);
+        setPermStatus({
+          success: true,
+          message:
+            detectedNames.length > 1
+              ? `Successfully created ${detectedNames.length} ${isAdmin ? 'owners' : 'workers'} (${detectedNames.join(', ')}) simultaneously!`
+              : `Worker "${detectedNames[0]}" created successfully!`,
+        });
+        setHostNewStaffName('');
+        setHostNewStaffIsAdmin(false);
+        setHostNewStaffMenus(
+          permDefaultStaffMenus.length > 0
+            ? [...permDefaultStaffMenus]
+            : ['invoices', 'invoices_other', 'quotations', 'customers', 'suppliers', 'products', 'purchases', 'inventory', 'payments']
+        );
+        await loadWorkstationPermissions();
+        setHostCreatingStaff(false);
+        return;
+      } catch (err: any) {
+        if (err?.message && !err.message.toLowerCase().includes('pin')) {
+          setPermStatus({ success: false, message: err.message });
+          setHostCreatingStaff(false);
+          return;
+        }
+      } finally {
+        setHostCreatingStaff(false);
+      }
+    }
+
     setPinPromptState({
       type: 'CREATE_STAFF',
-      title: `Create Staff Member "${clean}"`,
-      description: `Enter the 4-digit MD / Admin PIN to authorize and create staff member "${clean}" with ${hostNewStaffMenus.length} allowed menus:`,
+      title:
+        detectedNames.length > 1
+          ? `Create ${detectedNames.length} ${isAdmin ? 'Owners' : 'Staff Members'}`
+          : `Create Worker "${detectedNames[0]}"`,
+      description: `Enter the 4-digit Admin PIN to authorize creating ${
+        detectedNames.length > 1
+          ? `${detectedNames.length} ${isAdmin ? 'owners' : 'workers'} (${detectedNames.join(', ')}) simultaneously`
+          : `worker "${detectedNames[0]}"`
+      } (${hostNewStaffIsAdmin ? 'Full Admin / Manager' : `${allowedMenus.length} allowed menus`})${!permHasCustomPin ? ' (Default PIN is 1234)' : ''}:`,
       data: {
         staffName: clean,
-        allowedMenus: [...hostNewStaffMenus],
-        canOpenSettings: hostNewStaffCanSettings,
+        staffNames: detectedNames,
+        allowedMenus,
+        canOpenSettings,
+        isAdmin,
       },
     });
     setPinPromptInput('');
     setPinPromptError('');
   };
 
-  const handleInitiateSaveWorkstation = (ws: any) => {
+  const handleCreateBatchStaff = async () => {
+    const validRows = batchStaffRows
+      .map((r) => ({ ...r, name: r.name.trim() }))
+      .filter((r) => r.name.length > 0);
+
+    if (validRows.length === 0) {
+      setPermStatus({ success: false, message: 'Please enter at least one staff member name.' });
+      return;
+    }
+
+    const pinToTry = sessionAdminPin || (!permHasCustomPin ? '1234' : '');
+    const staffList = validRows.map((r) => {
+      const isAdmin = r.role === 'OWNER';
+      let menus: string[] = [];
+      if (r.role === 'OWNER') menus = permMenuCatalog.length > 0 ? permMenuCatalog.map((m) => m.id) : [];
+      else if (r.role === 'MANAGER') menus = ['dashboard', 'reports', 'work_summary', 'invoices', 'invoices_other', 'quotations', 'customers', 'suppliers', 'products', 'purchases', 'inventory', 'payments'];
+      else if (r.role === 'BILLING') menus = ['invoices', 'invoices_other', 'quotations', 'customers', 'products'];
+      else if (r.role === 'ACCOUNTS') menus = ['invoices', 'invoices_other', 'quotations', 'customers', 'suppliers', 'products', 'purchases', 'inventory', 'payments'];
+      else if (r.role === 'INVENTORY') menus = ['products', 'purchases', 'inventory'];
+      else if (r.role === 'AUDIT') menus = ['dashboard', 'reports', 'work_summary'];
+      return {
+        staff_name: r.name,
+        is_admin: isAdmin,
+        allowed_menus: menus,
+        can_open_settings: true,
+      };
+    });
+
+    if (pinToTry) {
+      setHostCreatingStaff(true);
+      try {
+        await api.createStaffMembersBatch(staffList, pinToTry);
+        setSessionAdminPin(pinToTry);
+        setPermStatus({
+          success: true,
+          message: `Successfully created all ${validRows.length} staff members and owners simultaneously!`,
+        });
+        setBatchStaffRows([
+          { id: String(Date.now()), name: '', role: 'OWNER' },
+          { id: String(Date.now() + 1), name: '', role: 'OWNER' },
+        ]);
+        await loadWorkstationPermissions();
+        setHostCreatingStaff(false);
+        return;
+      } catch (err: any) {
+        if (err?.message && !err.message.toLowerCase().includes('pin')) {
+          setPermStatus({ success: false, message: err.message });
+          setHostCreatingStaff(false);
+          return;
+        }
+      } finally {
+        setHostCreatingStaff(false);
+      }
+    }
+
+    setPinPromptState({
+      type: 'BATCH_STAFF',
+      title: `Create ${validRows.length} Staff Members & Owners`,
+      description: `Enter the 4-digit Admin PIN to authorize creating ${validRows.length} staff members and owners simultaneously${!permHasCustomPin ? ' (Default PIN is 1234)' : ''}:`,
+      data: {
+        staffList,
+      },
+    });
+    setPinPromptInput('');
+    setPinPromptError('');
+  };
+
+  const handleInitiateSaveWorkstation = async (ws: any) => {
+    const cleanName = String(ws.device_name || '').trim();
+    if (!cleanName) {
+      setPermStatus({ success: false, message: 'Staff member name cannot be blank.' });
+      return;
+    }
+    const pinToTry = sessionAdminPin || (!permHasCustomPin ? '1234' : '');
+    if (pinToTry) {
+      setPermSavingId(ws.device_id);
+      try {
+        await api.updateWorkstationPermission(
+          ws.device_id,
+          {
+            device_name: cleanName,
+            is_admin: Boolean(ws.is_admin),
+            allowed_menus: ws.allowed_menus,
+            can_open_settings: Boolean(ws.can_open_settings),
+          },
+          pinToTry
+        );
+        setSessionAdminPin(pinToTry);
+        setPermStatus({ success: true, message: `Saved menu permissions for "${cleanName}"!` });
+        window.dispatchEvent(new Event('eim-permissions-changed'));
+        await loadWorkstationPermissions();
+        setPermSavingId(null);
+        return;
+      } catch (err: any) {
+        if (err?.message && !err.message.toLowerCase().includes('pin')) {
+          setPermStatus({ success: false, message: err.message });
+          setPermSavingId(null);
+          return;
+        }
+      } finally {
+        setPermSavingId(null);
+      }
+    }
     setPinPromptState({
       type: 'SAVE_STAFF',
-      title: `Save Permissions for "${ws.device_name}"`,
-      description: `Enter the 4-digit MD / Admin PIN to authorize and save updated menu permissions for "${ws.device_name}":`,
-      data: { ws },
+      title: `Save Changes for "${cleanName}"`,
+      description: `Enter the 4-digit Admin PIN to authorize and save updated name and menu permissions for "${cleanName}"${
+        !permHasCustomPin ? ' (Default PIN is 1234)' : ''
+      }:`,
+      data: { ws: { ...ws, device_name: cleanName, staff_name: cleanName } },
     });
     setPinPromptInput('');
     setPinPromptError('');
@@ -840,18 +1014,37 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     setPinPromptError('');
     try {
       if (pinPromptState.type === 'CREATE_STAFF') {
-        const { staffName, allowedMenus, canOpenSettings } = pinPromptState.data;
-        await api.createStaffMember(staffName, allowedMenus, canOpenSettings, cleanPin);
+        const { staffName, staffNames, allowedMenus, canOpenSettings, isAdmin } = pinPromptState.data;
+        await api.createStaffMember(staffName, allowedMenus, canOpenSettings, cleanPin, isAdmin, staffNames);
+        setSessionAdminPin(cleanPin);
+        const count = staffNames?.length || 1;
         setPermStatus({
           success: true,
-          message: `Staff member "${staffName}" created with ${allowedMenus.length} allowed menus!`,
+          message:
+            count > 1
+              ? `Successfully created ${count} ${isAdmin ? 'owners' : 'workers'} (${staffNames.join(', ')}) simultaneously!`
+              : `Worker "${staffName}" created successfully!`,
         });
         setHostNewStaffName('');
+        setHostNewStaffIsAdmin(false);
         setHostNewStaffMenus(
           permDefaultStaffMenus.length > 0
             ? [...permDefaultStaffMenus]
             : ['invoices', 'invoices_other', 'quotations', 'customers', 'suppliers', 'products', 'purchases', 'inventory', 'payments']
         );
+        await loadWorkstationPermissions();
+      } else if (pinPromptState.type === 'BATCH_STAFF') {
+        const { staffList } = pinPromptState.data;
+        await api.createStaffMembersBatch(staffList, cleanPin);
+        setSessionAdminPin(cleanPin);
+        setPermStatus({
+          success: true,
+          message: `Successfully created all ${staffList.length} staff members and owners simultaneously!`,
+        });
+        setBatchStaffRows([
+          { id: String(Date.now()), name: '', role: 'OWNER' },
+          { id: String(Date.now() + 1), name: '', role: 'OWNER' },
+        ]);
         await loadWorkstationPermissions();
       } else if (pinPromptState.type === 'SAVE_STAFF') {
         const { ws } = pinPromptState.data;
@@ -906,8 +1099,8 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
       try {
         const listRes = await api.getWorkstations();
-        const staffOnly = (listRes.workstations || []).filter((w: any) => !w.is_admin && w.role !== 'ADMIN');
-        setPermWorkstations(staffOnly);
+        const allStaff = (listRes.workstations || []).filter((w: any) => w.device_id !== 'local-host-pc' && w.device_id !== 'host-server');
+        setPermWorkstations(allStaff);
         setPermDefaultStaffMenus(listRes.default_staff_menus || []);
         setPermHasCustomPin(Boolean(listRes.has_custom_pin ?? me.has_custom_pin));
         setPermUnlocked(true);
@@ -967,6 +1160,15 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
     } catch (err: any) {
       setPermStatus({ success: false, message: err?.message || 'Could not update MD / Admin PIN.' });
     }
+  };
+
+  const updateWorkstationName = (deviceId: string, newName: string) => {
+    setPermWorkstations((prev) =>
+      prev.map((ws) => {
+        if (ws.device_id !== deviceId) return ws;
+        return { ...ws, device_name: newName, staff_name: newName };
+      })
+    );
   };
 
   const toggleWorkstationMenu = (deviceId: string, menuId: string) => {
@@ -1531,7 +1733,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             </div>
                           )}
                           <span className="mt-1.5 text-[9px] font-semibold text-center leading-tight text-white/95">
-                            Enterprise Invoice
+                            Enterprise Management
                           </span>
                           <span className="text-[8px] text-sky-300 uppercase font-bold mt-0.5">Desktop</span>
                         </div>
@@ -1551,7 +1753,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               </div>
                             )}
                             <span className="text-[11px] font-extrabold text-brand-900 dark:text-brand-300 leading-tight">
-                              Enterprise<br />Invoicer
+                              Enterprise<br />Management
                             </span>
                           </div>
                           <span className="text-[8px] text-slate-400 uppercase font-bold">Top Bar Match</span>
@@ -2129,7 +2331,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         <span>Software Operating Mode</span>
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Select how you want to use Enterprise Invoice Manager in your office.
+                        Select how you want to use Enterprise Management in your office.
                       </p>
                     </div>
                     <span
@@ -2314,7 +2516,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             }`}
                           >
                             <Server className="w-3.5 h-3.5" />
-                            <span>Host (Main PC)</span>
+                            <span>Central Server (Office Host)</span>
                           </button>
                           <button
                             type="button"
@@ -2329,7 +2531,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             }`}
                           >
                             <Users className="w-3.5 h-3.5" />
-                            <span>Staff (Staff PC)</span>
+                            <span>Worker PC (Owner / Staff)</span>
                           </button>
                         </div>
                       </div>
@@ -2434,132 +2636,397 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           {/* Staff Member Creation Form */}
                           <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
                             <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                              <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                                <span>Create Staff Member &amp; Assign Menu Permissions</span>
-                              </h4>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Enter a staff name (e.g. Ramesh) and choose which menus they can access. When they enter this name on their computer, the software will automatically recognize and apply these permissions.
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                                  <Users className="w-4 h-4 text-brand-600" />
+                                  <span>Create Staff &amp; Owner Profiles (Simultaneous / Unrestricted)</span>
+                                </h4>
+                                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-900 text-xs font-semibold">
+                                  <button
+                                    type="button"
+                                    onClick={() => setStaffCreationMode('quick')}
+                                    className={`px-3 py-1 rounded-md transition-all ${
+                                      staffCreationMode === 'quick'
+                                        ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                                  >
+                                    ⚡ Quick Simultaneous Creator
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setStaffCreationMode('multi_role')}
+                                    className={`px-3 py-1 rounded-md transition-all ${
+                                      staffCreationMode === 'multi_role'
+                                        ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                                  >
+                                    📋 Multi-Role Batch Creator
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                Create any number of Owners, Managers, or Staff members simultaneously without restrictions. When staff or owners connect from their computers using their name, the server instantly applies their role and permissions.
                               </p>
                             </div>
 
-                            <div className="space-y-3">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Staff Member Name *
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Ramesh, Priya, Billing Desk, Accounts"
-                                  value={hostNewStaffName}
-                                  onChange={(e) => setHostNewStaffName(e.target.value)}
-                                  className="w-full sm:w-80 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                />
-                              </div>
+                            {staffCreationMode === 'quick' ? (
+                              <div className="space-y-3.5">
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                      {hostNewStaffIsAdmin ? 'Owner / Manager Name(s) *' : 'Worker / Staff Member Name(s) *'}
+                                    </label>
+                                    <span className="text-[11px] text-slate-400">
+                                      Separate multiple names with commas or newlines (e.g. Owner 1, Owner 2, Owner 3, Owner 4)
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    placeholder={
+                                      hostNewStaffIsAdmin
+                                        ? 'e.g. Owner 1, Owner 2, Owner 3, Owner 4 (or Rajesh, Priya, Vikram)'
+                                        : 'e.g. Ramesh, Priya, Billing Desk 1, Accounts Staff'
+                                    }
+                                    value={hostNewStaffName}
+                                    onChange={(e) => setHostNewStaffName(e.target.value)}
+                                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                  />
 
-                              <div>
-                                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                    Allowed Menus for this Staff Member ({hostNewStaffMenus.length} selected):
-                                  </label>
-                                  <div className="flex items-center space-x-2 text-[11px]">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setHostNewStaffMenus([
-                                          'invoices',
-                                          'invoices_other',
-                                          'quotations',
-                                          'customers',
-                                          'products',
-                                        ])
-                                      }
-                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
-                                    >
-                                      Billing Staff (No Dashboard/Reports)
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setHostNewStaffMenus([
-                                          'invoices',
-                                          'invoices_other',
-                                          'quotations',
-                                          'customers',
-                                          'suppliers',
-                                          'products',
-                                          'purchases',
-                                          'inventory',
-                                          'payments',
-                                        ])
-                                      }
-                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
-                                    >
-                                      Accounts &amp; Inventory
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setHostNewStaffMenus(
-                                          permMenuCatalog.length > 0 ? permMenuCatalog.map((m) => m.id) : []
-                                        )
-                                      }
-                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
-                                    >
-                                      Select All
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setHostNewStaffMenus([])}
-                                      className="px-2 py-0.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded font-semibold"
-                                    >
-                                      Clear
-                                    </button>
+                                  {/* Simultaneous creation live indicator */}
+                                  {(() => {
+                                    const detected = hostNewStaffName
+                                      .split(/[\r\n,]+/)
+                                      .map((s) => s.trim())
+                                      .filter(Boolean);
+                                    if (detected.length > 1) {
+                                      return (
+                                        <div className="mt-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs flex flex-wrap items-center gap-2">
+                                          <span className="font-bold flex items-center space-x-1 text-amber-700 dark:text-amber-400">
+                                            <span>⚡ Simultaneous Creation:</span>
+                                          </span>
+                                          <span>
+                                            {detected.length} {hostNewStaffIsAdmin ? 'Owner profiles' : 'Staff profiles'} will be created at once:
+                                          </span>
+                                          <div className="flex flex-wrap gap-1">
+                                            {detected.map((n, idx) => (
+                                              <span
+                                                key={idx}
+                                                className="px-2 py-0.5 bg-amber-200/70 dark:bg-amber-900/60 font-mono font-bold rounded text-[11px]"
+                                              >
+                                                {n}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                </div>
+
+                                <div>
+                                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                      Role Preset &amp; Allowed Modules:
+                                    </label>
+                                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(true);
+                                          setHostNewStaffMenus(
+                                            permMenuCatalog.length > 0 ? permMenuCatalog.map((m) => m.id) : []
+                                          );
+                                        }}
+                                        className={`px-2.5 py-1 rounded font-semibold transition-all ${
+                                          hostNewStaffIsAdmin
+                                            ? 'bg-amber-600 text-white shadow-xs'
+                                            : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100'
+                                        }`}
+                                      >
+                                        👑 Owner / Full Admin (All 15 Access)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus([
+                                            'dashboard',
+                                            'reports',
+                                            'work_summary',
+                                            'invoices',
+                                            'invoices_other',
+                                            'quotations',
+                                            'customers',
+                                            'suppliers',
+                                            'products',
+                                            'purchases',
+                                            'inventory',
+                                            'payments',
+                                          ]);
+                                        }}
+                                        className={`px-2 py-0.5 rounded font-semibold ${
+                                          !hostNewStaffIsAdmin && hostNewStaffMenus.length === 12
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        👔 Manager / Partner
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus([
+                                            'invoices',
+                                            'invoices_other',
+                                            'quotations',
+                                            'customers',
+                                            'products',
+                                          ]);
+                                        }}
+                                        className={`px-2 py-0.5 rounded font-semibold ${
+                                          !hostNewStaffIsAdmin && hostNewStaffMenus.length === 5
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        🧾 Billing Staff
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus([
+                                            'invoices',
+                                            'invoices_other',
+                                            'quotations',
+                                            'customers',
+                                            'suppliers',
+                                            'products',
+                                            'purchases',
+                                            'inventory',
+                                            'payments',
+                                          ]);
+                                        }}
+                                        className={`px-2 py-0.5 rounded font-semibold ${
+                                          !hostNewStaffIsAdmin && hostNewStaffMenus.length === 9
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        📊 Accounts &amp; Inventory
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus(['products', 'purchases', 'inventory']);
+                                        }}
+                                        className={`px-2 py-0.5 rounded font-semibold ${
+                                          !hostNewStaffIsAdmin && hostNewStaffMenus.length === 3
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        📦 Warehouse &amp; Stock
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus([
+                                            'dashboard',
+                                            'reports',
+                                            'work_summary',
+                                          ]);
+                                        }}
+                                        className={`px-2 py-0.5 rounded font-semibold ${
+                                          !hostNewStaffIsAdmin && hostNewStaffMenus.length === 3 && hostNewStaffMenus.includes('dashboard')
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        👁️ Audit Only
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus(
+                                            permMenuCatalog.length > 0 ? permMenuCatalog.map((m) => m.id) : []
+                                          );
+                                        }}
+                                        className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded font-semibold"
+                                      >
+                                        Select All
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setHostNewStaffIsAdmin(false);
+                                          setHostNewStaffMenus([]);
+                                        }}
+                                        className="px-2 py-0.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded font-semibold"
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                                    {permMenuCatalog.map((m) => {
+                                      const checked = hostNewStaffIsAdmin || hostNewStaffMenus.includes(m.id);
+                                      return (
+                                        <label
+                                          key={m.id}
+                                          className={`flex items-center space-x-2 p-1.5 rounded border cursor-pointer transition-colors ${
+                                            checked
+                                              ? 'bg-brand-50 dark:bg-brand-950/60 border-brand-200 dark:border-brand-800 text-brand-950 dark:text-brand-300 font-semibold'
+                                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={hostNewStaffIsAdmin}
+                                            onChange={() =>
+                                              setHostNewStaffMenus((prev) =>
+                                                prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]
+                                              )
+                                            }
+                                            className="w-3.5 h-3.5 rounded text-brand-600"
+                                          />
+                                          <span className="truncate">{m.label}</span>
+                                        </label>
+                                      );
+                                    })}
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
-                                  {permMenuCatalog.map((m) => {
-                                    const checked = hostNewStaffMenus.includes(m.id);
+                                <div className="flex justify-end pt-1">
+                                  {(() => {
+                                    const detected = hostNewStaffName
+                                      .split(/[\r\n,]+/)
+                                      .map((s) => s.trim())
+                                      .filter(Boolean);
+                                    const count = detected.length;
                                     return (
-                                      <label
-                                        key={m.id}
-                                        className={`flex items-center space-x-2 p-1.5 rounded border cursor-pointer transition-colors ${
-                                          checked
-                                            ? 'bg-brand-50 dark:bg-brand-950/60 border-brand-200 dark:border-brand-800 text-brand-950 dark:text-brand-300 font-semibold'
-                                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-                                        }`}
+                                      <button
+                                        type="button"
+                                        disabled={hostCreatingStaff || count === 0}
+                                        onClick={handleInitiateCreateStaff}
+                                        className="px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded-lg text-xs font-bold shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
                                       >
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          onChange={() =>
-                                            setHostNewStaffMenus((prev) =>
-                                              prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]
-                                            )
-                                          }
-                                          className="w-3.5 h-3.5 rounded text-brand-600"
-                                        />
-                                        <span className="truncate">{m.label}</span>
-                                      </label>
+                                        {hostCreatingStaff && (
+                                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                        )}
+                                        <span>
+                                          {count > 1
+                                            ? `Create ${count} ${hostNewStaffIsAdmin ? 'Owners' : 'Staff Members'} Simultaneously`
+                                            : `Create ${hostNewStaffIsAdmin ? 'Owner Profile' : 'Staff Member'}`}
+                                        </span>
+                                      </button>
                                     );
-                                  })}
+                                  })()}
                                 </div>
                               </div>
+                            ) : (
+                              /* Multi-Role Batch Creator */
+                              <div className="space-y-3.5">
+                                <div className="space-y-2">
+                                  {batchStaffRows.map((row, idx) => (
+                                    <div
+                                      key={row.id}
+                                      className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-xs"
+                                    >
+                                      <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-[11px] text-slate-700 dark:text-slate-300">
+                                        {idx + 1}
+                                      </span>
+                                      <input
+                                        type="text"
+                                        placeholder={`Staff / Owner #${idx + 1} Name (e.g. Owner ${idx + 1}, Ramesh)`}
+                                        value={row.name}
+                                        onChange={(e) => {
+                                          const next = [...batchStaffRows];
+                                          next[idx].name = e.target.value;
+                                          setBatchStaffRows(next);
+                                        }}
+                                        className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                      />
+                                      <select
+                                        value={row.role}
+                                        onChange={(e) => {
+                                          const next = [...batchStaffRows];
+                                          next[idx].role = e.target.value as any;
+                                          setBatchStaffRows(next);
+                                        }}
+                                        className="border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold focus:outline-none"
+                                      >
+                                        <option value="OWNER">👑 Owner / Full Admin (All 15 Access)</option>
+                                        <option value="MANAGER">👔 Manager / Partner (Operations + Reports)</option>
+                                        <option value="BILLING">🧾 Billing Staff (Sales &amp; Quotes)</option>
+                                        <option value="ACCOUNTS">📊 Accounts &amp; Inventory Staff</option>
+                                        <option value="INVENTORY">📦 Warehouse &amp; Stock</option>
+                                        <option value="AUDIT">👁️ Audit / View Only</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        disabled={batchStaffRows.length <= 1}
+                                        onClick={() => {
+                                          setBatchStaffRows(batchStaffRows.filter((_, i) => i !== idx));
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 rounded"
+                                        title="Remove row"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
 
-                              <div className="flex justify-end pt-1">
-                                <button
-                                  type="button"
-                                  disabled={hostCreatingStaff || !hostNewStaffName.trim()}
-                                  onClick={handleInitiateCreateStaff}
-                                  className="px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded-lg text-xs font-bold shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
-                                >
-                                  {hostCreatingStaff && (
-                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                  )}
-                                  <span>Create Staff Member</span>
-                                </button>
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setBatchStaffRows([
+                                        ...batchStaffRows,
+                                        {
+                                          id: String(Date.now() + Math.random()),
+                                          name: '',
+                                          role: 'OWNER',
+                                        },
+                                      ]);
+                                    }}
+                                    className="px-3 py-1.5 border border-dashed border-slate-300 dark:border-slate-600 hover:border-brand-500 hover:text-brand-600 rounded-lg text-xs font-semibold flex items-center space-x-1 transition-colors"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>+ Add Another Staff / Owner Row</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      hostCreatingStaff ||
+                                      batchStaffRows.filter((r) => r.name.trim().length > 0).length === 0
+                                    }
+                                    onClick={handleCreateBatchStaff}
+                                    className="px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded-lg text-xs font-bold shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
+                                  >
+                                    {hostCreatingStaff && (
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    )}
+                                    <span>
+                                      Create All (
+                                      {batchStaffRows.filter((r) => r.name.trim().length > 0).length}) Staff Members
+                                      Simultaneously
+                                    </span>
+                                  </button>
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
 
                           {/* Existing Staff Members List */}
@@ -2568,7 +3035,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               <div>
                                 <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
                                   <Users className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                                  <span>Configured Office Staff Members ({permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').length})</span>
+                                  <span>Configured Office Staff Members ({permWorkstations.length})</span>
                                 </h4>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                   Staff will automatically receive these permissions when they enter their name on their computer.
@@ -2576,13 +3043,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               </div>
                             </div>
 
-                            {permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').length === 0 ? (
+                            {permWorkstations.length === 0 ? (
                               <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
                                 No staff members created yet. Use the form above to add your office staff members by name.
                               </div>
                             ) : (
                               <div className="space-y-3">
-                                {permWorkstations.filter((w) => !w.is_admin && w.role !== 'ADMIN').map((ws) => {
+                                {permWorkstations.map((ws) => {
                                   const isExpanded = expandedStaffId === ws.device_id;
                                   return (
                                     <div
@@ -2591,12 +3058,52 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex items-center space-x-2.5">
-                                          <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300 flex items-center justify-center font-bold text-xs uppercase">
-                                            {(ws.device_name || 'S').charAt(0)}
+                                          <div
+                                            className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs uppercase ${
+                                              ws.is_admin
+                                                ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                                                : 'bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300'
+                                            }`}
+                                          >
+                                            {(ws.device_name || 'W').charAt(0)}
                                           </div>
                                           <div>
                                             <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                                              <span>{ws.device_name}</span>
+                                              {editingNameId === ws.device_id ? (
+                                                <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                                                  <input
+                                                    type="text"
+                                                    value={ws.device_name}
+                                                    onChange={(e) => updateWorkstationName(ws.device_id, e.target.value)}
+                                                    className="px-2 py-0.5 text-xs font-bold border border-brand-500 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                                    placeholder="Staff Name"
+                                                    autoFocus
+                                                  />
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setEditingNameId(null)}
+                                                    className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded transition-colors"
+                                                    title="Done"
+                                                  >
+                                                    <Check className="w-3.5 h-3.5" />
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <div className="flex items-center space-x-1.5">
+                                                  <span>{ws.device_name}</span>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingNameId(ws.device_id);
+                                                      if (expandedStaffId !== ws.device_id) setExpandedStaffId(ws.device_id);
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                                                    title="Change Staff Name"
+                                                  >
+                                                    <Pencil className="w-3 h-3" />
+                                                  </button>
+                                                </div>
+                                              )}
                                               <span
                                                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                                   ws.is_admin
@@ -2604,12 +3111,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                                     : 'bg-brand-100 dark:bg-brand-950/50 text-brand-800 dark:text-brand-300'
                                                 }`}
                                               >
-                                                {ws.is_admin ? 'MD / Full Admin' : 'Staff Member'}
+                                                {ws.is_admin ? 'Owner / Full Admin' : 'Worker'}
                                               </span>
                                             </div>
                                             <div className="text-[11px] text-slate-500 dark:text-slate-400">
                                               {ws.is_admin
-                                                ? 'All menus allowed'
+                                                ? 'All menus allowed (Full Permissions)'
                                                 : `${ws.allowed_menus?.length || 0} menus allowed (Dashboard & Reports ${
                                                     ws.allowed_menus?.includes('dashboard') ? 'visible' : 'hidden'
                                                   })`}
@@ -2637,9 +3144,29 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                         </div>
                                       </div>
 
-                                      {/* Expanded Menu Editor */}
+                                      {/* Expanded Menu & Name Editor */}
                                       {isExpanded && (
                                         <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2.5">
+                                          {/* Direct Staff Name Edit Box */}
+                                          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                                            <div className="flex items-center space-x-2 flex-1 min-w-[240px]">
+                                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap flex items-center space-x-1">
+                                                <Pencil className="w-3 h-3 text-brand-600" />
+                                                <span>Staff Member Name:</span>
+                                              </label>
+                                              <input
+                                                type="text"
+                                                value={ws.device_name}
+                                                onChange={(e) => updateWorkstationName(ws.device_id, e.target.value)}
+                                                placeholder="e.g. Ramesh, Priya, Veer"
+                                                className="w-full max-w-xs px-2.5 py-1 text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                              />
+                                            </div>
+                                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                              Staff will enter this name on their computer to connect.
+                                            </div>
+                                          </div>
+
                                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
                                             {permMenuCatalog.map((m) => {
                                               const checked = ws.is_admin || ws.allowed_menus?.includes(m.id);
@@ -2669,9 +3196,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                               type="button"
                                               disabled={permSavingId === ws.device_id}
                                               onClick={() => handleInitiateSaveWorkstation(ws)}
-                                              className="px-3 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-xs font-bold flex items-center space-x-1 shadow-sm disabled:opacity-50"
+                                              className="px-3.5 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs rounded text-xs font-bold flex items-center space-x-1.5 shadow-sm disabled:opacity-50"
                                             >
-                                              <span>{permSavingId === ws.device_id ? 'Saving...' : 'Save Permissions'}</span>
+                                              {permSavingId === ws.device_id ? (
+                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                              ) : (
+                                                <Save className="w-3.5 h-3.5 text-brand-600" />
+                                              )}
+                                              <span>{permSavingId === ws.device_id ? 'Saving...' : 'Save Changes'}</span>
                                             </button>
                                           </div>
                                         </div>
@@ -2845,7 +3377,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                     <div>
                       <span className="text-slate-400 font-medium block">Application Version</span>
-                      <span className="font-bold text-slate-800 dark:text-slate-100">Enterprise Invoice Manager v2.0.0</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">Enterprise Management v2.0.0</span>
                     </div>
                     <div>
                       <span className="text-slate-400 font-medium block">Database Persistence Engine</span>

@@ -55,22 +55,53 @@ export const DEFAULT_STAFF_MENUS: MenuId[] = [
 
 export const PRESET_PERMISSIONS = {
   MD_FULL_ADMIN: {
-    label: 'MD / Full Admin',
+    label: 'Owner / Full Admin (All Access)',
     is_admin: true,
     can_open_settings: true,
     allowed_menus: [...ALL_MENU_IDS],
   },
+  MANAGER_PARTNER: {
+    label: 'Manager / Partner (Operations + Reports)',
+    is_admin: false,
+    can_open_settings: true,
+    allowed_menus: [
+      'dashboard',
+      'reports',
+      'work_summary',
+      'invoices',
+      'invoices_other',
+      'quotations',
+      'customers',
+      'suppliers',
+      'products',
+      'purchases',
+      'inventory',
+      'payments',
+    ] as MenuId[],
+  },
   BILLING_STAFF: {
-    label: 'Billing Staff (No Dashboard/Reports)',
+    label: 'Billing Staff (Sales & Quotations)',
     is_admin: false,
     can_open_settings: true,
     allowed_menus: ['invoices', 'invoices_other', 'quotations', 'customers', 'products'] as MenuId[],
   },
   ACCOUNTS_STAFF: {
-    label: 'Accounts & Inventory Staff (No Dashboard/Reports)',
+    label: 'Accounts & Inventory Staff',
     is_admin: false,
     can_open_settings: true,
     allowed_menus: [...DEFAULT_STAFF_MENUS],
+  },
+  INVENTORY_WAREHOUSE: {
+    label: 'Warehouse & Stock Staff',
+    is_admin: false,
+    can_open_settings: true,
+    allowed_menus: ['products', 'purchases', 'inventory'] as MenuId[],
+  },
+  VIEW_ONLY_AUDIT: {
+    label: 'Audit / View Only (Dashboard & Reports)',
+    is_admin: false,
+    can_open_settings: true,
+    allowed_menus: ['dashboard', 'reports', 'work_summary'] as MenuId[],
   },
 };
 
@@ -271,7 +302,60 @@ export class WorkstationService {
   async createStaffMember(
     staffName: string,
     allowedMenus?: MenuId[],
-    canOpenSettings = true
+    canOpenSettings = true,
+    isAdmin = false
+  ): Promise<WorkstationPermission> {
+    const rawNames = String(staffName || '')
+      .split(/[\r\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (rawNames.length === 0) {
+      throw new Error('Please enter at least one staff member name.');
+    }
+
+    if (rawNames.length > 1) {
+      let lastCreated: WorkstationPermission | null = null;
+      for (const singleName of rawNames) {
+        lastCreated = await this._createSingleStaff(singleName, allowedMenus, canOpenSettings, isAdmin);
+      }
+      return lastCreated!;
+    }
+
+    return this._createSingleStaff(rawNames[0], allowedMenus, canOpenSettings, isAdmin);
+  }
+
+  async createStaffMembersBatch(
+    staffList: Array<{
+      staff_name: string;
+      allowed_menus?: MenuId[];
+      can_open_settings?: boolean;
+      is_admin?: boolean;
+    }>
+  ): Promise<WorkstationPermission[]> {
+    const results: WorkstationPermission[] = [];
+    for (const item of staffList) {
+      const clean = String(item.staff_name || '').trim();
+      if (!clean) continue;
+      const splitNames = clean.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+      for (const singleName of splitNames) {
+        const created = await this._createSingleStaff(
+          singleName,
+          item.allowed_menus,
+          item.can_open_settings ?? true,
+          item.is_admin ?? false
+        );
+        results.push(created);
+      }
+    }
+    return results;
+  }
+
+  private async _createSingleStaff(
+    staffName: string,
+    allowedMenus?: MenuId[],
+    canOpenSettings = true,
+    isAdmin = false
   ): Promise<WorkstationPermission> {
     const cleanName = sanitizeDeviceName(staffName, '').trim();
     if (!cleanName) {
@@ -279,10 +363,11 @@ export class WorkstationService {
     }
     const now = new Date().toISOString();
     const defaultMenus = await this.getDefaultStaffMenus();
-    const cleanMenus =
-      allowedMenus && Array.isArray(allowedMenus) && allowedMenus.length > 0
-        ? sanitizeMenuList(allowedMenus)
-        : defaultMenus;
+    const cleanMenus = isAdmin
+      ? [...ALL_MENU_IDS]
+      : allowedMenus && Array.isArray(allowedMenus) && allowedMenus.length > 0
+      ? sanitizeMenuList(allowedMenus)
+      : defaultMenus;
 
     // Check if staff member with this name already exists (case-insensitive)
     const existing = await this.db('workstation_permissions')
@@ -295,10 +380,10 @@ export class WorkstationService {
         .update({
           device_name: cleanName,
           staff_name: cleanName,
-          role: 'STAFF',
-          is_admin: false,
+          role: isAdmin ? 'ADMIN' : 'STAFF',
+          is_admin: Boolean(isAdmin),
           allowed_menus_json: JSON.stringify(cleanMenus),
-          can_open_settings: Boolean(canOpenSettings),
+          can_open_settings: isAdmin ? true : Boolean(canOpenSettings),
           updated_at: now,
         });
       const updated = await this.db('workstation_permissions').where({ device_id: existing.device_id }).first();
@@ -311,10 +396,10 @@ export class WorkstationService {
       device_id: deviceId,
       device_name: cleanName,
       staff_name: cleanName,
-      role: 'STAFF',
-      is_admin: false,
+      role: isAdmin ? 'ADMIN' : 'STAFF',
+      is_admin: Boolean(isAdmin),
       allowed_menus_json: JSON.stringify(cleanMenus),
-      can_open_settings: Boolean(canOpenSettings),
+      can_open_settings: isAdmin ? true : Boolean(canOpenSettings),
       last_ip: null,
       last_seen_at: now,
       created_at: now,
@@ -380,16 +465,11 @@ export class WorkstationService {
       }
     }
 
-    // 2. Loopback Host PC is ALWAYS MD Admin by definition (does not pollute staff list)
+    // 2. Loopback Host PC is ALWAYS Server Admin if no staff name provided
     if (isLoopback && !cleanStaffName) {
-      try {
-        await this.db('workstation_permissions').where('is_admin', 1).orWhere('is_admin', true).orWhere('role', 'ADMIN').del();
-      } catch {
-        // ignore
-      }
       return {
         device_id: sanitizeDeviceId(rawDeviceId) || 'local-host-pc',
-        device_name: sanitizeDeviceName(rawDeviceName, 'Office PC'),
+        device_name: sanitizeDeviceName(rawDeviceName, 'Office Server'),
         staff_name: null,
         role: 'ADMIN',
         is_admin: true,
@@ -459,7 +539,7 @@ export class WorkstationService {
 
   async listWorkstations(options?: { staffOnly?: boolean }): Promise<WorkstationPermission[]> {
     let query = this.db('workstation_permissions').orderBy('last_seen_at', 'desc');
-    if (options?.staffOnly !== false) {
+    if (options?.staffOnly === true) {
       query = query.where({ is_admin: false }).andWhereNot({ role: 'ADMIN' });
     }
     const rows = await query;
@@ -506,7 +586,9 @@ export class WorkstationService {
     };
 
     if (patch.device_name !== undefined && String(patch.device_name).trim()) {
-      updateRow.device_name = sanitizeDeviceName(patch.device_name, existing.device_name);
+      const cleanName = sanitizeDeviceName(patch.device_name, existing.device_name);
+      updateRow.device_name = cleanName;
+      updateRow.staff_name = cleanName;
     }
 
     await this.db('workstation_permissions').where({ device_id: cleanId }).update(updateRow);

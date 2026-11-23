@@ -230,7 +230,7 @@ export function testLanHostConnection(
           } else {
             resolve({
               success: false,
-              message: `Reached ${host}:${port}, but Enterprise Invoice Manager host service did not respond as expected (HTTP ${res.statusCode}).`,
+              message: `Reached ${host}:${port}, but Enterprise Management host service did not respond as expected (HTTP ${res.statusCode}).`,
             });
           }
         });

@@ -126,9 +126,21 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
   }, [companyInfo, branches]);
 
   const invoiceDropdownOptions = useMemo(() => {
-    const source = selectedPartyId
-      ? allUnpaidInvoices.filter((inv) => inv.customer_id === selectedPartyId)
-      : allUnpaidInvoices;
+    if (!selectedPartyId) {
+      return [{ value: '', label: '-- Select Customer First to View Invoices --' }];
+    }
+    const pool = showMoreInvoices ? allCompanyInvoices : allUnpaidInvoices;
+    const source = pool.filter((inv) => inv.customer_id === selectedPartyId);
+    if (source.length === 0) {
+      return [
+        {
+          value: '',
+          label: showMoreInvoices
+            ? '-- No Invoices Found for this Customer --'
+            : '-- No Unpaid Invoices for this Customer --',
+        },
+      ];
+    }
     return [
       { value: '', label: '-- Select Invoice Number (Optional) --' },
       ...source.map((inv) => ({
@@ -138,12 +150,24 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
         badge: `Total ${formatIndianCurrency(inv.grand_total)}`,
       })),
     ];
-  }, [allUnpaidInvoices, selectedPartyId]);
+  }, [allUnpaidInvoices, allCompanyInvoices, selectedPartyId, showMoreInvoices]);
 
   const billDropdownOptions = useMemo(() => {
-    const source = selectedPartyId
-      ? allUnpaidBills.filter((b) => b.supplier_id === selectedPartyId)
-      : allUnpaidBills;
+    if (!selectedPartyId) {
+      return [{ value: '', label: '-- Select Supplier First to View Bills --' }];
+    }
+    const pool = showMoreInvoices ? allCompanyBills : allUnpaidBills;
+    const source = pool.filter((b) => b.supplier_id === selectedPartyId);
+    if (source.length === 0) {
+      return [
+        {
+          value: '',
+          label: showMoreInvoices
+            ? '-- No Bills Found for this Supplier --'
+            : '-- No Unpaid Bills for this Supplier --',
+        },
+      ];
+    }
     return [
       { value: '', label: '-- Select Purchase Bill # (Optional) --' },
       ...source.map((b) => ({
@@ -153,7 +177,7 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
         badge: `Total ${formatIndianCurrency(b.grand_total)}`,
       })),
     ];
-  }, [allUnpaidBills, selectedPartyId]);
+  }, [allUnpaidBills, allCompanyBills, selectedPartyId, showMoreInvoices]);
 
   const buildVendorBanks = (vendor?: Supplier) => {
     if (!vendor) return [];
@@ -378,7 +402,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
     }
 
     if (activeTab === 'customer') {
-      const inv = allUnpaidInvoices.find((i) => i.id === docId);
+      const pool = showMoreInvoices ? allCompanyInvoices : allUnpaidInvoices;
+      const inv = pool.find((i) => i.id === docId);
       if (!inv) return;
       if (selectedPartyId !== inv.customer_id) {
         setSelectedPartyId(inv.customer_id);
@@ -393,7 +418,8 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
         setAllocations(currentAmt ? { [inv.id]: currentAmt } : {});
       }
     } else {
-      const bill = allUnpaidBills.find((b) => b.id === docId);
+      const pool = showMoreInvoices ? allCompanyBills : allUnpaidBills;
+      const bill = pool.find((b) => b.id === docId);
       if (!bill) return;
       if (selectedPartyId !== bill.supplier_id) {
         setSelectedPartyId(bill.supplier_id);
@@ -1332,7 +1358,16 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
                     options={activeTab === 'customer' ? invoiceDropdownOptions : billDropdownOptions}
                     value={selectedInvoiceId}
                     onChange={(val) => handleInvoiceOrBillSelect(val)}
-                    placeholder={activeTab === 'customer' ? 'Select company invoice number...' : 'Select supplier bill #...'}
+                    placeholder={
+                      !selectedPartyId
+                        ? activeTab === 'customer'
+                          ? 'Select a customer first to view invoices...'
+                          : 'Select a supplier first to view bills...'
+                        : activeTab === 'customer'
+                        ? 'Select company invoice number...'
+                        : 'Select supplier bill #...'
+                    }
+                    disabled={!selectedPartyId}
                   />
                 </div>
 

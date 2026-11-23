@@ -63,7 +63,7 @@ export const Sidebar: React.FC<Props> = ({
 
       {/* Settings Shortcut Button - Always accessible so staff can configure network or switch to Standalone mode */}
       {onOpenSettings && (
-        <div className="px-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+        <div className="px-2.5 pt-2.5">
           <button
             type="button"
             onClick={onOpenSettings}
@@ -77,7 +77,7 @@ export const Sidebar: React.FC<Props> = ({
 
       {/* Software Build Info */}
       <div className="px-4 pt-2.5 text-[10px] text-slate-400 space-y-0.5">
-        <div className="font-semibold text-slate-600 dark:text-slate-400">Enterprise Invoicer v2.0.0</div>
+        <div className="font-semibold text-slate-600 dark:text-slate-400">Enterprise Management v2.0.0</div>
         <div>Offline Enterprise Edition</div>
       </div>
     </aside>

@@ -27,6 +27,9 @@ import {
   Package,
   Users,
   Shield,
+  User,
+  Edit2,
+  Check,
 } from 'lucide-react';
 
 interface Props {
@@ -94,6 +97,14 @@ export const QuotationsView: React.FC<Props> = ({
   // Selected print template in the viewing modal
   const [activePrintTemplateId, setActivePrintTemplateId] = useState<string>('');
   const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState<boolean>(false);
+
+  // Staff and Creator state
+  const [availableStaffNames, setAvailableStaffNames] = useState<string[]>(['Admin / Owner']);
+  const [creatorName, setCreatorName] = useState<string>(() => {
+    return localStorage.getItem('eim_workstation_name') || 'Admin / Owner';
+  });
+  const [editingCreatorQuotationId, setEditingCreatorQuotationId] = useState<string | null>(null);
+  const [editingCreatorValue, setEditingCreatorValue] = useState<string>('');
 
   const customerOptions = useMemo(() => {
     return [
@@ -204,11 +215,12 @@ export const QuotationsView: React.FC<Props> = ({
 
   const loadMaster = async () => {
     try {
-      const [cList, pList, tList, comp] = await Promise.all([
+      const [cList, pList, tList, comp, wsRes] = await Promise.all([
         api.getCustomers(companyId),
         api.getProducts(companyId),
         api.getLetterheads(companyId),
         api.getCompany(companyId).catch(() => null),
+        api.getWorkstations().catch(() => ({ workstations: [] })),
       ]);
       setCustomers(cList);
       setProducts(pList);
@@ -224,6 +236,12 @@ export const QuotationsView: React.FC<Props> = ({
         DEFAULT_VARUN_TERMS;
       setCompanyDefaultTerms(loadedTerms);
       setTermsAndConditions((prev) => (!prev || prev === DEFAULT_VARUN_TERMS ? loadedTerms : prev));
+
+      const staffList = ((wsRes as any)?.workstations || [])
+        .map((w: any) => (w.name || w.device_name || '').trim())
+        .filter((name: string) => name && name !== 'local-host-pc' && name !== 'Office PC');
+      const uniqueNames = Array.from(new Set(['Admin / Owner', ...staffList]));
+      setAvailableStaffNames(uniqueNames);
     } catch (err) {
       console.error(err);
     }
@@ -386,7 +404,7 @@ export const QuotationsView: React.FC<Props> = ({
         }
       }
 
-      await api.createQuotation(companyId, {
+      const created = await api.createQuotation(companyId, {
         customer_id: cust ? cust.id : undefined,
         customer_name: finalCustName,
         customer_gstin: cust ? cust.gstin : customerGstinInput.trim() || undefined,
@@ -396,6 +414,7 @@ export const QuotationsView: React.FC<Props> = ({
         quotation_date: quoteDate,
         valid_until_date: validUntil,
         letterhead_template_id: selectedTemplateId || undefined,
+        created_by_device_name: creatorName.trim() || undefined,
         top_margin_mm: topMarginMm,
         bottom_margin_mm: bottomMarginMm,
         terms_and_conditions: termsAndConditions,
@@ -537,12 +556,37 @@ export const QuotationsView: React.FC<Props> = ({
     return prodTot.add(ro).toFixed(2);
   }, [viewingQuotation, viewingTotalOfProducts]);
 
+  const getCreatorDisplay = (q: { created_by_device_name?: string | null; created_by_device_id?: string | null }) => {
+    const raw = (q.created_by_device_name || '').trim();
+    if (!raw || raw === 'Office PC' || raw === 'Main Office PC' || raw === 'local-host-pc' || raw === 'Staff PC') {
+      return 'Admin / Owner';
+    }
+    return raw;
+  };
+
   const isStaffQuotation = (q: Quotation) => {
-    const devName = (q.created_by_device_name || '').trim();
-    const devId = (q.created_by_device_id || '').trim();
-    if (!devName && !devId) return false;
-    if (devName === 'Main Office PC' || devId === 'local-host-pc') return false;
-    return true;
+    const name = getCreatorDisplay(q);
+    return name !== 'Admin / Owner';
+  };
+
+  const handleSaveCreator = async (quotationId: string) => {
+    const val = editingCreatorValue.trim();
+    if (!val) {
+      setEditingCreatorQuotationId(null);
+      return;
+    }
+    try {
+      await api.updateQuotationCreator(companyId, quotationId, val);
+      setQuotations((prev) =>
+        prev.map((item) => (item.id === quotationId ? { ...item, created_by_device_name: val } : item))
+      );
+      if (viewingQuotation?.id === quotationId) {
+        setViewingQuotation((prev) => (prev ? { ...prev, created_by_device_name: val } : null));
+      }
+      setEditingCreatorQuotationId(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update quotation creator');
+    }
   };
 
   const staffQuotations = useMemo(() => {
@@ -556,7 +600,8 @@ export const QuotationsView: React.FC<Props> = ({
   const staffContributors = useMemo(() => {
     const names = new Set<string>();
     for (const q of staffQuotations) {
-      if (q.created_by_device_name) names.add(q.created_by_device_name);
+      const disp = getCreatorDisplay(q);
+      if (disp && disp !== 'Admin / Owner') names.add(disp);
     }
     return Array.from(names);
   }, [staffQuotations]);
@@ -797,20 +842,63 @@ export const QuotationsView: React.FC<Props> = ({
                     {q.customer_name}
                   </td>
                   <td className="py-3 px-4">
-                    {isStaffQuotation(q) ? (
-                      <span
-                        className="text-slate-700 dark:text-slate-300 font-medium"
-                        title={`Created on staff workstation: ${q.created_by_device_name || 'Staff'}`}
-                      >
-                        Staff: {q.created_by_device_name || 'Staff PC'}
-                      </span>
+                    {editingCreatorQuotationId === q.id ? (
+                      <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          list="staff-creators-list"
+                          value={editingCreatorValue}
+                          onChange={(e) => setEditingCreatorValue(e.target.value)}
+                          className="w-28 text-xs px-2 py-0.5 border border-brand-500 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveCreator(q.id);
+                            if (e.key === 'Escape') setEditingCreatorQuotationId(null);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveCreator(q.id)}
+                          className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded cursor-pointer"
+                          title="Save creator"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCreatorQuotationId(null)}
+                          className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded cursor-pointer"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ) : (
-                      <span
-                        className="text-slate-600 dark:text-slate-400 font-medium"
-                        title="Created on Host PC / MD Workstation"
-                      >
-                        Main PC / MD
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                            getCreatorDisplay(q) === 'Admin / Owner'
+                              ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                              : 'bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                          }`}
+                          title={`Created by: ${getCreatorDisplay(q)} (Click pencil to edit)`}
+                        >
+                          <User className="w-3 h-3 mr-1 opacity-70" />
+                          <span>{getCreatorDisplay(q)}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCreatorQuotationId(q.id);
+                            setEditingCreatorValue(getCreatorDisplay(q));
+                          }}
+                          className="p-1 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          title="Change creator name"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
@@ -973,6 +1061,7 @@ export const QuotationsView: React.FC<Props> = ({
                     {viewingQuotation.valid_until_date && (
                       <div className="text-slate-500 text-[11px]">Valid Until: {isoToDisplayDate(viewingQuotation.valid_until_date) || viewingQuotation.valid_until_date}</div>
                     )}
+                    <div><strong>Prepared By:</strong> <span className="font-semibold text-brand-600 dark:text-brand-400">{getCreatorDisplay(viewingQuotation)}</span></div>
                   </div>
                 </div>
 
@@ -1132,8 +1221,8 @@ export const QuotationsView: React.FC<Props> = ({
                     <span className="font-bold">IFSC Code :</span>
                     <span className="font-mono">{companyInfo?.bank_ifsc || ''}</span>
                   </div>
-                  <div className="grid grid-cols-[120px_1fr] max-w-sm">
-                    <span className="font-bold">Branch Number :</span>
+                  <div className="grid grid-cols-[130px_1fr] max-w-sm">
+                    <span className="font-bold">Branch Address :</span>
                     <span>{companyInfo?.bank_branch || ''}</span>
                   </div>
                 </div>
@@ -1254,20 +1343,45 @@ export const QuotationsView: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Print Template Selection for new quotation */}
-              <div>
-                <div className="flex items-center justify-between h-6 mb-1.5">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
-                    <FileText className="w-3.5 h-3.5 text-brand-600" />
-                    <span>Print Template</span>
-                  </label>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Print Template Selection for new quotation */}
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <FileText className="w-3.5 h-3.5 text-brand-600" />
+                      <span>Print Template</span>
+                    </label>
+                  </div>
+                  <SearchableSelect
+                    options={templateOptions}
+                    value={selectedTemplateId}
+                    onChange={(val) => setSelectedTemplateId(val)}
+                    placeholder="Select print template..."
+                  />
                 </div>
-                <SearchableSelect
-                  options={templateOptions}
-                  value={selectedTemplateId}
-                  onChange={(val) => setSelectedTemplateId(val)}
-                  placeholder="Select print template..."
-                />
+
+                {/* Created By (Staff / Owner) */}
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <User className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Created By (Staff / Owner)</span>
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    list="staff-creators-list"
+                    value={creatorName}
+                    onChange={(e) => setCreatorName(e.target.value)}
+                    placeholder="e.g. Veer, Sandhya, Admin / Owner"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-semibold outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                  />
+                  <datalist id="staff-creators-list">
+                    {availableStaffNames.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
               {/* 8-Column GST Quotation Table */}

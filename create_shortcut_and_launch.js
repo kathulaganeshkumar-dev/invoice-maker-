@@ -2,9 +2,13 @@ const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const exePath = 'c:\\Users\\kathu\\OneDrive\\Desktop\\new invoice\\version 2.0\\win-unpacked\\Enterprise Invoice Manager.exe';
+const targetDir = 'c:\\Users\\kathu\\OneDrive\\Desktop\\new invoice\\version 2.0\\win-unpacked';
+const exePath = fs.existsSync(path.join(targetDir, 'Enterprise Management.exe'))
+  ? path.join(targetDir, 'Enterprise Management.exe')
+  : path.join(targetDir, 'Enterprise Invoice Manager.exe');
+
 const desktopPath = 'C:\\Users\\kathu\\OneDrive\\Desktop';
-const shortcutPath = path.join(desktopPath, 'Enterprise Invoice Manager.lnk');
+const shortcutPath = path.join(desktopPath, 'Enterprise Management.lnk');
 
 // 1. Create Windows Shortcut on Desktop via VBScript
 const vbsScript = `
@@ -13,7 +17,7 @@ sLinkFile = "${shortcutPath.replace(/\\/g, '\\\\')}"
 Set oLink = oWS.CreateShortcut(sLinkFile)
 oLink.TargetPath = "${exePath.replace(/\\/g, '\\\\')}"
 oLink.WorkingDirectory = "${path.dirname(exePath).replace(/\\/g, '\\\\')}"
-oLink.Description = "Enterprise Invoice & Business Management System"
+oLink.Description = "Enterprise Management Software"
 oLink.Save
 `;
 
@@ -33,8 +37,8 @@ const batContent = `@echo off
 set ELECTRON_RUN_AS_NODE=
 start "" "${exePath}"
 `;
-fs.writeFileSync(path.join(desktopPath, 'Start Enterprise Invoice Manager.bat'), batContent);
-fs.writeFileSync('c:\\Users\\kathu\\OneDrive\\Desktop\\new invoice\\Start Enterprise Invoice Manager.bat', batContent);
+fs.writeFileSync(path.join(desktopPath, 'Start Enterprise Management.bat'), batContent);
+fs.writeFileSync('c:\\Users\\kathu\\OneDrive\\Desktop\\new invoice\\Start Enterprise Management.bat', batContent);
 console.log('Created batch launcher on Desktop and in workspace root');
 
 // 3. Launch via explorer.exe so it launches in the user's interactive desktop session

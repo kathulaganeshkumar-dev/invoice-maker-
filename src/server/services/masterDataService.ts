@@ -540,7 +540,6 @@ export class MasterDataService {
       'max_selling_price',
       'is_tax_inclusive',
       'minimum_stock',
-      'current_stock',
       'preferred_supplier_id',
       'is_active',
     ]);

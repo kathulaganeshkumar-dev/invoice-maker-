@@ -68,11 +68,11 @@ async function run() {
     // Generate 1-Click-Update.bat
     const batContent = `@echo off
 setlocal enabledelayedexpansion
-title Enterprise Invoice Manager - 1-Click Client Software Updater
+title Enterprise Management - 1-Click Client Software Updater
 color 0b
 
 echo ===============================================================================
-echo          ENTERPRISE INVOICE MANAGER - 1-CLICK CLIENT SOFTWARE UPDATER
+echo          ENTERPRISE MANAGEMENT - 1-CLICK CLIENT SOFTWARE UPDATER
 echo ===============================================================================
 echo.
 echo  This updater will install the latest features and updates on this computer.
@@ -85,8 +85,9 @@ echo  Press any key to begin update...
 pause >nul
 echo.
 
-:: 1. Close any running Enterprise Invoice Manager instances so files are not locked
-echo [1/4] Closing any running instances of Enterprise Invoice Manager...
+:: 1. Close any running Enterprise Management instances so files are not locked
+echo [1/4] Closing any running instances of Enterprise Management...
+taskkill /f /im "Enterprise Management.exe" /t >nul 2>&1
 taskkill /f /im "Enterprise Invoice Manager.exe" /t >nul 2>&1
 taskkill /f /im "electron.exe" /t >nul 2>&1
 timeout /t 1 /nobreak >nul
@@ -96,26 +97,33 @@ echo [2/4] Locating software installation...
 set "TARGET_RES="
 set "APP_EXE="
 
-if exist "%LOCALAPPDATA%\\Programs\\enterprise-invoice-manager\\resources\\app.asar" (
+if exist "%LOCALAPPDATA%\\Programs\\enterprise-management\\resources\\app.asar" (
+    set "TARGET_RES=%LOCALAPPDATA%\\Programs\\enterprise-management\\resources"
+    set "APP_EXE=%LOCALAPPDATA%\\Programs\\enterprise-management\\Enterprise Management.exe"
+) else if exist "%LOCALAPPDATA%\\Programs\\enterprise-invoice-manager\\resources\\app.asar" (
     set "TARGET_RES=%LOCALAPPDATA%\\Programs\\enterprise-invoice-manager\\resources"
-    set "APP_EXE=%LOCALAPPDATA%\\Programs\\enterprise-invoice-manager\\Enterprise Invoice Manager.exe"
+    set "APP_EXE=%LOCALAPPDATA%\\Programs\\enterprise-invoice-manager\\Enterprise Management.exe"
+    if not exist "!APP_EXE!" set "APP_EXE=%LOCALAPPDATA%\\Programs\\enterprise-invoice-manager\\Enterprise Invoice Manager.exe"
+) else if exist "%PROGRAMFILES%\\Enterprise Management\\resources\\app.asar" (
+    set "TARGET_RES=%PROGRAMFILES%\\Enterprise Management\\resources"
+    set "APP_EXE=%PROGRAMFILES%\\Enterprise Management\\Enterprise Management.exe"
 ) else if exist "%PROGRAMFILES%\\Enterprise Invoice Manager\\resources\\app.asar" (
     set "TARGET_RES=%PROGRAMFILES%\\Enterprise Invoice Manager\\resources"
-    set "APP_EXE=%PROGRAMFILES%\\Enterprise Invoice Manager\\Enterprise Invoice Manager.exe"
-) else if exist "%PROGRAMFILES(X86)%\\Enterprise Invoice Manager\\resources\\app.asar" (
-    set "TARGET_RES=%PROGRAMFILES(X86)%\\Enterprise Invoice Manager\\resources"
-    set "APP_EXE=%PROGRAMFILES(X86)%\\Enterprise Invoice Manager\\Enterprise Invoice Manager.exe"
+    set "APP_EXE=%PROGRAMFILES%\\Enterprise Invoice Manager\\Enterprise Management.exe"
+    if not exist "!APP_EXE!" set "APP_EXE=%PROGRAMFILES%\\Enterprise Invoice Manager\\Enterprise Invoice Manager.exe"
 ) else if exist "..\\resources\\app.asar" (
     set "TARGET_RES=..\\resources"
-    set "APP_EXE=..\\Enterprise Invoice Manager.exe"
+    set "APP_EXE=..\\Enterprise Management.exe"
+    if not exist "!APP_EXE!" set "APP_EXE=..\\Enterprise Invoice Manager.exe"
 ) else if exist ".\\resources\\app.asar" (
     set "TARGET_RES=.\\resources"
-    set "APP_EXE=.\\Enterprise Invoice Manager.exe"
+    set "APP_EXE=.\\Enterprise Management.exe"
+    if not exist "!APP_EXE!" set "APP_EXE=.\\Enterprise Invoice Manager.exe"
 )
 
 if "%TARGET_RES%"=="" (
-    echo [ERROR] Could not automatically find the Enterprise Invoice Manager installation.
-    echo Please make sure Enterprise Invoice Manager is installed, or copy app.asar manually
+    echo [ERROR] Could not automatically find the Enterprise Management installation.
+    echo Please make sure Enterprise Management is installed, or copy app.asar manually
     echo to the "resources" folder inside your installation directory.
     pause
     exit /b 1
@@ -164,7 +172,7 @@ echo  - New features and options have been installed.
 echo  - All your invoices, products, and data remain 100%% safe and intact.
 echo  - Your local network configuration was untouched.
 echo.
-echo Launching Enterprise Invoice Manager now...
+echo Launching Enterprise Management now...
 if exist "%APP_EXE%" (
     start "" "%APP_EXE%"
 )
@@ -175,7 +183,7 @@ exit /b 0
     fs.writeFileSync(path.join(releaseUpdateDir, '1-Click-Update.bat'), batContent, 'utf8');
     fs.writeFileSync(path.join(releaseUpdateDir, 'Update-Software.bat'), batContent, 'utf8');
 
-    const readmeContent = `ENTERPRISE INVOICE MANAGER - CLIENT UPDATE PACKAGE
+    const readmeContent = `ENTERPRISE MANAGEMENT - CLIENT UPDATE PACKAGE
 ==================================================
 
 How to update the software on another computer:
@@ -188,7 +196,7 @@ METHOD 1: 1-CLICK SCRIPT (EASIEST)
 
 METHOD 2: IN-APP UPDATE
 -----------------------
-1. Open Enterprise Invoice Manager on your other computer.
+1. Open Enterprise Management on your other computer.
 2. Go to Settings -> System Diagnostics & Updates.
 3. In "Offline Software Update", click "Select & Install Update File" and pick "app.asar".
 4. The software will back up your data, install the update, and restart automatically.

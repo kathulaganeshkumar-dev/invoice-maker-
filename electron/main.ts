@@ -141,7 +141,7 @@ if (!gotSingleLock) {
             title: 'Main Office PC Unreachable',
             message: `Could not connect to Main Office PC at ${activeLanConfig.hostIp}:${activeLanConfig.port}.`,
             detail:
-              'Make sure the Main Office PC is powered on, Enterprise Invoice Manager is open in "Main Office PC (Host)" mode, and both computers are on the same office network.',
+              'Make sure the Main Office PC is powered on, Enterprise Management is open in "Main Office PC (Host)" mode, and both computers are on the same office network.',
             buttons: ['Retry Connection', 'Open Standalone Mode (Local PC)', 'Exit'],
             defaultId: 0,
             cancelId: 2,
@@ -236,7 +236,7 @@ function ensureHostTray() {
     const ips = getLocalLanIps();
     const port = process.env.ACTUAL_SERVER_PORT || String(activeLanConfig.port || 4200);
     const ipLabel = ips.length > 0 ? `${ips[0]}:${port}` : `Port ${port}`;
-    tray.setToolTip(`Enterprise Invoice Manager — Office Host Active (${ipLabel})`);
+    tray.setToolTip(`Enterprise Management — Office Host Active (${ipLabel})`);
 
     const menu = Menu.buildFromTemplate([
       {
@@ -245,7 +245,7 @@ function ensureHostTray() {
       },
       { type: 'separator' },
       {
-        label: 'Open Enterprise Invoice Manager',
+        label: 'Open Enterprise Management',
         click: () => {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.show();
@@ -285,7 +285,7 @@ async function createMainWindow() {
     minWidth: 1024,
     minHeight: 700,
     center: true,
-    title: 'Enterprise Invoice & Business Management System',
+    title: 'Enterprise Management',
     ...(savedIcon ? { icon: savedIcon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -425,7 +425,7 @@ async function createMainWindow() {
         hasShownTrayHint = true;
         try {
           tray.displayBalloon({
-            title: 'Enterprise Invoice Manager — Office Host Active',
+            title: 'Enterprise Management — Office Host Active',
             content:
               'Running quietly in the system tray so office staff PCs stay connected. Right-click this tray icon to quit completely.',
           });
@@ -637,7 +637,7 @@ ipcMain.handle('app:install-offline-update', async (_event, opts?: { filePath?: 
     let chosenPath = opts?.filePath;
     if (!chosenPath) {
       const res = await dialog.showOpenDialog({
-        title: 'Select Enterprise Invoice Manager Update Package',
+        title: 'Select Enterprise Management Update Package',
         filters: [
           { name: 'Update Package (*.asar, *.zip)', extensions: ['asar', 'zip'] },
           { name: 'All Files', extensions: ['*'] },
@@ -680,7 +680,7 @@ ipcMain.handle('app:install-offline-update', async (_event, opts?: { filePath?: 
 
     return {
       success: true,
-      message: 'Update installed successfully! Relaunching Enterprise Invoice Manager in 2 seconds...',
+      message: 'Update installed successfully! Relaunching Enterprise Management in 2 seconds...',
       backupPath,
     };
   } catch (err: any) {

@@ -2,7 +2,7 @@
   "name": "enterprise-invoice-manager",
   "version": "2.0.0",
   "description": "Complete Premium Invoice, Quotation, Inventory, and Business Management Desktop Application",
-  "author": "Enterprise Invoicer",
+  "author": "Enterprise Management",
   "main": "dist-electron/main.js",
   "scripts": {
     "start": "ts-node src/server/index.ts",
@@ -26,7 +26,7 @@
   },
   "build": {
     "appId": "com.enterprise.invoicemanager",
-    "productName": "Enterprise Invoice Manager",
+    "productName": "Enterprise Management",
     "npmRebuild": false,
     "directories": {
       "output": "version 2.0"
@@ -98,7 +98,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "Enterprise Invoice Manager",
+      "shortcutName": "Enterprise Management",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     },

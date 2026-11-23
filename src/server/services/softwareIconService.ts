@@ -85,11 +85,16 @@ function findLocalExecutablePath(): string {
 
   // 2. Workspace packaged Version 2.0 desktop executables
   const cwd = process.cwd();
+  candidates.push(path.join(cwd, 'version 2.0', 'win-unpacked', 'Enterprise Management.exe'));
   candidates.push(path.join(cwd, 'version 2.0', 'win-unpacked', 'Enterprise Invoice Manager.exe'));
+  candidates.push(path.join(cwd, 'version 2.0', 'Enterprise Management 2.0.0.exe'));
   candidates.push(path.join(cwd, 'version 2.0', 'Enterprise Invoice Manager 2.0.0.exe'));
 
   // 3. Installed NSIS executable in LocalAppData
   if (process.env.LOCALAPPDATA) {
+    candidates.push(
+      path.join(process.env.LOCALAPPDATA, 'Programs', 'enterprise-management', 'Enterprise Management.exe')
+    );
     candidates.push(
       path.join(process.env.LOCALAPPDATA, 'Programs', 'enterprise-invoice-manager', 'Enterprise Invoice Manager.exe')
     );
@@ -165,7 +170,10 @@ $updated = New-Object System.Collections.Generic.List[string]
 $desktopShortcutFound = $false
 
 foreach ($dir in $searchDirs) {
-  $lnks = Get-ChildItem -Path $dir -Filter '*Enterprise Invoice Manager*.lnk' -ErrorAction SilentlyContinue
+  $lnks = Get-ChildItem -Path $dir -Include @('*Enterprise Management*.lnk', '*Enterprise Invoice Manager*.lnk') -Recurse -ErrorAction SilentlyContinue
+  if (-not $lnks) {
+    $lnks = Get-ChildItem -Path $dir -Filter '*Enterprise*.lnk' -ErrorAction SilentlyContinue
+  }
   foreach ($lnk in $lnks) {
     try {
       $sc = $shell.CreateShortcut($lnk.FullName)
@@ -187,11 +195,11 @@ foreach ($dir in $searchDirs) {
 
 if (-not $desktopShortcutFound -and -not $reset -and $activeDesktop -and (Test-Path $activeDesktop) -and $defaultTarget -and (Test-Path $defaultTarget) -and $icoPath -and (Test-Path $icoPath)) {
   try {
-    $newLnk = Join-Path $activeDesktop 'Enterprise Invoice Manager.lnk'
+    $newLnk = Join-Path $activeDesktop 'Enterprise Management.lnk'
     $sc = $shell.CreateShortcut($newLnk)
     $sc.TargetPath = $defaultTarget
     $sc.WorkingDirectory = Split-Path -Parent $defaultTarget
-    $sc.Description = 'Enterprise Invoice & Business Management Software'
+    $sc.Description = 'Enterprise Management Software'
     $sc.IconLocation = "$icoPath,0"
     $sc.Save()
     $updated.Add($newLnk)

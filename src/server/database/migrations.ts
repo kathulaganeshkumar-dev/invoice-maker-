@@ -989,9 +989,9 @@ export async function runMigrations(db: Knex): Promise<void> {
     }
   }
 
-  // Ensure host admin PC is never stored in workstation_permissions so staff list strictly contains user-created staff
+  // Ensure legacy temporary host PC entries are cleaned up
   if (await db.schema.hasTable('workstation_permissions')) {
-    await db('workstation_permissions').where('is_admin', 1).orWhere('is_admin', true).orWhere('role', 'ADMIN').del().catch(() => {});
+    await db('workstation_permissions').where({ device_id: 'local-host-pc' }).del().catch(() => {});
   }
 
   // 29. Quotation Numbering Sequences (for Varun Systems VS-QT-... sequences)

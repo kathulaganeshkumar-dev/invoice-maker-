@@ -48,7 +48,7 @@ This application is a commercial-grade, desktop-first Invoicing, Quotation, Inve
 
 ## 5. Local Software & Development Directives (Version 2.0)
 - **Local Application URL**: `http://127.0.0.1:4200` (Local embedded server running directly on user's machine)
-- **Local Desktop Executable**: `version 2.0\win-unpacked\Enterprise Invoice Manager.exe`
+- **Local Desktop Executable**: `version 2.0\win-unpacked\Enterprise Management.exe` (or `Enterprise Invoice Manager.exe`)
 - **User Launch Directive**: When the user requests to "open", "open the software", or review changes, open the **local Version 2 software** directly on their PC (`http://127.0.0.1:4200` and the desktop application), NOT the remote Vercel link unless explicitly asked.
 - **Development & Review Workflow**:
   1. Make requested code changes directly in the local workspace (`src/`).

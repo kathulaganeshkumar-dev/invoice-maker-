@@ -323,7 +323,7 @@ export const App: React.FC = () => {
             Σ
           </div>
         )}
-        <div className="text-lg font-bold">Enterprise Invoice & Business Manager</div>
+        <div className="text-lg font-bold">Enterprise Management</div>
         <div className="flex items-center text-xs text-slate-400 mt-2 space-x-2">
           <RefreshCw className="w-4 h-4 animate-spin text-brand-400" />
           <span>Starting local database & engine...</span>

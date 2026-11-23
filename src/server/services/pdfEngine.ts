@@ -1595,13 +1595,13 @@ export class PdfEngine {
     // 2. Bank Name
     // 3. Account Number
     // 4. IFSC Code
-    // 5. Branch Number
+    // 5. Branch Address
     const bankDetailsList = [
       { label: 'PAN Number', value: companyPan },
       { label: 'Bank Name', value: bankName },
       { label: 'Account Number', value: bankAccountNo },
       { label: 'IFSC Code', value: bankIfsc },
-      { label: 'Branch Number', value: bankBranch },
+      { label: 'Branch Address', value: bankBranch },
     ];
 
     let bankItemY = courtesyY + 16;

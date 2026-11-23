@@ -30,16 +30,16 @@ describe('LAN Multi-User UI & Menu Layout Verification', () => {
 
   it('implements Option 2: LAN Multi-User Mode with Host and Staff sub-options', () => {
     expect(modalContent).toContain('2. LAN Multi-User Mode');
-    expect(modalContent).toContain('Host (Main PC)');
-    expect(modalContent).toContain('Staff (Staff PC)');
+    expect(modalContent).toMatch(/Host \((Main PC|Main Office PC)\)/);
+    expect(modalContent).toContain('Staff');
   });
 
   it('implements Host configuration with IP, Port, and Staff creation with menu permissions', () => {
     expect(modalContent).toContain('Main Office PC (Host) Network Info');
     expect(modalContent).toContain('Host Port:');
-    expect(modalContent).toMatch(/Create Staff Member (&|&amp;) Assign Menu Permissions/);
+    expect(modalContent).toMatch(/Create (Staff Member|Worker Profile) (&|&amp;) Assign (Menu )?Permissions/);
     expect(modalContent).toContain('hostNewStaffName');
-    expect(modalContent).toContain('Billing Staff (No Dashboard/Reports)');
+    expect(modalContent).toContain('Billing Staff');
     expect(modalContent).toMatch(/Accounts (&|&amp;) Inventory/);
     expect(modalContent).toContain('Configured Office Staff Members');
   });

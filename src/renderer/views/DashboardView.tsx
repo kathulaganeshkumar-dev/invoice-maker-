@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { formatIndianCurrency } from '../../server/finance/decimalCalc';
+import { getIndianFinancialYear } from '../../server/services/numberingService';
 import { DateInput } from '../components/DateInput';
 import {
   TrendingUp,
@@ -266,7 +267,7 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100">
-              Financial Year Monthly Trajectory (FY 2026-27)
+              Financial Year Monthly Trajectory (FY {getIndianFinancialYear()})
             </h2>
             <div className="flex items-center space-x-3 text-xs">
               <span className="flex items-center space-x-1.5">

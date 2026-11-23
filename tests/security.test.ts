@@ -243,16 +243,20 @@ describe('Security Hardening Test Suite', () => {
 
       // 5. Cancellation restores BOTH products.current_stock and stock_balances.quantity_on_hand
       const [whA] = await inventoryService.getWarehouses(compA.id);
-      await secDb('stock_balances').insert({
-        id: 'sb-1',
-        company_id: compA.id,
-        warehouse_id: whA.id,
-        product_id: prod.id,
-        quantity_on_hand: '5.00',
-        average_unit_cost: '800.00',
-        total_stock_value: '4000.00',
-        last_updated_at: new Date().toISOString(),
-      });
+      let sbRecord = await secDb('stock_balances').where({ company_id: compA.id, warehouse_id: whA.id, product_id: prod.id }).first();
+      if (!sbRecord) {
+        await secDb('stock_balances').insert({
+          id: 'sb-1',
+          company_id: compA.id,
+          warehouse_id: whA.id,
+          product_id: prod.id,
+          quantity_on_hand: '5.00',
+          average_unit_cost: '800.00',
+          total_stock_value: '4000.00',
+          last_updated_at: new Date().toISOString(),
+        });
+        sbRecord = await secDb('stock_balances').where({ id: 'sb-1' }).first();
+      }
       const validInv = await invoiceService.createInvoice(compA.id, {
         branch_id: branchA.id,
         customer_id: cust.id,
@@ -262,7 +266,7 @@ describe('Security Hardening Test Suite', () => {
       });
       await invoiceService.cancelInvoice(compA.id, validInv.id, 'Customer cancelled order');
       const restoredProd = await masterData.getProductById(compA.id, prod.id);
-      const restoredBal = await secDb('stock_balances').where({ id: 'sb-1' }).first();
+      const restoredBal = await secDb('stock_balances').where({ id: sbRecord.id }).first();
       expect(restoredProd!.current_stock).toBe('5.00');
       expect(restoredBal.quantity_on_hand).toBe('5.00');
 
