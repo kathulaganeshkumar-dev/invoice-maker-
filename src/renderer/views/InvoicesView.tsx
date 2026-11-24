@@ -43,6 +43,33 @@ const SALES_DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'SERVICE_INVOICE', label: 'Service Invoice' },
 ];
 
+export const DEFAULT_VARUN_INVOICE_TERMS = `1. Goods once sold will not be taken back.
+2. Provider as per OEM Terms & Conditions.
+3. Stander warranty 11months from the date of invoice.
+4. Warranty provided Manufactures Authorized Service.
+5. Payments should be sent through A/C payee only.
+6. Payments should be made within 14 days otherwise interest will be charged @24% P.A.
+Thanking you and assuring of our best services and attention at all times.`;
+
+export const DEFAULT_VARUN_SHREE_INVOICE_TERMS = `1. Goods once sold will not be taken back.
+2. All disputes are subjected to Hyderabad jurisdiction
+3. Cheque Bounce Will Be Charged Rs.500/-+Taxes
+4. All payments Chqes/DD Payable to VARUN SHREE INFOTECH PVT LTD.
+5. Warranty as per manufacturers standard warranty policy and shall be directly provided by the company.
+6. Payments should be made within14days other wise interest will be charged @24% P.A.
+Thanking you and assuring of our best services and attention at all times.`;
+
+export const isVarunShreeTemplateId = (id?: string) => {
+  if (!id) return false;
+  const lower = id.toLowerCase();
+  return (
+    id === 'builtin-varun-shree-igst-invoice' ||
+    id === 'builtin-varun-shree-invoice-normal-gst' ||
+    lower.includes('varun shree') ||
+    lower.includes('varun sree')
+  );
+};
+
 function addDaysIso(dateStr: string, days: number): string {
   const part = (dateStr || '').split('T')[0];
   const [y, m, d] = part.split('-').map(Number);
@@ -127,6 +154,12 @@ export const InvoicesView: React.FC<Props> = ({
   const [docType, setDocType] = useState<DocumentType>(defaultDocType);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [poNumber, setPoNumber] = useState<string>('');
+  const [poDate, setPoDate] = useState<string>('');
+  const [referenceNumber, setReferenceNumber] = useState<string>('');
+  const [dcNumber, setDcNumber] = useState<string>('');
+  const [dcDate, setDcDate] = useState<string>('');
+  const [agentName, setAgentName] = useState<string>('');
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [invoicePaymentStatus, setInvoicePaymentStatus] = useState<'DRAFT' | 'UNPAID' | 'PARTIAL' | 'PAID'>('UNPAID');
@@ -149,8 +182,11 @@ export const InvoicesView: React.FC<Props> = ({
       is_custom: false,
     },
   ]);
+  const [topMarginMm, setTopMarginMm] = useState<number>(55);
+  const [bottomMarginMm, setBottomMarginMm] = useState<number>(32);
+  const [companyDefaultTerms, setCompanyDefaultTerms] = useState<string>(DEFAULT_VARUN_INVOICE_TERMS);
+  const [termsAndConditions, setTermsAndConditions] = useState<string>(DEFAULT_VARUN_INVOICE_TERMS);
   const [notes, setNotes] = useState<string>('');
-  const [companyDefaultTerms, setCompanyDefaultTerms] = useState<string>('');
   const [savingToCatalogIdx, setSavingToCatalogIdx] = useState<number | null>(null);
 
   // Mark-Paid modal state for existing invoices
@@ -194,21 +230,27 @@ export const InvoicesView: React.FC<Props> = ({
     ];
   }, [customers]);
 
-  const templateOptions = useMemo(() => {
-    return templates.map((tpl) => ({
-      value: tpl.id,
-      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
-      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
-    }));
+  const availableInvoiceTemplates = useMemo(() => {
+    return templates.filter(
+      (tpl) => !tpl.applies_to || tpl.applies_to === 'INVOICE' || tpl.applies_to === 'BOTH'
+    );
   }, [templates]);
 
-  const printTemplateOptions = useMemo(() => {
-    return templates.map((tpl) => ({
+  const templateOptions = useMemo(() => {
+    return availableInvoiceTemplates.map((tpl) => ({
       value: tpl.id,
       label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
       sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
     }));
-  }, [templates]);
+  }, [availableInvoiceTemplates]);
+
+  const printTemplateOptions = useMemo(() => {
+    return availableInvoiceTemplates.map((tpl) => ({
+      value: tpl.id,
+      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
+      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
+    }));
+  }, [availableInvoiceTemplates]);
 
   const catalogItemOptions = useMemo(() => {
     return products.map((p) => {
@@ -331,14 +373,27 @@ export const InvoicesView: React.FC<Props> = ({
       setCustomers(cList);
       setProducts(pList);
       setTemplates(tList);
-      const defTemplate = tList.find((t) => t.is_default) || tList[0];
+      const availableInvoiceTpls = tList.filter(
+        (t) => !t.applies_to || t.applies_to === 'INVOICE' || t.applies_to === 'BOTH'
+      );
+      const varunInvoiceTpl =
+        availableInvoiceTpls.find((t) => t.id === 'builtin-varun-invoice-normal-gst') ||
+        availableInvoiceTpls.find((t) => t.name.toLowerCase().includes('normal gst')) ||
+        availableInvoiceTpls.find((t) => t.id === 'builtin-varun-invoice-gst') ||
+        availableInvoiceTpls.find((t) => t.is_default) ||
+        availableInvoiceTpls[0] ||
+        tList[0];
+      const defTemplate = varunInvoiceTpl || availableInvoiceTpls[0] || tList[0];
       if (defTemplate) {
         setSelectedTemplateId(defTemplate.id);
         setActivePrintTemplateId(defTemplate.id);
       }
-      const loadedTerms = comp?.default_invoice_terms || '';
+      const isVarunShree = isVarunShreeTemplateId(defTemplate?.id);
+      const loadedTerms = isVarunShree
+        ? DEFAULT_VARUN_SHREE_INVOICE_TERMS
+        : ((comp?.default_invoice_terms && comp.default_invoice_terms.trim()) || DEFAULT_VARUN_INVOICE_TERMS);
       setCompanyDefaultTerms(loadedTerms);
-      setNotes((prev) => (!prev ? loadedTerms : prev));
+      setTermsAndConditions((prev) => (!prev || prev === DEFAULT_VARUN_INVOICE_TERMS || prev === DEFAULT_VARUN_SHREE_INVOICE_TERMS ? loadedTerms : prev));
 
       const staffList = ((wsRes as any)?.workstations || [])
         .map((w: any) => (w.name || w.device_name || '').trim())
@@ -505,6 +560,16 @@ export const InvoicesView: React.FC<Props> = ({
         place_of_supply_code: cust.state_code,
         invoice_date: invoiceDate,
         due_date: dueDate,
+        purchase_order_number: poNumber.trim() || undefined,
+        purchase_order_date: poDate || undefined,
+        po_number: poNumber.trim() || undefined,
+        po_date: poDate || undefined,
+        reference_number: referenceNumber.trim() || dcNumber.trim() || undefined,
+        delivery_challan_number: dcNumber.trim() || referenceNumber.trim() || undefined,
+        delivery_challan_date: dcDate || undefined,
+        dc_number: dcNumber.trim() || referenceNumber.trim() || undefined,
+        dc_date: dcDate || undefined,
+        agent_name: agentName.trim() || undefined,
         letterhead_template_id: selectedTemplateId || undefined,
         created_by_device_name: creatorName.trim() || undefined,
         finalize_on_create: invoicePaymentStatus !== 'DRAFT',
@@ -530,7 +595,11 @@ export const InvoicesView: React.FC<Props> = ({
           gst_rate: it.gst_rate || '18.00',
           is_tax_inclusive: Boolean(it.is_tax_inclusive),
         })),
-        notes,
+        terms_conditions: termsAndConditions,
+        terms_and_conditions: termsAndConditions,
+        top_margin_mm: topMarginMm,
+        bottom_margin_mm: bottomMarginMm,
+        notes: notes.trim() || undefined,
       });
 
       resetForm();
@@ -715,6 +784,12 @@ export const InvoicesView: React.FC<Props> = ({
   const resetForm = () => {
     setDocType(defaultDocType);
     setSelectedCustomerId('');
+    setPoNumber('');
+    setPoDate('');
+    setReferenceNumber('');
+    setDcNumber('');
+    setDcDate('');
+    setAgentName('');
     setInvoicePaymentStatus('UNPAID');
     setPaymentMethod('BANK_TRANSFER');
     setPaymentDate(new Date().toISOString().split('T')[0]);
@@ -734,7 +809,14 @@ export const InvoicesView: React.FC<Props> = ({
         is_custom: false,
       },
     ]);
-    setNotes(companyDefaultTerms || '');
+    setTermsAndConditions(
+      isVarunShreeTemplateId(selectedTemplateId)
+        ? DEFAULT_VARUN_SHREE_INVOICE_TERMS
+        : companyDefaultTerms || DEFAULT_VARUN_INVOICE_TERMS
+    );
+    setTopMarginMm(55);
+    setBottomMarginMm(32);
+    setNotes('');
   };
 
   // Compute live preview totals for Create Invoice modal using Decimal precision
@@ -1463,6 +1545,30 @@ export const InvoicesView: React.FC<Props> = ({
                 </div>
               </div>
 
+              {/* Terms & Conditions */}
+              {(viewingInvoice.terms_conditions || (viewingInvoice as any).terms_and_conditions) && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                  <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Terms &amp; Conditions:
+                  </div>
+                  <div className="whitespace-pre-line text-slate-600 dark:text-slate-400 font-mono text-[11px] leading-relaxed">
+                    {viewingInvoice.terms_conditions || (viewingInvoice as any).terms_and_conditions}
+                  </div>
+                </div>
+              )}
+
+              {/* Invoice Notes */}
+              {viewingInvoice.notes && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                  <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Notes &amp; Remittance:
+                  </div>
+                  <div className="text-slate-600 dark:text-slate-400 font-mono text-[11px] leading-relaxed">
+                    {viewingInvoice.notes}
+                  </div>
+                </div>
+              )}
+
               {/* Template Selection for Printing */}
               <div className="p-4 bg-brand-50/50 dark:bg-slate-900 rounded-xl border border-brand-100 dark:border-slate-700 space-y-2">
                 <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
@@ -1484,9 +1590,20 @@ export const InvoicesView: React.FC<Props> = ({
                     type="button"
                     onClick={() => handlePrintPdf(viewingInvoice.id, 'DIGITAL_LETTERHEAD')}
                     className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
+                    title="Print with digital header and branding"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Print / Download PDF</span>
+                    <span>Print (Digital PDF)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePrintPdf(viewingInvoice.id, 'PREPRINTED_STATIONERY')}
+                    className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
+                    title="Print on physical preprinted letterhead with 55mm top & 32mm bottom clearances"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Preprinted Letterhead</span>
                   </button>
                 </div>
               </div>
@@ -1659,6 +1776,75 @@ export const InvoicesView: React.FC<Props> = ({
                 </div>
               </div>
 
+              {/* PO Number, PO Date, DC Number, DC Date & Agent Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">PO Number (PO No)</label>
+                  </div>
+                  <input
+                    type="text"
+                    value={poNumber}
+                    onChange={(e) => setPoNumber(e.target.value)}
+                    placeholder="e.g. GEMC-511687712333006"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-medium outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">PO Date</label>
+                  </div>
+                  <DateInput
+                    value={poDate}
+                    onChange={(val) => setPoDate(val)}
+                    placeholder="PO Date (e.g. 02-Mar-2026)"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">DC No (Challan #)</label>
+                  </div>
+                  <input
+                    type="text"
+                    value={dcNumber || referenceNumber}
+                    onChange={(e) => {
+                      setDcNumber(e.target.value);
+                      setReferenceNumber(e.target.value);
+                    }}
+                    placeholder="Optional DC / Challan #"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-medium outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">DC Date</label>
+                  </div>
+                  <DateInput
+                    value={dcDate}
+                    onChange={(val) => setDcDate(val)}
+                    placeholder="DC Date (e.g. 16-Sep-2026)"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between h-6 mb-1.5">
+                    <label className="font-semibold text-slate-700 dark:text-slate-300">Agent Name</label>
+                  </div>
+                  <input
+                    type="text"
+                    value={agentName}
+                    onChange={(e) => setAgentName(e.target.value)}
+                    placeholder="Optional Agent Name"
+                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-medium outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 {/* Print Template Selector */}
                 <div>
@@ -1671,7 +1857,18 @@ export const InvoicesView: React.FC<Props> = ({
                   <SearchableSelect
                     options={templateOptions}
                     value={selectedTemplateId}
-                    onChange={(val) => setSelectedTemplateId(val)}
+                    onChange={(val) => {
+                      setSelectedTemplateId(val);
+                      if (isVarunShreeTemplateId(val)) {
+                        if (!termsAndConditions || termsAndConditions === DEFAULT_VARUN_INVOICE_TERMS) {
+                          setTermsAndConditions(DEFAULT_VARUN_SHREE_INVOICE_TERMS);
+                        }
+                      } else {
+                        if (!termsAndConditions || termsAndConditions === DEFAULT_VARUN_SHREE_INVOICE_TERMS) {
+                          setTermsAndConditions(companyDefaultTerms || DEFAULT_VARUN_INVOICE_TERMS);
+                        }
+                      }
+                    }}
                     placeholder="Select print template..."
                   />
                 </div>
@@ -2059,31 +2256,87 @@ export const InvoicesView: React.FC<Props> = ({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Invoice Notes &amp; Terms
+              {/* Physical Letterhead Clearance & Terms */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Pre-Printed Letterhead Clearance (mm)
                   </label>
-                  {companyDefaultTerms && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-500">Top Header Margin (mm):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="120"
+                        value={topMarginMm}
+                        onChange={(e) => setTopMarginMm(Number(e.target.value) || 55)}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500">Bottom Footer Margin (mm):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={bottomMarginMm}
+                        onChange={(e) => setBottomMarginMm(Number(e.target.value) || 32)}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1">
+                    Default 55mm top / 32mm bottom leaves exact clearance for physical printed stationery.
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      {isVarunShreeTemplateId(selectedTemplateId)
+                        ? 'Terms & Conditions (Varun Shree Infotech)'
+                        : 'Terms & Conditions (Varun Systems)'}
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setNotes(companyDefaultTerms)}
+                      onClick={() => {
+                        if (isVarunShreeTemplateId(selectedTemplateId)) {
+                          setTermsAndConditions(DEFAULT_VARUN_SHREE_INVOICE_TERMS);
+                        } else {
+                          setTermsAndConditions(companyDefaultTerms || DEFAULT_VARUN_INVOICE_TERMS);
+                        }
+                      }}
                       className="text-[11px] text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-semibold cursor-pointer"
+                      title="Reset terms to Settings defaults"
                     >
                       Reset to Settings Default
                     </button>
-                  )}
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={termsAndConditions}
+                    onChange={(e) => setTermsAndConditions(e.target.value)}
+                    placeholder="Enter invoice terms and conditions..."
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs font-mono leading-relaxed bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Pre-filled from Settings. You can edit, add, or delete points for this invoice. All points print on the invoice.
+                  </p>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Invoice Notes &amp; Remittance Instructions
+                </label>
                 <textarea
-                  rows={4}
+                  rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Payment instructions, bank transfer details, delivery terms..."
-                  className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded p-2 text-xs font-mono leading-relaxed"
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded p-2 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Pre-filled from Settings. You can edit, add, or delete terms for this invoice.
-                </p>
               </div>
             </div>
 

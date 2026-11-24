@@ -272,9 +272,9 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
     const oldBills = allBills.filter((b) => Number(b.balance_amount || 0) <= 0);
 
     const pendingOrders = allOrders.filter(
-      (o) => o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
+      (o) => o.status !== 'CANCELLED' && (o.status as any) !== 'COMPLETED'
     );
-    const completedOrders = allOrders.filter((o) => o.status === 'COMPLETED');
+    const completedOrders = allOrders.filter((o) => (o.status as any) === 'COMPLETED');
 
     let sumPurchased = new Decimal(0);
     let sumOutstanding = new Decimal(0);
@@ -713,7 +713,7 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
                       {viewingSupplier.state && (
                         <div className="flex items-center space-x-1">
                           <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{viewingSupplier.city ? `${viewingSupplier.city}, ` : ''}{viewingSupplier.state} ({viewingSupplier.state_code})</span>
+                          <span>{(viewingSupplier as any).city ? `${(viewingSupplier as any).city}, ` : ''}{viewingSupplier.state} ({viewingSupplier.state_code})</span>
                         </div>
                       )}
                     </div>

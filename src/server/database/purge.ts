@@ -27,6 +27,7 @@ const BUSINESS_TABLES = [
   'units',
   'warehouses',
   'letterhead_templates',
+  'letterhead_template_overrides',
   'numbering_sequences',
   'company_settings',
   'branches',
@@ -62,6 +63,19 @@ export async function purgeDatabaseFile(dbPath: string): Promise<void> {
           default_staff_menus_json: null,
           last_seen_utc: null,
           license_data_json: null,
+          invoice_save_path: null,
+          quotation_save_path: null,
+          purchase_save_path: null,
+          report_save_path: null,
+          backup_save_path: null,
+          excel_export_save_path: null,
+          software_icon: null,
+          auto_backup_enabled: 1,
+          auto_backup_frequency: 'DAILY',
+          auto_backup_interval_days: 1,
+          auto_backup_retention_days: 30,
+          auto_backup_max_count: 30,
+          last_auto_backup_at: null,
         }).catch(() => {});
       }
       try {

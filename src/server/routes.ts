@@ -285,6 +285,12 @@ export function createApiRouter(db: Knex): Router {
         'backup_save_path',
         'excel_export_save_path',
         'software_icon',
+        'auto_backup_enabled',
+        'auto_backup_frequency',
+        'auto_backup_interval_days',
+        'auto_backup_retention_days',
+        'auto_backup_max_count',
+        'last_auto_backup_at',
       ]);
       const savePathCols = new Set([
         'invoice_save_path',
@@ -634,7 +640,37 @@ export function createApiRouter(db: Knex): Router {
   router.post('/backups/rolling', async (_req: Request, res: Response) => {
     try {
       const result = await backupRestoreService.runDailyRollingBackup();
-      res.json({ success: true, created: Boolean(result), backup: result });
+      res.json({ success: true, created: Boolean(result?.backup), backup: result?.backup, details: result });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/backups/auto-backup/settings', async (req: Request, res: Response) => {
+    try {
+      const companyId = req.query.companyId ? String(req.query.companyId).trim() : undefined;
+      const settings = await backupRestoreService.getAutoBackupSettings(companyId);
+      res.json(settings);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.put('/backups/auto-backup/settings', async (req: Request, res: Response) => {
+    try {
+      const companyId = req.body?.companyId ? String(req.body.companyId).trim() : undefined;
+      const updated = await backupRestoreService.updateAutoBackupSettings(req.body || {}, companyId);
+      res.json({ success: true, settings: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post('/backups/auto-backup/run', async (req: Request, res: Response) => {
+    try {
+      const companyId = req.body?.companyId ? String(req.body.companyId).trim() : undefined;
+      const result = await backupRestoreService.runDailyRollingBackup(true, companyId);
+      res.json({ success: true, ...result });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1332,7 +1368,7 @@ export function createApiRouter(db: Knex): Router {
       if (!template) {
         template = await letterheadService.getDefaultTemplate(companyId);
       }
-      if (template && (!template.file_path || !fs.existsSync(template.file_path))) {
+      if (template && !template.id.startsWith('builtin-') && (!template.file_path || !fs.existsSync(template.file_path))) {
         template = undefined;
       }
 
@@ -1518,7 +1554,7 @@ export function createApiRouter(db: Knex): Router {
       if (!template) {
         template = await letterheadService.getDefaultTemplate(companyId);
       }
-      if (template && (!template.file_path || !fs.existsSync(template.file_path))) {
+      if (template && !template.id.startsWith('builtin-') && (!template.file_path || !fs.existsSync(template.file_path))) {
         template = undefined;
       }
 
@@ -1861,7 +1897,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const includeSystem = req.query.include_system !== 'false';
-      const templates = await letterheadService.getTemplates(companyId, includeSystem);
+      const appliesToFilter = req.query.applies_to ? String(req.query.applies_to).toUpperCase() : undefined;
+      const templates = await letterheadService.getTemplates(companyId, includeSystem, appliesToFilter);
       res.json(templates);
     } catch (err: any) {
       sendInternalError(res, err);
@@ -1944,6 +1981,9 @@ export function createApiRouter(db: Knex): Router {
       const orientation = req.body?.orientation === 'LANDSCAPE' || req.body?.orientation === 'PORTRAIT'
         ? req.body.orientation
         : undefined;
+      const appliesTo = req.body?.applies_to === 'INVOICE' || req.body?.applies_to === 'QUOTATION'
+        ? req.body.applies_to
+        : 'BOTH';
 
       const result = await letterheadService.importTemplateFile(
         companyId,
@@ -1953,6 +1993,7 @@ export function createApiRouter(db: Knex): Router {
           orientation,
           is_default: isDefault,
           auto_detect: autoDetect,
+          applies_to: appliesTo,
         }
       );
       res.status(201).json(result);

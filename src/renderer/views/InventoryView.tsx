@@ -1278,7 +1278,6 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                         value={newProductForm.category_id}
                         onChange={(val) => setNewProductForm({ ...newProductForm, category_id: val })}
                         placeholder="Select category..."
-                        allowClear
                       />
                     )}
                   </div>
@@ -1303,7 +1302,7 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
                       Unit of Measure
                     </label>
                     <SearchableSelect
-                      options={STANDARD_UNITS.map((u) => ({ value: u.code, label: `${u.code} - ${u.label}` }))}
+                      options={STANDARD_UNITS.map((u) => ({ value: u.code, label: `${u.code} - ${u.name}` }))}
                       value={newProductForm.unit}
                       onChange={(val) => setNewProductForm({ ...newProductForm, unit: val || 'NOS' })}
                       placeholder="Select unit..."

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CompanySettings, AppSettings, Company, NumberingSequence } from '../../shared/types';
 import { api, setLocalDeviceIdentity, setSessionAdminPin, getSessionAdminPin } from '../services/api';
+import { DEFAULT_VARUN_INVOICE_TERMS } from '../views/InvoicesView';
 import { ModalPortal } from './ModalPortal';
 import {
   Settings,
@@ -125,6 +126,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [permPresets, setPermPresets] = useState<Record<string, any>>({});
   const [permStatus, setPermStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [permSavingId, setPermSavingId] = useState<string | null>(null);
+  const [sessionAdminPin, setSessionAdminPin] = useState<string>('');
 
   // Simultaneous Multi-Role Batch Creator state
   const [staffCreationMode, setStaffCreationMode] = useState<'quick' | 'multi_role'>('quick');
@@ -1972,7 +1974,17 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
 
                 <div className="space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Invoice Terms & Conditions (Prints on every invoice):</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300">Default Invoice Terms &amp; Conditions (Prints on every invoice):</label>
+                      <button
+                        type="button"
+                        onClick={() => updateCompanyField('default_invoice_terms', DEFAULT_VARUN_INVOICE_TERMS)}
+                        className="text-[11px] text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-semibold cursor-pointer"
+                        title="Fill standard Varun Systems 6-point warranty & payment terms"
+                      >
+                        Reset to Varun Systems Defaults
+                      </button>
+                    </div>
                     <textarea
                       rows={6}
                       value={company.default_invoice_terms || ''}
@@ -2257,15 +2269,122 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     />
                   </div>
 
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Automated Backups Save Folder Path:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. D:\Backups\InvoiceManager"
-                      value={companySettings.backup_save_path || ''}
-                      onChange={(e) => updateCompanySetting('backup_save_path', e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
-                    />
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                        Automated Daily Backups &amp; Retention Policy:
+                      </label>
+                      <label className="flex items-center space-x-1.5 text-xs font-semibold cursor-pointer text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={companySettings.auto_backup_enabled ?? true}
+                          onChange={(e) => {
+                            updateCompanySetting('auto_backup_enabled', e.target.checked);
+                            updateAppSetting('auto_backup_enabled', e.target.checked);
+                          }}
+                          className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500"
+                        />
+                        <span>Enable Auto-Backup</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        Backup Destination Folder Path:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. D:\Backups\InvoiceManager"
+                        value={companySettings.backup_save_path || ''}
+                        onChange={(e) => {
+                          updateCompanySetting('backup_save_path', e.target.value);
+                          updateAppSetting('backup_save_path', e.target.value);
+                        }}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                          Frequency:
+                        </label>
+                        <select
+                          value={companySettings.auto_backup_frequency || 'DAILY'}
+                          onChange={(e) => {
+                            const val = e.target.value as any;
+                            updateCompanySetting('auto_backup_frequency', val);
+                            updateAppSetting('auto_backup_frequency', val);
+                          }}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded px-2.5 py-1 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-medium outline-none focus:ring-1 focus:ring-brand-500"
+                        >
+                          <option value="DAILY">Daily (Every 24 Hours)</option>
+                          <option value="EVERY_N_DAYS">Every N Days</option>
+                        </select>
+                        {(companySettings.auto_backup_frequency === 'EVERY_N_DAYS') && (
+                          <div className="mt-1.5 flex items-center space-x-1">
+                            <span className="text-[10px] text-slate-500">Every:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="365"
+                              value={companySettings.auto_backup_interval_days || 1}
+                              onChange={(e) => {
+                                const n = Math.max(1, parseInt(e.target.value) || 1);
+                                updateCompanySetting('auto_backup_interval_days', n);
+                                updateAppSetting('auto_backup_interval_days', n);
+                              }}
+                              className="w-14 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-xs text-center font-mono font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+                            />
+                            <span className="text-[10px] text-slate-500">days</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                          Keep Backups For (Days):
+                        </label>
+                        <div className="flex items-center space-x-1.5">
+                          <input
+                            type="number"
+                            min="1"
+                            max="3650"
+                            value={companySettings.auto_backup_retention_days ?? 30}
+                            onChange={(e) => {
+                              const n = Math.max(1, parseInt(e.target.value) || 1);
+                              updateCompanySetting('auto_backup_retention_days', n);
+                              updateAppSetting('auto_backup_retention_days', n);
+                            }}
+                            className="w-20 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                          <span className="text-[11px] text-slate-600 dark:text-slate-400">Days</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Older files deleted</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                          Max Backups to Retain:
+                        </label>
+                        <div className="flex items-center space-x-1.5">
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={companySettings.auto_backup_max_count ?? 30}
+                            onChange={(e) => {
+                              const n = Math.max(1, parseInt(e.target.value) || 1);
+                              updateCompanySetting('auto_backup_max_count', n);
+                              updateAppSetting('auto_backup_max_count', n);
+                            }}
+                            className="w-20 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs font-mono font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                          <span className="text-[11px] text-slate-600 dark:text-slate-400">Copies</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Max files in folder</p>
+                      </div>
+                    </div>
                   </div>
 
                   <div>

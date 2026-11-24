@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { PDFArray, PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
-import { LetterheadTemplate, LayoutConfiguration, LetterheadOCRResult } from '../../shared/types';
+import { LetterheadTemplate, LayoutConfiguration, LetterheadOCRResult, TemplateAppliesTo } from '../../shared/types';
 import { getDefaultDataDir } from '../database/connection';
 
 export function getDefaultLayoutConfig(templateId: string): LayoutConfiguration {
@@ -61,6 +61,62 @@ function getSystemTemplatePath(filename: string): string {
 export function getSystemQuotationTemplates(): LetterheadTemplate[] {
   return [
     {
+      id: 'builtin-varun-invoice-normal-gst',
+      company_id: '',
+      name: 'Varun Systems Normal GST Template',
+      file_path: getSystemTemplatePath('VARUN_SYSTEMS_INVOICE_GST_FORMAT.pdf'),
+      file_type: 'PDF',
+      page_size: 'A4',
+      orientation: 'PORTRAIT',
+      is_default: true,
+      applies_to: 'INVOICE',
+      layout_config: getDefaultLayoutConfig('builtin-varun-invoice-normal-gst'),
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'builtin-varun-invoice-gst',
+      company_id: '',
+      name: 'Varun Systems Named GST Invoice',
+      file_path: getSystemTemplatePath('VARUN_SYSTEMS_INVOICE_GST_FORMAT.pdf'),
+      file_type: 'PDF',
+      page_size: 'A4',
+      orientation: 'PORTRAIT',
+      is_default: false,
+      applies_to: 'INVOICE',
+      layout_config: getDefaultLayoutConfig('builtin-varun-invoice-gst'),
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'builtin-varun-shree-invoice-normal-gst',
+      company_id: '',
+      name: 'Varun Shree Infotech Normal GST Template',
+      file_path: getSystemTemplatePath('VARUN_SHREE_INFOTECH_NORMAL_GST_INVOICE_FORMAT.pdf'),
+      file_type: 'PDF',
+      page_size: 'A4',
+      orientation: 'PORTRAIT',
+      is_default: false,
+      applies_to: 'INVOICE',
+      layout_config: getDefaultLayoutConfig('builtin-varun-shree-invoice-normal-gst'),
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'builtin-varun-shree-igst-invoice',
+      company_id: '',
+      name: 'Varun Sree Infotech IGST Invoice Template',
+      file_path: getSystemTemplatePath('VARUN_SHREE_INFOTECH_IGST_INVOICE_FORMAT.pdf'),
+      file_type: 'PDF',
+      page_size: 'A4',
+      orientation: 'PORTRAIT',
+      is_default: false,
+      applies_to: 'INVOICE',
+      layout_config: getDefaultLayoutConfig('builtin-varun-shree-igst-invoice'),
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    },
+    {
       id: 'builtin-varun-gst',
       company_id: '',
       name: 'Varun Systems — GST Quotation Format',
@@ -69,6 +125,7 @@ export function getSystemQuotationTemplates(): LetterheadTemplate[] {
       page_size: 'A4',
       orientation: 'PORTRAIT',
       is_default: true,
+      applies_to: 'QUOTATION',
       layout_config: getDefaultLayoutConfig('builtin-varun-gst'),
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-01T00:00:00.000Z',
@@ -82,6 +139,7 @@ export function getSystemQuotationTemplates(): LetterheadTemplate[] {
       page_size: 'A4',
       orientation: 'PORTRAIT',
       is_default: false,
+      applies_to: 'QUOTATION',
       layout_config: getDefaultLayoutConfig('builtin-varun-nogst'),
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-01T00:00:00.000Z',
@@ -92,7 +150,7 @@ export function getSystemQuotationTemplates(): LetterheadTemplate[] {
 export class LetterheadService {
   constructor(private db: Knex) {}
 
-  async getTemplates(companyId: string, includeSystem: boolean = false): Promise<LetterheadTemplate[]> {
+  async getTemplates(companyId: string, includeSystem: boolean = false, appliesToFilter?: string): Promise<LetterheadTemplate[]> {
     const sysTemplates = includeSystem ? getSystemQuotationTemplates() : [];
     const records = await this.db('letterhead_templates')
       .where({ company_id: companyId })
@@ -103,22 +161,42 @@ export class LetterheadService {
       .filter((r) => r.file_path && fs.existsSync(r.file_path))
       .map((r) => ({
         ...r,
+        applies_to: (r.applies_to || 'BOTH') as any,
         is_default: Boolean(r.is_default),
         layout_config: JSON.parse(r.layout_config_json),
       }));
-    return [...sysTemplates, ...custom];
+
+    let all: LetterheadTemplate[] = [...sysTemplates.map((t) => ({ ...t })), ...custom];
+
+    // Merge company overrides if table exists
+    try {
+      if (await this.db.schema.hasTable('letterhead_template_overrides')) {
+        const overrides = await this.db('letterhead_template_overrides').where({ company_id: companyId });
+        const overrideMap = new Map<string, any>(overrides.map((o: any) => [o.template_id, o]));
+        all = all.map((tpl) => {
+          const ov = overrideMap.get(tpl.id);
+          if (!ov) return tpl;
+          return {
+            ...tpl,
+            name: ov.name && ov.name.trim() ? ov.name.trim() : tpl.name,
+            applies_to: ov.applies_to ? ov.applies_to : tpl.applies_to,
+            is_default: ov.is_default !== null && ov.is_default !== undefined ? Boolean(ov.is_default) : tpl.is_default,
+          };
+        });
+      }
+    } catch (ovErr) {
+      console.warn('[LetterheadService] Failed to load template overrides:', ovErr);
+    }
+
+    if (appliesToFilter) {
+      all = all.filter((t) => !t.applies_to || t.applies_to === 'BOTH' || t.applies_to === appliesToFilter);
+    }
+    return all;
   }
 
   async getTemplateById(companyId: string, templateId: string): Promise<LetterheadTemplate | null> {
-    const sys = getSystemQuotationTemplates().find((t) => t.id === templateId);
-    if (sys) return sys;
-    const r = await this.db('letterhead_templates').where({ company_id: companyId, id: templateId }).first();
-    if (!r || !r.file_path || !fs.existsSync(r.file_path)) return null;
-    return {
-      ...r,
-      is_default: Boolean(r.is_default),
-      layout_config: JSON.parse(r.layout_config_json),
-    };
+    const list = await this.getTemplates(companyId, true);
+    return list.find((t) => t.id === templateId) || null;
   }
 
   async getDefaultTemplate(companyId: string): Promise<LetterheadTemplate | null> {
@@ -150,12 +228,13 @@ export class LetterheadService {
       id,
       company_id: companyId,
       branch_id: data.branch_id || undefined,
-      name: data.name || 'Letterhead Template',
+      name: data.name?.trim() || 'Letterhead Template',
       file_path: data.file_path || '',
       file_type: data.file_type || 'PDF',
       page_size: 'A4',
       orientation: data.orientation || 'PORTRAIT',
       is_default: Boolean(data.is_default),
+      applies_to: (data.applies_to || 'BOTH') as any,
       layout_config: layoutConfig,
       created_at: now,
       updated_at: now,
@@ -175,6 +254,7 @@ export class LetterheadService {
       page_size: template.page_size,
       orientation: template.orientation,
       is_default: template.is_default,
+      applies_to: template.applies_to || 'BOTH',
       layout_config_json: JSON.stringify(template.layout_config),
       created_at: now,
       updated_at: now,
@@ -185,9 +265,45 @@ export class LetterheadService {
 
   async updateTemplate(companyId: string, templateId: string, data: Partial<LetterheadTemplate>): Promise<LetterheadTemplate> {
     const now = new Date().toISOString();
-    const updatePayload: any = { updated_at: now };
 
-    if (data.name) updatePayload.name = data.name;
+    if (data.is_default) {
+      await this.db('letterhead_templates').where({ company_id: companyId }).update({ is_default: false });
+      if (await this.db.schema.hasTable('letterhead_template_overrides')) {
+        await this.db('letterhead_template_overrides').where({ company_id: companyId }).update({ is_default: false });
+      }
+    }
+
+    if (templateId.startsWith('builtin-')) {
+      if (await this.db.schema.hasTable('letterhead_template_overrides')) {
+        const existing = await this.db('letterhead_template_overrides')
+          .where({ company_id: companyId, template_id: templateId })
+          .first();
+        if (existing) {
+          const up: any = { updated_at: now };
+          if (data.name !== undefined && data.name.trim()) up.name = data.name.trim();
+          if (data.applies_to !== undefined) up.applies_to = data.applies_to;
+          if (data.is_default !== undefined) up.is_default = Boolean(data.is_default);
+          await this.db('letterhead_template_overrides')
+            .where({ company_id: companyId, template_id: templateId })
+            .update(up);
+        } else {
+          await this.db('letterhead_template_overrides').insert({
+            company_id: companyId,
+            template_id: templateId,
+            name: data.name?.trim() || null,
+            applies_to: data.applies_to || null,
+            is_default: data.is_default !== undefined ? Boolean(data.is_default) : null,
+            is_active: true,
+            updated_at: now,
+          });
+        }
+      }
+      return (await this.getTemplateById(companyId, templateId))!;
+    }
+
+    const updatePayload: any = { updated_at: now };
+    if (data.name) updatePayload.name = data.name.trim();
+    if (data.applies_to) updatePayload.applies_to = data.applies_to;
     if (data.file_path) {
       this.validateFilePathInsideUploadDir(companyId, data.file_path);
       updatePayload.file_path = data.file_path;
@@ -195,13 +311,7 @@ export class LetterheadService {
     if (data.file_type) updatePayload.file_type = data.file_type;
     if (data.orientation) updatePayload.orientation = data.orientation;
     if (data.layout_config) updatePayload.layout_config_json = JSON.stringify(data.layout_config);
-
-    if (data.is_default !== undefined) {
-      updatePayload.is_default = Boolean(data.is_default);
-      if (updatePayload.is_default) {
-        await this.db('letterhead_templates').where({ company_id: companyId }).update({ is_default: false });
-      }
-    }
+    if (data.is_default !== undefined) updatePayload.is_default = Boolean(data.is_default);
 
     await this.db('letterhead_templates').where({ company_id: companyId, id: templateId }).update(updatePayload);
     return (await this.getTemplateById(companyId, templateId))!;
@@ -386,26 +496,67 @@ export class LetterheadService {
     const left = Math.max(25, Math.min(85, zones?.left_margin || 45));
 
     const metaTopY = Math.min(Math.max(headerEnd + 12, 115), 215);
-    const tableTopY = Math.min(Math.max(metaTopY + 85, 220), 340);
+    const tableTopY = analysis.table_rows_start_y
+      ? Math.round(analysis.table_rows_start_y)
+      : Math.min(Math.max(metaTopY + 85, 220), 340);
     const clampedFooterStart = Math.max(footerStart, tableTopY + 180);
+
+    const meta = analysis.detected_meta_fields;
+    const cust = analysis.detected_customer_fields;
+    const detectedCols = analysis.detected_columns;
+
+    const tableCols: any = { ...base.table_columns };
+    if (detectedCols && detectedCols.length > 0) {
+      for (const col of detectedCols) {
+        if (col.id === 'sr_no') tableCols.sr_no = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'item_name') tableCols.item_name = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'hsn_sac') tableCols.hsn_sac = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'qty') tableCols.qty = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'unit') tableCols.unit = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'rate') tableCols.rate = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'discount') tableCols.discount = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'taxable') tableCols.taxable = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'cgst_rate') tableCols.cgst_rate = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'cgst_amt') tableCols.cgst_amt = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'sgst_rate') tableCols.sgst_rate = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'sgst_amt') tableCols.sgst_amt = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'igst_rate') tableCols.igst_rate = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'igst_amt') tableCols.igst_amt = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+        else if (col.id === 'total') tableCols.total = { x: col.x, width: col.width, label: col.label, alignment: col.alignment };
+      }
+    }
+
+    const tableBottomMargin = analysis.table_rows_end_y
+      ? Math.max(120, Math.round(842 - analysis.table_rows_end_y + 40))
+      : Math.max(120, Math.round(842 - clampedFooterStart + 60));
 
     return {
       ...base,
-      customer_name: { ...base.customer_name, x: left, y: metaTopY + 12 },
-      billing_address: { ...base.billing_address, x: left, y: metaTopY + 28 },
-      shipping_address: { ...base.shipping_address!, x: left, y: metaTopY + 62 },
-      customer_gstin: { ...base.customer_gstin!, x: left, y: metaTopY + 52 },
-      invoice_number: { ...base.invoice_number, x: Math.max(left + 320, 395), y: metaTopY },
-      invoice_date: { ...base.invoice_date, x: Math.max(left + 320, 395), y: metaTopY + 18 },
-      due_date: { ...base.due_date!, x: Math.max(left + 320, 395), y: metaTopY + 36 },
-      place_of_supply: { ...base.place_of_supply!, x: Math.max(left + 320, 395), y: metaTopY + 54 },
+      customer_name: cust?.name ? { ...base.customer_name, x: cust.name.x, y: cust.name.y, width: cust.name.width } : { ...base.customer_name, x: left, y: metaTopY + 12 },
+      billing_address: cust?.address ? { ...base.billing_address, x: cust.address.x, y: cust.address.y, width: cust.address.width } : { ...base.billing_address, x: left, y: metaTopY + 28 },
+      shipping_address: cust?.address ? { ...base.shipping_address!, x: cust.address.x, y: cust.address.y + 35, width: cust.address.width } : { ...base.shipping_address!, x: left, y: metaTopY + 62 },
+      customer_gstin: cust?.gstin ? { ...base.customer_gstin!, x: cust.gstin.x, y: cust.gstin.y } : { ...base.customer_gstin!, x: left, y: metaTopY + 52 },
+      customer_state: meta?.state ? { x: meta.state.x, y: meta.state.y, fontSize: 9, alignment: 'left' } : undefined,
+      customer_state_code: meta?.state_code ? { x: meta.state_code.x, y: meta.state_code.y, fontSize: 9, alignment: 'left' } : undefined,
+      invoice_number: meta?.invoice_number ? { ...base.invoice_number, x: meta.invoice_number.x, y: meta.invoice_number.y } : { ...base.invoice_number, x: Math.max(left + 320, 395), y: metaTopY },
+      invoice_date: meta?.invoice_date ? { ...base.invoice_date, x: meta.invoice_date.x, y: meta.invoice_date.y } : { ...base.invoice_date, x: Math.max(left + 320, 395), y: metaTopY + 18 },
+      due_date: meta?.due_date ? { ...base.due_date!, x: meta.due_date.x, y: meta.due_date.y } : { ...base.due_date!, x: Math.max(left + 320, 395), y: metaTopY + 36 },
+      po_number: meta?.po_number ? { x: meta.po_number.x, y: meta.po_number.y, fontSize: 8.5, alignment: 'left' } : undefined,
+      po_date: meta?.po_date ? { x: meta.po_date.x, y: meta.po_date.y, fontSize: 8.5, alignment: 'left' } : undefined,
+      challan_number: meta?.challan_number ? { x: meta.challan_number.x, y: meta.challan_number.y, fontSize: 8.5, alignment: 'left' } : undefined,
+      challan_date: meta?.challan_date ? { x: meta.challan_date.x, y: meta.challan_date.y, fontSize: 8.5, alignment: 'left' } : undefined,
+      place_of_supply: meta?.place_of_supply ? { ...base.place_of_supply!, x: meta.place_of_supply.x, y: meta.place_of_supply.y } : { ...base.place_of_supply!, x: Math.max(left + 320, 395), y: metaTopY + 54 },
+      agent_name: meta?.agent_name ? { x: meta.agent_name.x, y: meta.agent_name.y, fontSize: 8.5, alignment: 'left' } : undefined,
       table_top_y: tableTopY,
-      table_bottom_margin: Math.max(120, Math.round(842 - clampedFooterStart + 60)),
+      table_bottom_margin: tableBottomMargin,
+      table_columns: tableCols,
       amount_in_words: { ...base.amount_in_words, x: left, y: Math.max(clampedFooterStart - 135, 580) },
       bank_details: { ...base.bank_details!, x: left, y: Math.max(clampedFooterStart - 95, 620) },
       terms_conditions: { ...base.terms_conditions!, x: left, y: Math.max(clampedFooterStart - 45, 680) },
       signature: { ...base.signature, y: Math.max(clampedFooterStart - 35, 720) },
       footer: { ...base.footer, y: Math.min(Math.max(clampedFooterStart + 15, 760), 825) },
+      detected_archetype: analysis.detected_archetype || 'STANDARD_OVERLAY',
+      is_igst: analysis.is_igst,
     };
   }
 
@@ -417,6 +568,7 @@ export class LetterheadService {
       orientation?: 'PORTRAIT' | 'LANDSCAPE';
       is_default?: boolean;
       auto_detect?: boolean;
+      applies_to?: TemplateAppliesTo;
     }
   ): Promise<{ template: LetterheadTemplate; analysis: LetterheadOCRResult }> {
     const company = await this.db('companies').where({ id: companyId }).first();
@@ -437,12 +589,18 @@ export class LetterheadService {
         ? getDefaultLayoutConfig(id)
         : this.buildLayoutFromAnalysis(id, analysis);
 
+    const effectiveAppliesTo: TemplateAppliesTo =
+      options?.applies_to && options.applies_to !== 'BOTH'
+        ? options.applies_to
+        : (analysis as any).recommended_applies_to || options?.applies_to || 'BOTH';
+
     const template = await this.createTemplate(companyId, {
       name: options?.name?.trim() || cleanTitle,
       file_path: storedPath,
       file_type: fileType,
       orientation: options?.orientation || analysis.recommended_orientation || 'PORTRAIT',
       is_default: Boolean(options?.is_default),
+      applies_to: effectiveAppliesTo,
       layout_config: layoutConfig,
     });
 
@@ -514,8 +672,8 @@ export class LetterheadService {
     streamText: string,
     pageWidth: number,
     pageHeight: number
-  ): Array<{ text: string; x: number; topY: number }> {
-    const tokens: Array<{ text: string; x: number; topY: number }> = [];
+  ): Array<{ text: string; x: number; topY: number; fontSize?: number; width?: number }> {
+    const tokens: Array<{ text: string; x: number; topY: number; fontSize?: number; width?: number }> = [];
     const btEtRegex = /BT\b([\s\S]*?)ET\b/g;
     let blockMatch: RegExpExecArray | null;
 
@@ -523,11 +681,12 @@ export class LetterheadService {
       const block = blockMatch[1];
       let curX = 45;
       let curPdfY = pageHeight - 50;
+      let curFontSize = 10;
       let leading = 14;
 
       // Walk line-by-line or operator-by-operator within BT..ET
       const opRegex =
-        /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+Tm\b|(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(?:Td|TD)\b|(-?\d+(?:\.\d+)?)\s+TL\b|T\*|(\((?:\\.|[^\\)])*\))\s*(?:Tj|'|")|\[((?:\\.|[^\]])*)\]\s*TJ\b|<([0-9A-Fa-f\s]+)>\s*Tj\b/g;
+        /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+Tm\b|(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(?:Td|TD)\b|(\/[A-Za-z0-9_]+)\s+(-?\d+(?:\.\d+)?)\s+Tf\b|(-?\d+(?:\.\d+)?)\s+TL\b|T\*|(\((?:\\.|[^\\)])*\))\s*(?:Tj|'|")|\[((?:\\.|[^\]])*)\]\s*TJ\b|<([0-9A-Fa-f\s]+)>\s*Tj\b/g;
 
       let opMatch: RegExpExecArray | null;
       while ((opMatch = opRegex.exec(block)) !== null) {
@@ -537,19 +696,28 @@ export class LetterheadService {
         } else if (opMatch[7] !== undefined && opMatch[8] !== undefined) {
           curX += parseFloat(opMatch[7]);
           curPdfY += parseFloat(opMatch[8]);
-        } else if (opMatch[9] !== undefined) {
-          leading = Math.abs(parseFloat(opMatch[9])) || 14;
+        } else if (opMatch[9] !== undefined && opMatch[10] !== undefined) {
+          curFontSize = Math.abs(parseFloat(opMatch[10])) || 10;
+        } else if (opMatch[11] !== undefined) {
+          leading = Math.abs(parseFloat(opMatch[11])) || 14;
         } else if (opMatch[0] === 'T*') {
           curPdfY -= leading;
-        } else if (opMatch[10] !== undefined) {
-          const inner = opMatch[10].slice(1, -1);
+        } else if (opMatch[12] !== undefined) {
+          const inner = opMatch[12].slice(1, -1);
           const decoded = this.decodePdfStringLiteral(inner).replace(/\s+/g, ' ').trim();
           if (decoded) {
             const topY = Math.max(0, Math.min(pageHeight, pageHeight - curPdfY));
-            tokens.push({ text: decoded, x: Math.max(0, Math.min(pageWidth, curX)), topY });
+            const w = Math.round(decoded.length * curFontSize * 0.52 * 10) / 10;
+            tokens.push({
+              text: decoded,
+              x: Math.round(Math.max(0, Math.min(pageWidth, curX)) * 10) / 10,
+              topY: Math.round(topY * 10) / 10,
+              fontSize: curFontSize,
+              width: w,
+            });
           }
-        } else if (opMatch[11] !== undefined) {
-          const arrayBody = opMatch[11];
+        } else if (opMatch[13] !== undefined) {
+          const arrayBody = opMatch[13];
           let combined = '';
           const partRegex = /\((?:\\.|[^\\)])*\)|<([0-9A-Fa-f\s]+)>/g;
           let part: RegExpExecArray | null;
@@ -563,13 +731,27 @@ export class LetterheadService {
           const decoded = combined.replace(/\s+/g, ' ').trim();
           if (decoded) {
             const topY = Math.max(0, Math.min(pageHeight, pageHeight - curPdfY));
-            tokens.push({ text: decoded, x: Math.max(0, Math.min(pageWidth, curX)), topY });
+            const w = Math.round(decoded.length * curFontSize * 0.52 * 10) / 10;
+            tokens.push({
+              text: decoded,
+              x: Math.round(Math.max(0, Math.min(pageWidth, curX)) * 10) / 10,
+              topY: Math.round(topY * 10) / 10,
+              fontSize: curFontSize,
+              width: w,
+            });
           }
-        } else if (opMatch[12] !== undefined) {
-          const decoded = this.decodePdfHexString(opMatch[12]).replace(/\s+/g, ' ').trim();
+        } else if (opMatch[14] !== undefined) {
+          const decoded = this.decodePdfHexString(opMatch[14]).replace(/\s+/g, ' ').trim();
           if (decoded) {
             const topY = Math.max(0, Math.min(pageHeight, pageHeight - curPdfY));
-            tokens.push({ text: decoded, x: Math.max(0, Math.min(pageWidth, curX)), topY });
+            const w = Math.round(decoded.length * curFontSize * 0.52 * 10) / 10;
+            tokens.push({
+              text: decoded,
+              x: Math.round(Math.max(0, Math.min(pageWidth, curX)) * 10) / 10,
+              topY: Math.round(topY * 10) / 10,
+              fontSize: curFontSize,
+              width: w,
+            });
           }
         }
       }
@@ -583,7 +765,7 @@ export class LetterheadService {
     pageWidth: number;
     pageHeight: number;
     pageCount: number;
-    tokens: Array<{ text: string; x: number; topY: number }>;
+    tokens: Array<{ text: string; x: number; topY: number; fontSize?: number; width?: number }>;
   }> {
     const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
     const pageCount = pdfDoc.getPageCount();
@@ -592,7 +774,7 @@ export class LetterheadService {
       ? firstPage.getSize()
       : { width: 595.28, height: 841.89 };
 
-    const allTokens: Array<{ text: string; x: number; topY: number }> = [];
+    const allTokens: Array<{ text: string; x: number; topY: number; fontSize?: number; width?: number }> = [];
 
     const MAX_INFLATE_BYTES = 10 * 1024 * 1024; // Cap stream inflation at 10 MB to prevent deflate bombs
     const readStreamBytes = (rawStream: PDFRawStream): string => {
@@ -741,6 +923,338 @@ export class LetterheadService {
     }
 
     return { width, height, metadataText: textChunks.join('\n') };
+  }
+
+  private detectTableColumnsAndZones(
+    tokens: Array<{ text: string; x: number; topY: number; fontSize?: number; width?: number }>,
+    canonicalW: number,
+    canonicalH: number,
+    rawText: string
+  ): {
+    detected_archetype: 'VARUN_SYSTEMS' | 'VARUN_SHREE' | 'CUSTOM_GST_GRID' | 'STANDARD_OVERLAY';
+    is_igst: boolean;
+    recommended_applies_to: TemplateAppliesTo;
+    detected_columns: Array<{ id: string; label: string; x: number; width: number; alignment: 'left' | 'center' | 'right' }>;
+    table_header_y?: number;
+    table_rows_start_y?: number;
+    table_rows_end_y?: number;
+    detected_meta_fields: {
+      invoice_number?: { x: number; y: number };
+      invoice_date?: { x: number; y: number };
+      due_date?: { x: number; y: number };
+      po_number?: { x: number; y: number };
+      po_date?: { x: number; y: number };
+      challan_number?: { x: number; y: number };
+      challan_date?: { x: number; y: number };
+      place_of_supply?: { x: number; y: number };
+      state?: { x: number; y: number };
+      state_code?: { x: number; y: number };
+      agent_name?: { x: number; y: number };
+    };
+    detected_customer_fields: {
+      name?: { x: number; y: number; width?: number };
+      address?: { x: number; y: number; width?: number };
+      gstin?: { x: number; y: number };
+    };
+  } {
+    const upperText = rawText.toUpperCase();
+    let archetype: 'VARUN_SYSTEMS' | 'VARUN_SHREE' | 'CUSTOM_GST_GRID' | 'STANDARD_OVERLAY' = 'STANDARD_OVERLAY';
+    if (upperText.includes('VARUN SYSTEMS')) {
+      archetype = 'VARUN_SYSTEMS';
+    } else if (upperText.includes('VARUN SHREE') || upperText.includes('VARUN SREE') || upperText.includes('VSIT')) {
+      archetype = 'VARUN_SHREE';
+    }
+
+    let isIgst = false;
+    if (upperText.includes('IGST') || upperText.includes('INTEGRATED TAX')) {
+      isIgst = true;
+    } else if (upperText.includes('CGST') || upperText.includes('SGST')) {
+      isIgst = false;
+    }
+
+    let recommendedAppliesTo: TemplateAppliesTo = 'BOTH';
+    if ((upperText.includes('QUOTATION') || upperText.includes('ESTIMATE')) && !upperText.includes('TAX INVOICE') && !upperText.includes('GST-INVOICE')) {
+      recommendedAppliesTo = 'QUOTATION';
+    } else if (upperText.includes('INVOICE') || upperText.includes('BILL OF SUPPLY')) {
+      recommendedAppliesTo = 'INVOICE';
+    }
+
+    // Group tokens into lines
+    const sorted = [...tokens].sort((a, b) => a.topY - b.topY || a.x - b.x);
+    const lines: Array<{ y: number; tokens: typeof tokens; text: string }> = [];
+    let curY = -999;
+    let curLine: typeof tokens = [];
+
+    for (const t of sorted) {
+      if (Math.abs(t.topY - curY) > 5) {
+        if (curLine.length > 0) {
+          lines.push({ y: curY, tokens: curLine.sort((a, b) => a.x - b.x), text: curLine.map((x) => x.text).join(' ') });
+        }
+        curLine = [t];
+        curY = t.topY;
+      } else {
+        curLine.push(t);
+      }
+    }
+    if (curLine.length > 0) {
+      lines.push({ y: curY, tokens: curLine.sort((a, b) => a.x - b.x), text: curLine.map((x) => x.text).join(' ') });
+    }
+
+    // Identify Table Header Line
+    let bestHeaderLine: (typeof lines)[0] | null = null;
+    let bestSubHeaderLine: (typeof lines)[0] | null = null;
+    let bestScore = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (l.y < canonicalH * 0.15 || l.y > canonicalH * 0.65) continue;
+
+      const nextL = i + 1 < lines.length && lines[i + 1].y - l.y <= 18 ? lines[i + 1] : null;
+      const combined = (l.text + ' ' + (nextL ? nextL.text : '')).toLowerCase();
+
+      let score = 0;
+      if (/\b(?:s\.?\s*no|sl\.?\s*no|sr\.?\s*no|#|no\.?)\b/.test(combined)) score++;
+      if (/\b(?:description|particulars|goods|item)\b/.test(combined)) score++;
+      if (/\b(?:hsn|sac)\b/.test(combined)) score++;
+      if (/\b(?:qty|quantity|units?)\b/.test(combined)) score++;
+      if (/\b(?:rate|base\s*rate|price)\b/.test(combined)) score++;
+      if (/\b(?:taxable|amount)\b/.test(combined)) score++;
+      if (/\b(?:cgst|sgst|igst|gst)\b/.test(combined)) score++;
+      if (/\b(?:total)\b/.test(combined)) score++;
+
+      if (score > bestScore && score >= 3) {
+        bestScore = score;
+        bestHeaderLine = l;
+        bestSubHeaderLine = nextL;
+      }
+    }
+
+    const detectedColumns: Array<{ id: string; label: string; x: number; width: number; alignment: 'left' | 'center' | 'right' }> = [];
+    let tableHeaderY = bestHeaderLine ? bestHeaderLine.y : 220;
+    let tableRowsStartY = bestSubHeaderLine ? Math.round(bestSubHeaderLine.y + 16) : Math.round(tableHeaderY + 22);
+
+    if (bestHeaderLine) {
+      if (archetype === 'STANDARD_OVERLAY') {
+        archetype = 'CUSTOM_GST_GRID';
+      }
+
+      const allHeaderTokens = [
+        ...bestHeaderLine.tokens,
+        ...(bestSubHeaderLine ? bestSubHeaderLine.tokens : []),
+      ].sort((a, b) => a.x - b.x);
+
+      const rawCols: Array<{ id: string; label: string; x: number; alignment: 'left' | 'center' | 'right' }> = [];
+
+      for (const t of allHeaderTokens) {
+        const txt = t.text.toLowerCase().trim();
+        if (/^(?:s\.?\s*no|sl\.?\s*no|sr\.?\s*no|#|no\.?)$/i.test(txt) || txt === 's') {
+          if (!rawCols.some((c) => c.id === 'sr_no')) {
+            rawCols.push({ id: 'sr_no', label: 'S.No', x: t.x, alignment: 'center' });
+          }
+        } else if (/description|particulars|goods|item/i.test(txt)) {
+          if (!rawCols.some((c) => c.id === 'item_name')) {
+            rawCols.push({ id: 'item_name', label: 'Item Description', x: t.x, alignment: 'left' });
+          }
+        } else if (/hsn|sac/i.test(txt)) {
+          if (!rawCols.some((c) => c.id === 'hsn_sac')) {
+            rawCols.push({ id: 'hsn_sac', label: 'HSN/SAC', x: t.x, alignment: 'center' });
+          }
+        } else if (/qty|quantity/i.test(txt)) {
+          if (!rawCols.some((c) => c.id === 'qty')) {
+            rawCols.push({ id: 'qty', label: 'Qty', x: t.x, alignment: 'center' });
+          }
+        } else if (/units?|uom|per/i.test(txt) && !/description/i.test(txt)) {
+          if (!rawCols.some((c) => c.id === 'unit')) {
+            rawCols.push({ id: 'unit', label: 'Unit', x: t.x, alignment: 'center' });
+          }
+        } else if (/base\s*rate|rate|price|unit\s*price/i.test(txt)) {
+          if (!rawCols.some((c) => c.id === 'rate')) {
+            rawCols.push({ id: 'rate', label: 'Rate', x: t.x, alignment: 'right' });
+          }
+        } else if (/taxable/i.test(txt)) {
+          if (!rawCols.some((c) => c.id === 'taxable')) {
+            rawCols.push({ id: 'taxable', label: 'Taxable', x: t.x, alignment: 'right' });
+          }
+        } else if (/total\s*amount|line\s*total/i.test(txt) || (txt === 'total' && t.x > canonicalW * 0.75)) {
+          if (!rawCols.some((c) => c.id === 'total')) {
+            rawCols.push({ id: 'total', label: 'Total', x: t.x, alignment: 'right' });
+          }
+        }
+      }
+
+      // Detect Tax Columns (CGST, SGST, IGST)
+      const cgstToken = allHeaderTokens.find((t) => /\bcgst\b/i.test(t.text));
+      const sgstToken = allHeaderTokens.find((t) => /\bsgst\b/i.test(t.text));
+      const igstToken = allHeaderTokens.find((t) => /\bigst\b/i.test(t.text));
+
+      if (cgstToken && sgstToken) {
+        isIgst = false;
+        const subTokens = bestSubHeaderLine ? bestSubHeaderLine.tokens : [];
+        const cgstPct = subTokens.find((t) => t.text === '%' && Math.abs(t.x - cgstToken.x) < 40);
+        const cgstAmt = subTokens.find((t) => /amt/i.test(t.text) && Math.abs(t.x - cgstToken.x) < 40);
+        const sgstPct = subTokens.find((t) => t.text === '%' && Math.abs(t.x - sgstToken.x) < 40);
+        const sgstAmt = subTokens.find((t) => /amt/i.test(t.text) && Math.abs(t.x - sgstToken.x) < 40);
+
+        if (cgstPct && cgstAmt && sgstPct && sgstAmt) {
+          rawCols.push({ id: 'cgst_rate', label: 'CGST %', x: cgstPct.x, alignment: 'right' });
+          rawCols.push({ id: 'cgst_amt', label: 'CGST Amt', x: cgstAmt.x, alignment: 'right' });
+          rawCols.push({ id: 'sgst_rate', label: 'SGST %', x: sgstPct.x, alignment: 'right' });
+          rawCols.push({ id: 'sgst_amt', label: 'SGST Amt', x: sgstAmt.x, alignment: 'right' });
+        } else {
+          rawCols.push({ id: 'cgst_amt', label: 'CGST', x: cgstToken.x, alignment: 'right' });
+          rawCols.push({ id: 'sgst_amt', label: 'SGST', x: sgstToken.x, alignment: 'right' });
+        }
+      } else if (igstToken) {
+        isIgst = true;
+        const subTokens = bestSubHeaderLine ? bestSubHeaderLine.tokens : [];
+        const igstPct = subTokens.find((t) => t.text === '%' && Math.abs(t.x - igstToken.x) < 45);
+        const igstAmt = subTokens.find((t) => /amt/i.test(t.text) && Math.abs(t.x - igstToken.x) < 45);
+
+        if (igstPct && igstAmt) {
+          rawCols.push({ id: 'igst_rate', label: 'IGST %', x: igstPct.x, alignment: 'right' });
+          rawCols.push({ id: 'igst_amt', label: 'IGST Amt', x: igstAmt.x, alignment: 'right' });
+        } else {
+          rawCols.push({ id: 'igst_amt', label: 'IGST', x: igstToken.x, alignment: 'right' });
+        }
+      }
+
+      rawCols.sort((a, b) => a.x - b.x);
+
+      for (let i = 0; i < rawCols.length; i++) {
+        const c = rawCols[i];
+        const nextC = i + 1 < rawCols.length ? rawCols[i + 1] : null;
+        const width = nextC ? Math.max(20, Math.round(nextC.x - c.x)) : Math.max(45, Math.round(canonicalW - c.x - 30));
+        detectedColumns.push({
+          id: c.id,
+          label: c.label,
+          x: Math.round(c.x),
+          width,
+          alignment: c.alignment,
+        });
+      }
+    }
+
+    let tableRowsEndY = canonicalH - 180;
+    const totalsYCandidates: number[] = [];
+
+    for (const l of lines) {
+      if (l.y <= tableRowsStartY) continue;
+      const lt = l.text.toLowerCase();
+      if (/\b(?:total|sub\s*total|taxable\s*amount|total\s*taxable)\b/.test(lt) && !lt.includes('line total')) {
+        totalsYCandidates.push(l.y);
+      }
+      if (/\bround\s*off\b/.test(lt)) totalsYCandidates.push(l.y);
+      if (/\bgrand\s*total\b/.test(lt)) totalsYCandidates.push(l.y);
+      if (/\b(?:amount\s+chargeable|invoice\s+value|rupees|inr\s*in\s*words)\b/.test(lt)) totalsYCandidates.push(l.y);
+    }
+
+    if (totalsYCandidates.length > 0) {
+      tableRowsEndY = Math.min(...totalsYCandidates) - 8;
+    }
+
+    const detectedMeta: any = {};
+    for (const t of tokens) {
+      if (t.topY >= tableHeaderY) continue;
+      const txt = t.text.toLowerCase();
+
+      if (/\binvoice\s*no\b|\bbill\s*no\b|\bquotation\s*no\b|\bquote\s*no\b/.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.invoice_number = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : (t.width || 55) + 4)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bdate\s*of\s*invoice\b|\binvoice\s*date\b|\bdated\b|\bdate\s*:/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.invoice_date = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : (t.width || 45) + 4)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bdue\s*date\b|\bvalid\s*until\b/i.test(txt)) {
+        detectedMeta.due_date = { x: Math.round(t.x + (t.width || 45) + 4), y: Math.round(t.topY) };
+      }
+      if (/\bpo\s*no\b|\bp\.o\.\s*no\b|\bbuyer's\s*order\s*no\b/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.po_number = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : (t.width || 35) + 4)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bpo\s*date\b|\bp\.o\.\s*date\b|\border\s*date\b/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.po_date = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : (t.width || 40) + 4)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bdc\s*no\b|\bdelivery\s*note\b|\bchallan\s*no\b|\bdespatch\s*doc\b/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.challan_number = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : (t.width || 35) + 4)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bdc\s*date\b|\bchallan\s*date\b/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.challan_date = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : (t.width || 40) + 4)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bplace\s*of\s*supply\b|\bdestination\b/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.place_of_supply = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : 75)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bstate\s*name\b|\bstate\s*:/i.test(txt) && !txt.includes('state code')) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.state = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : 55)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bstate\s*code\b|\bcode\s*:/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.state_code = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : 40)),
+          y: Math.round(t.topY),
+        };
+      }
+      if (/\bagent\s*name\b|\bagent\s*:/i.test(txt)) {
+        const colonIdx = t.text.indexOf(':');
+        detectedMeta.agent_name = {
+          x: Math.round(t.x + (colonIdx >= 0 ? (colonIdx + 2) * 5.2 : 55)),
+          y: Math.round(t.topY),
+        };
+      }
+    }
+
+    const detectedCust: any = {};
+    const receiverLabelTok = tokens.find((t) =>
+      t.topY < tableHeaderY && /billed\s*to|details\s*of\s*receiver|buyer\s*\(bill\s*to\)|consignee|to,/i.test(t.text)
+    );
+
+    if (receiverLabelTok) {
+      const custX = Math.round(receiverLabelTok.x);
+      detectedCust.name = { x: custX, y: Math.round(receiverLabelTok.topY + 14), width: 250 };
+      detectedCust.address = { x: custX, y: Math.round(receiverLabelTok.topY + 28), width: 250 };
+      detectedCust.gstin = { x: custX, y: Math.round(receiverLabelTok.topY + 52) };
+    }
+
+    return {
+      detected_archetype: archetype,
+      is_igst: isIgst,
+      recommended_applies_to: recommendedAppliesTo,
+      detected_columns: detectedColumns,
+      table_header_y: Math.round(tableHeaderY),
+      table_rows_start_y: Math.round(tableRowsStartY),
+      table_rows_end_y: Math.round(tableRowsEndY),
+      detected_meta_fields: detectedMeta,
+      detected_customer_fields: detectedCust,
+    };
   }
 
   private async runLocalTesseractIfBundled(buffer: Buffer): Promise<string> {
@@ -907,6 +1421,13 @@ export class LetterheadService {
     const printableTop = headerEnd + 10;
     const printableBottom = footerStart - 10;
 
+    const intel = this.detectTableColumnsAndZones(
+      pdfTokens.map((t) => ({ ...t, x: t.x * scaleX, topY: t.topY * scaleY, width: ((t as any).width || 20) * scaleX })),
+      canonicalW,
+      canonicalH,
+      extractedText
+    );
+
     return {
       raw_text: extractedText.substring(0, 1000),
       confidence,
@@ -916,6 +1437,14 @@ export class LetterheadService {
       page_height_pt: Math.round(pageHeight * 100) / 100,
       page_count: pageCount,
       recommended_orientation: recommendedOrientation,
+      detected_archetype: intel.detected_archetype,
+      is_igst: intel.is_igst,
+      detected_columns: intel.detected_columns,
+      table_header_y: intel.table_header_y,
+      table_rows_start_y: intel.table_rows_start_y,
+      table_rows_end_y: intel.table_rows_end_y,
+      detected_meta_fields: intel.detected_meta_fields,
+      detected_customer_fields: intel.detected_customer_fields,
       detected_entities: {
         company_name: companyName,
         gstin,

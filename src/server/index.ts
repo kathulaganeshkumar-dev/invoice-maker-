@@ -12,6 +12,7 @@ import { logger } from './services/logger';
 
 let activeHttpServer: any = null;
 let activeWatchInterval: NodeJS.Timeout | null = null;
+let activeAutoBackupInterval: NodeJS.Timeout | null = null;
 const sseClients = new Set<express.Response>();
 
 export async function stopServer(): Promise<void> {
@@ -19,6 +20,10 @@ export async function stopServer(): Promise<void> {
   if (activeWatchInterval) {
     clearInterval(activeWatchInterval);
     activeWatchInterval = null;
+  }
+  if (activeAutoBackupInterval) {
+    clearInterval(activeAutoBackupInterval);
+    activeAutoBackupInterval = null;
   }
   for (const client of sseClients) {
     try {
@@ -167,10 +172,19 @@ export async function startServer(port = 4200): Promise<express.Express> {
   await seedInitialData(db);
   logger.info('[Database] Ready and verified!');
 
-  // Trigger automated daily rolling local backup (keeps last 7 copies)
+  // Trigger automated rolling local backup and initialize background recurring check (every 30 mins)
   try {
     const backupRestoreService = new BackupRestoreService(db);
     backupRestoreService.runDailyRollingBackup().catch((err) => logger.warn('[Server] Daily rolling backup error:', err));
+
+    if (activeAutoBackupInterval) {
+      clearInterval(activeAutoBackupInterval);
+    }
+    activeAutoBackupInterval = setInterval(() => {
+      backupRestoreService.runDailyRollingBackup().catch((err) => {
+        logger.warn('[Server] Periodic auto-backup check warning:', err);
+      });
+    }, 30 * 60 * 1000);
   } catch (err) {
     logger.warn('[Server] Could not initialize daily rolling backup:', err);
   }

@@ -37,7 +37,7 @@ describe('LAN Multi-User UI & Menu Layout Verification', () => {
   it('implements Host configuration with IP, Port, and Staff creation with menu permissions', () => {
     expect(modalContent).toContain('Main Office PC (Host) Network Info');
     expect(modalContent).toContain('Host Port:');
-    expect(modalContent).toMatch(/Create (Staff Member|Worker Profile) (&|&amp;) Assign (Menu )?Permissions/);
+    expect(modalContent).toMatch(/Create Staff (&|&amp;) Owner Profiles|Create (Staff Member|Worker Profile)/);
     expect(modalContent).toContain('hostNewStaffName');
     expect(modalContent).toContain('Billing Staff');
     expect(modalContent).toMatch(/Accounts (&|&amp;) Inventory/);

@@ -724,6 +724,7 @@ export async function runMigrations(db: Knex): Promise<void> {
       table.string('page_size').defaultTo('A4');
       table.string('orientation').defaultTo('PORTRAIT');
       table.boolean('is_default').defaultTo(false);
+      table.string('applies_to').defaultTo('BOTH');
       table.text('layout_config_json').notNullable();
       table.string('created_at').notNullable();
       table.string('updated_at').notNullable();
@@ -758,34 +759,48 @@ export async function runMigrations(db: Knex): Promise<void> {
     { name: 'excel_export_save_path', type: 'text' },
     { name: 'default_invoice_notes', type: 'text' },
     { name: 'default_quotation_notes', type: 'text' },
-    { name: 'quotation_validity_days', type: 'integer' },
-    { name: 'default_tax_inclusive', type: 'boolean' },
+    { name: 'quotation_validity_days', type: 'integer', defaultVal: 30 },
+    { name: 'default_tax_inclusive', type: 'boolean', defaultVal: false },
+    { name: 'auto_backup_enabled', type: 'boolean', defaultVal: true },
+    { name: 'auto_backup_frequency', type: 'text', defaultVal: 'DAILY' },
+    { name: 'auto_backup_interval_days', type: 'integer', defaultVal: 1 },
+    { name: 'auto_backup_retention_days', type: 'integer', defaultVal: 30 },
+    { name: 'auto_backup_max_count', type: 'integer', defaultVal: 30 },
+    { name: 'last_auto_backup_at', type: 'text' },
   ];
 
   for (const col of compSettingsCols) {
     const exists = await db.schema.hasColumn('company_settings', col.name);
     if (!exists) {
       await db.schema.alterTable('company_settings', (table) => {
-        if (col.type === 'text') table.text(col.name).nullable();
-        else if (col.type === 'integer') table.integer(col.name).defaultTo(30);
-        else if (col.type === 'boolean') table.boolean(col.name).defaultTo(false);
+        if (col.type === 'text') table.text(col.name).nullable().defaultTo((col as any).defaultVal ?? null);
+        else if (col.type === 'integer') table.integer(col.name).defaultTo((col as any).defaultVal ?? 30);
+        else if (col.type === 'boolean') table.boolean(col.name).defaultTo((col as any).defaultVal ?? false);
       });
     }
   }
 
   const appSettingsCols = [
-    'invoice_save_path',
-    'quotation_save_path',
-    'purchase_save_path',
-    'report_save_path',
-    'backup_save_path',
-    'excel_export_save_path',
+    { name: 'invoice_save_path', type: 'text' },
+    { name: 'quotation_save_path', type: 'text' },
+    { name: 'purchase_save_path', type: 'text' },
+    { name: 'report_save_path', type: 'text' },
+    { name: 'backup_save_path', type: 'text' },
+    { name: 'excel_export_save_path', type: 'text' },
+    { name: 'auto_backup_enabled', type: 'boolean', defaultVal: true },
+    { name: 'auto_backup_frequency', type: 'text', defaultVal: 'DAILY' },
+    { name: 'auto_backup_interval_days', type: 'integer', defaultVal: 1 },
+    { name: 'auto_backup_retention_days', type: 'integer', defaultVal: 30 },
+    { name: 'auto_backup_max_count', type: 'integer', defaultVal: 30 },
+    { name: 'last_auto_backup_at', type: 'text' },
   ];
   for (const col of appSettingsCols) {
-    const exists = await db.schema.hasColumn('app_settings', col);
+    const exists = await db.schema.hasColumn('app_settings', col.name);
     if (!exists) {
       await db.schema.alterTable('app_settings', (table) => {
-        table.text(col).nullable();
+        if (col.type === 'text') table.text(col.name).nullable().defaultTo((col as any).defaultVal ?? null);
+        else if (col.type === 'integer') table.integer(col.name).defaultTo((col as any).defaultVal ?? 30);
+        else if (col.type === 'boolean') table.boolean(col.name).defaultTo((col as any).defaultVal ?? false);
       });
     }
   }
@@ -928,6 +943,28 @@ export async function runMigrations(db: Knex): Promise<void> {
       .whereNull('file_path')
       .orWhereRaw("TRIM(file_path) = ''")
       .del();
+
+    const hasAppliesTo = await db.schema.hasColumn('letterhead_templates', 'applies_to');
+    if (!hasAppliesTo) {
+      await db.schema.alterTable('letterhead_templates', (table) => {
+        table.string('applies_to').defaultTo('BOTH');
+      });
+    }
+  }
+
+  // Letterhead Template Overrides (allows company-level renaming and scope customization for built-in & custom templates)
+  if (!(await db.schema.hasTable('letterhead_template_overrides'))) {
+    await db.schema.createTable('letterhead_template_overrides', (table) => {
+      table.string('company_id').notNullable();
+      table.string('template_id').notNullable();
+      table.string('name').nullable();
+      table.string('applies_to').nullable();
+      table.boolean('is_default').nullable();
+      table.boolean('is_active').defaultTo(true);
+      table.string('updated_at').notNullable();
+      table.primary(['company_id', 'template_id']);
+      table.index(['company_id']);
+    });
   }
 
   const purchaseHasNotes = await db.schema.hasColumn('purchase_invoices', 'notes');
@@ -1090,6 +1127,40 @@ export async function runMigrations(db: Knex): Promise<void> {
       if (!exists) {
         await db.schema.alterTable('quotation_items', (table) => {
           table.string(c.name).defaultTo(c.defaultVal ?? '');
+        });
+      }
+    }
+  }
+
+  // Ensure Varun Systems invoice columns exist on existing databases
+  if (await db.schema.hasTable('invoices')) {
+    const invCols: Array<{ name: string; type?: string; defaultVal?: any }> = [
+      { name: 'purchase_order_date', type: 'string' },
+      { name: 'po_date', type: 'string' },
+      { name: 'delivery_challan_number', type: 'string' },
+      { name: 'delivery_challan_date', type: 'string' },
+      { name: 'dc_number', type: 'string' },
+      { name: 'dc_date', type: 'string' },
+      { name: 'agent_name', type: 'string' },
+      { name: 'top_margin_mm', type: 'float', defaultVal: 55.0 },
+      { name: 'bottom_margin_mm', type: 'float', defaultVal: 32.0 },
+      { name: 'left_margin_mm', type: 'float', defaultVal: 15.0 },
+      { name: 'right_margin_mm', type: 'float', defaultVal: 15.0 },
+      { name: 'print_letterhead_overlay', type: 'boolean', defaultVal: false },
+      { name: 'sign_off_company', type: 'string', defaultVal: 'For VARUN SYSTEMS.' },
+    ];
+
+    for (const c of invCols) {
+      const exists = await db.schema.hasColumn('invoices', c.name);
+      if (!exists) {
+        await db.schema.alterTable('invoices', (table) => {
+          if (c.type === 'boolean') {
+            table.boolean(c.name).defaultTo(c.defaultVal ?? false);
+          } else if (c.type === 'float') {
+            table.float(c.name).defaultTo(c.defaultVal ?? 0);
+          } else {
+            table.string(c.name).defaultTo(c.defaultVal ?? '');
+          }
         });
       }
     }

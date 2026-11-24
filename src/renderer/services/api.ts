@@ -21,6 +21,7 @@ import {
   LetterheadTemplate,
   LetterheadOCRResult,
   AppSettings,
+  AutoBackupSettings,
 } from '../../shared/types';
 
 export const getBaseUrl = (): string => {
@@ -595,4 +596,25 @@ export const api = {
   getBackupDownloadUrl: (filename: string, companyId?: string) =>
     `${getBaseUrl()}/backups/${encodeURIComponent(filename)}/download${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`,
   uploadRestoreBackup: (formData: FormData) => requestFormData<any>('/backups/upload-restore', formData),
+
+  // Automated Daily Backup & Retention Configuration
+  getAutoBackupSettings: (companyId?: string) =>
+    request<AutoBackupSettings>(`/backups/auto-backup/settings${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`),
+  updateAutoBackupSettings: (settings: Partial<AutoBackupSettings>, companyId?: string) =>
+    request<{ success: boolean; settings: AutoBackupSettings }>('/backups/auto-backup/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...settings, companyId }),
+    }),
+  runAutoBackupNow: (companyId?: string) =>
+    request<{
+      success: boolean;
+      backup: any;
+      destinationDir: string;
+      prunedCount: number;
+      totalRemaining: number;
+      message: string;
+    }>('/backups/auto-backup/run', {
+      method: 'POST',
+      body: JSON.stringify(companyId ? { companyId } : {}),
+    }),
 };

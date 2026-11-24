@@ -8,6 +8,7 @@ import { getDefaultDataDir, getDefaultSqlitePath } from '../database/connection'
 import { runMigrations } from '../database/migrations';
 import { validateSafeLocalSaveDir } from './pathSecurity';
 import { assertDiskSpace } from './diskSpaceGuard';
+import { AutoBackupSettings } from '../../shared/types';
 
 export interface BackupMetadata {
   id: string;
@@ -90,6 +91,8 @@ const ORDERED_TABLES = [
 ];
 
 export class BackupRestoreService {
+  private cachedCustomBackupDir: string = '';
+
   constructor(private db: Knex) {}
 
   getBackupDir(): string {
@@ -160,19 +163,31 @@ export class BackupRestoreService {
       throw new Error('Invalid backup archive file format. Only .sqlite3 database files are permitted.');
     }
 
-    const targetDir = path.resolve(companyId ? this.getCompanyBackupDir(companyId) : this.getBackupDir());
-    const backupPath = path.resolve(targetDir, cleanName);
+    const candidateDirs = [
+      path.resolve(companyId ? this.getCompanyBackupDir(companyId) : this.getBackupDir()),
+      path.resolve(this.getBackupDir(), 'rolling'),
+    ];
+    if (this.cachedCustomBackupDir) {
+      candidateDirs.push(path.resolve(this.cachedCustomBackupDir));
+    }
 
-    if (!backupPath.startsWith(targetDir + path.sep) || !fs.existsSync(backupPath)) {
+    let resolvedValidPath: string | null = null;
+    for (const dir of candidateDirs) {
+      const candidate = path.resolve(dir, cleanName);
+      if (candidate.startsWith(dir + path.sep) && fs.existsSync(candidate)) {
+        const stat = fs.statSync(candidate);
+        if (stat.isFile()) {
+          resolvedValidPath = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedValidPath) {
       throw new Error(`Backup file ${cleanName} does not exist in authorized backups directory.`);
     }
 
-    const stat = fs.statSync(backupPath);
-    if (!stat.isFile()) {
-      throw new Error('Specified backup path is not a valid regular file.');
-    }
-
-    return { cleanName, backupPath };
+    return { cleanName, backupPath: resolvedValidPath };
   }
 
   private async readAllTablesFromSqlite(filePath: string): Promise<Map<string, any[]>> {
@@ -494,30 +509,258 @@ export class BackupRestoreService {
   }
 
   /**
-   * Executes an automated daily rolling local backup (keeps latest 7 daily snapshots)
+   * Retrieves the current automated backup configuration, resolving between company_settings and app_settings
    */
-  async runDailyRollingBackup(): Promise<BackupMetadata | null> {
-    const backupDir = this.getBackupDir();
-    const rollingDir = path.join(backupDir, 'rolling');
-    if (!fs.existsSync(rollingDir)) {
-      fs.mkdirSync(rollingDir, { recursive: true });
+  async getAutoBackupSettings(companyId?: string): Promise<AutoBackupSettings> {
+    let compSettings: any = null;
+    if (companyId) {
+      compSettings = await this.db('company_settings').where({ company_id: companyId }).first();
+    }
+    const appSettings = await this.db('app_settings').first();
+
+    const enabled = compSettings?.auto_backup_enabled ?? appSettings?.auto_backup_enabled ?? true;
+    const frequency = (compSettings?.auto_backup_frequency || appSettings?.auto_backup_frequency || 'DAILY') as 'DAILY' | 'EVERY_N_DAYS';
+    const intervalDays = Math.max(1, Number(compSettings?.auto_backup_interval_days ?? appSettings?.auto_backup_interval_days ?? 1));
+    const retentionDays = Math.max(1, Number(compSettings?.auto_backup_retention_days ?? appSettings?.auto_backup_retention_days ?? 30));
+    const maxCount = Math.max(1, Number(compSettings?.auto_backup_max_count ?? appSettings?.auto_backup_max_count ?? 30));
+    const rawPath = String(compSettings?.backup_save_path || appSettings?.backup_save_path || '').trim();
+    const lastBackup = compSettings?.last_auto_backup_at || appSettings?.last_auto_backup_at || null;
+
+    let resolvedDir = path.join(this.getBackupDir(), 'rolling');
+    if (rawPath) {
+      try {
+        resolvedDir = validateSafeLocalSaveDir(rawPath);
+        this.cachedCustomBackupDir = resolvedDir;
+      } catch {
+        // Fallback to internal rolling dir if configured path is invalid
+      }
+    }
+
+    return {
+      auto_backup_enabled: Boolean(enabled),
+      auto_backup_frequency: frequency === 'EVERY_N_DAYS' ? 'EVERY_N_DAYS' : 'DAILY',
+      auto_backup_interval_days: intervalDays,
+      auto_backup_retention_days: retentionDays,
+      auto_backup_max_count: maxCount,
+      backup_save_path: rawPath,
+      last_auto_backup_at: lastBackup,
+      resolved_backup_dir: resolvedDir,
+    };
+  }
+
+  /**
+   * Updates automated backup configuration across both app_settings and company_settings
+   */
+  async updateAutoBackupSettings(
+    updates: Partial<AutoBackupSettings>,
+    companyId?: string
+  ): Promise<AutoBackupSettings> {
+    const patch: any = {};
+    if (updates.auto_backup_enabled !== undefined) {
+      patch.auto_backup_enabled = Boolean(updates.auto_backup_enabled);
+    }
+    if (updates.auto_backup_frequency !== undefined) {
+      patch.auto_backup_frequency = updates.auto_backup_frequency === 'EVERY_N_DAYS' ? 'EVERY_N_DAYS' : 'DAILY';
+    }
+    if (updates.auto_backup_interval_days !== undefined) {
+      patch.auto_backup_interval_days = Math.max(1, Math.min(365, Number(updates.auto_backup_interval_days) || 1));
+    }
+    if (updates.auto_backup_retention_days !== undefined) {
+      patch.auto_backup_retention_days = Math.max(1, Math.min(3650, Number(updates.auto_backup_retention_days) || 30));
+    }
+    if (updates.auto_backup_max_count !== undefined) {
+      patch.auto_backup_max_count = Math.max(1, Math.min(1000, Number(updates.auto_backup_max_count) || 30));
+    }
+    if (updates.backup_save_path !== undefined) {
+      const cleanPath = String(updates.backup_save_path || '').trim();
+      if (cleanPath) {
+        const validated = validateSafeLocalSaveDir(cleanPath);
+        this.cachedCustomBackupDir = validated;
+      } else {
+        this.cachedCustomBackupDir = '';
+      }
+      patch.backup_save_path = cleanPath;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      const appSettings = await this.db('app_settings').first();
+      if (appSettings) {
+        await this.db('app_settings').where({ id: appSettings.id }).update(patch);
+      }
+      if (companyId) {
+        await this.db('company_settings').where({ company_id: companyId }).update(patch);
+      }
+    }
+
+    return this.getAutoBackupSettings(companyId);
+  }
+
+  /**
+   * Prunes backup files in a directory according to retention days and max count limits
+   */
+  pruneDirectoryBackups(
+    dirPath: string,
+    retentionDays: number,
+    maxCount: number
+  ): { prunedCount: number; remainingCount: number } {
+    if (!fs.existsSync(dirPath)) {
+      return { prunedCount: 0, remainingCount: 0 };
+    }
+
+    let prunedCount = 0;
+    try {
+      const files = fs.readdirSync(dirPath);
+      const backupFiles = files
+        .filter((f) => /^(?:auto_backup_|rolling_).*\.(?:sqlite3|json)$/i.test(f))
+        .map((f) => {
+          const filePath = path.join(dirPath, f);
+          const stat = fs.statSync(filePath);
+          return {
+            filename: f,
+            filePath,
+            mtimeMs: stat.mtimeMs,
+          };
+        });
+
+      const now = Date.now();
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const surviving: typeof backupFiles = [];
+
+      // Step 1: Delete files older than retentionDays
+      for (const file of backupFiles) {
+        const ageDays = (now - file.mtimeMs) / msPerDay;
+        if (ageDays > retentionDays) {
+          try {
+            fs.unlinkSync(file.filePath);
+            prunedCount++;
+          } catch {
+            // ignore unlink error
+          }
+        } else {
+          surviving.push(file);
+        }
+      }
+
+      // Step 2: Delete excess files if surviving count exceeds maxCount
+      surviving.sort((a, b) => b.mtimeMs - a.mtimeMs);
+      if (surviving.length > maxCount) {
+        for (let i = maxCount; i < surviving.length; i++) {
+          try {
+            fs.unlinkSync(surviving[i].filePath);
+            prunedCount++;
+          } catch {
+            // ignore unlink error
+          }
+        }
+      }
+
+      return {
+        prunedCount,
+        remainingCount: Math.min(surviving.length, maxCount),
+      };
+    } catch (err) {
+      console.warn('[Backup] Directory pruning error:', err);
+      return { prunedCount, remainingCount: 0 };
+    }
+  }
+
+  /**
+   * Executes an automated rolling backup with user-defined frequency, custom folder path, and retention policy
+   */
+  async runDailyRollingBackup(
+    force = false,
+    companyId?: string
+  ): Promise<{
+    backup: BackupMetadata | null;
+    destinationDir: string;
+    prunedCount: number;
+    totalRemaining: number;
+    message: string;
+  }> {
+    const settings = await this.getAutoBackupSettings(companyId);
+
+    if (!force && !settings.auto_backup_enabled) {
+      return {
+        backup: null,
+        destinationDir: '',
+        prunedCount: 0,
+        totalRemaining: 0,
+        message: 'Automated backup is disabled in settings.',
+      };
     }
 
     const todayDate = new Date().toISOString().slice(0, 10);
-    const todayFilename = `rolling_${todayDate}.sqlite3`;
-    const todayPath = path.join(rollingDir, todayFilename);
 
-    // If today's rolling backup already exists, no need to duplicate
-    if (fs.existsSync(todayPath)) {
-      return null;
+    // Frequency checking (unless forced)
+    if (!force) {
+      if (settings.auto_backup_frequency === 'DAILY') {
+        if (settings.last_auto_backup_at && settings.last_auto_backup_at.startsWith(todayDate)) {
+          return {
+            backup: null,
+            destinationDir: settings.resolved_backup_dir || '',
+            prunedCount: 0,
+            totalRemaining: 0,
+            message: "Today's daily backup has already been completed.",
+          };
+        }
+      } else if (settings.auto_backup_frequency === 'EVERY_N_DAYS') {
+        if (settings.last_auto_backup_at) {
+          const elapsedMs = Date.now() - new Date(settings.last_auto_backup_at).getTime();
+          const intervalMs = settings.auto_backup_interval_days * 24 * 60 * 60 * 1000;
+          if (elapsedMs < intervalMs) {
+            return {
+              backup: null,
+              destinationDir: settings.resolved_backup_dir || '',
+              prunedCount: 0,
+              totalRemaining: 0,
+              message: `Backup not due yet (configured interval: every ${settings.auto_backup_interval_days} days).`,
+            };
+          }
+        }
+      }
     }
 
-    await assertDiskSpace(rollingDir, 25 * 1024 * 1024);
+    // Prepare target directories
+    const internalRollingDir = path.join(this.getBackupDir(), 'rolling');
+    if (!fs.existsSync(internalRollingDir)) {
+      fs.mkdirSync(internalRollingDir, { recursive: true });
+    }
+
+    let customDir = '';
+    if (settings.backup_save_path) {
+      try {
+        customDir = validateSafeLocalSaveDir(settings.backup_save_path);
+        if (!fs.existsSync(customDir)) {
+          fs.mkdirSync(customDir, { recursive: true });
+        }
+        this.cachedCustomBackupDir = customDir;
+      } catch (err: any) {
+        console.warn('[Backup] Invalid user custom backup path, falling back to internal directory:', err.message);
+        customDir = '';
+      }
+    }
+
+    const primaryDir = customDir || internalRollingDir;
+    await assertDiskSpace(primaryDir, 25 * 1024 * 1024);
+
+    // Filename generation
+    let filename = `auto_backup_${todayDate}.sqlite3`;
+    const primaryPath = path.join(primaryDir, filename);
+    if (fs.existsSync(primaryPath) && force) {
+      const timeStr = new Date().toISOString().slice(11, 19).replace(/[:.]/g, '');
+      filename = `auto_backup_${todayDate}_${timeStr}.sqlite3`;
+    }
+
+    const targetFilePath = path.join(primaryDir, filename);
+    const internalFilePath = path.join(internalRollingDir, filename);
     const sqlitePath = this.getActiveSqliteFilename();
 
     if (this.isSqliteClient() && fs.existsSync(sqlitePath)) {
       await this.checkpointWal();
-      fs.copyFileSync(sqlitePath, todayPath);
+      fs.copyFileSync(sqlitePath, targetFilePath);
+      if (customDir && customDir !== internalRollingDir) {
+        fs.copyFileSync(sqlitePath, internalFilePath);
+      }
     } else {
       const dump: Record<string, any[]> = {};
       for (const t of ORDERED_TABLES) {
@@ -525,65 +768,103 @@ export class BackupRestoreService {
           dump[t] = await this.db(t).select('*');
         }
       }
-      fs.writeFileSync(todayPath + '.json', JSON.stringify(dump, null, 2));
+      const jsonContent = JSON.stringify(dump, null, 2);
+      const jsonFileName = filename.replace(/\.sqlite3$/, '.json');
+      fs.writeFileSync(path.join(primaryDir, jsonFileName), jsonContent);
+      if (customDir && customDir !== internalRollingDir) {
+        fs.writeFileSync(path.join(internalRollingDir, jsonFileName), jsonContent);
+      }
     }
 
-    // Prune rolling backups older than 7 days
-    try {
-      const files = fs.readdirSync(rollingDir);
-      const rollingFiles = files
-        .filter((f) => f.startsWith('rolling_') && (f.endsWith('.sqlite3') || f.endsWith('.json')))
-        .map((f) => ({
-          filename: f,
-          path: path.join(rollingDir, f),
-          mtime: fs.statSync(path.join(rollingDir, f)).mtimeMs,
-        }))
-        .sort((a, b) => b.mtime - a.mtime);
+    // Prune both custom folder and internal rolling directory
+    const primaryPrune = this.pruneDirectoryBackups(
+      primaryDir,
+      settings.auto_backup_retention_days,
+      settings.auto_backup_max_count
+    );
+    if (customDir && customDir !== internalRollingDir) {
+      this.pruneDirectoryBackups(
+        internalRollingDir,
+        settings.auto_backup_retention_days,
+        settings.auto_backup_max_count
+      );
+    }
 
-      if (rollingFiles.length > 7) {
-        for (let i = 7; i < rollingFiles.length; i++) {
-          try {
-            fs.unlinkSync(rollingFiles[i].path);
-          } catch {
-            // ignore
-          }
-        }
+    // Update last_auto_backup_at timestamp in database
+    const nowIso = new Date().toISOString();
+    try {
+      await this.db('app_settings').update({ last_auto_backup_at: nowIso });
+      if (companyId) {
+        await this.db('company_settings').where({ company_id: companyId }).update({ last_auto_backup_at: nowIso });
       }
     } catch {
       // ignore
     }
 
-    const finalPath = fs.existsSync(todayPath) ? todayPath : todayPath + '.json';
-    const finalStats = fs.statSync(finalPath);
-    return {
+    const finalPath = fs.existsSync(targetFilePath) ? targetFilePath : targetFilePath.replace(/\.sqlite3$/, '.json');
+    const stats = fs.statSync(finalPath);
+    const backupMeta: BackupMetadata = {
       id: path.basename(finalPath),
       filename: path.basename(finalPath),
       filePath: finalPath,
-      sizeBytes: finalStats.size,
-      createdAt: new Date().toISOString(),
+      sizeBytes: stats.size,
+      createdAt: nowIso,
+    };
+
+    return {
+      backup: backupMeta,
+      destinationDir: primaryDir,
+      prunedCount: primaryPrune.prunedCount,
+      totalRemaining: primaryPrune.remainingCount,
+      message: `Automated backup successfully saved to ${primaryDir}!`,
     };
   }
 
   async listBackups(companyId?: string): Promise<BackupMetadata[]> {
     const targetDir = companyId ? this.getCompanyBackupDir(companyId) : this.getBackupDir();
-    const files = fs.readdirSync(targetDir);
+    const rollingDir = path.join(this.getBackupDir(), 'rolling');
 
-    return files
-      .filter((f) => /\.(?:sqlite3|sqlite|db|json)$/i.test(f))
-      .map((f) => {
-        const fullPath = path.join(targetDir, f);
-        const stats = fs.statSync(fullPath);
-        if (!stats.isFile()) return null;
-        return {
-          id: f,
-          filename: f,
-          filePath: fullPath,
-          sizeBytes: stats.size,
-          createdAt: stats.mtime.toISOString(),
-        };
-      })
-      .filter((item): item is BackupMetadata => item !== null)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const searchDirs = [targetDir];
+    if (fs.existsSync(rollingDir) && rollingDir !== targetDir) {
+      searchDirs.push(rollingDir);
+    }
+    if (this.cachedCustomBackupDir && fs.existsSync(this.cachedCustomBackupDir)) {
+      if (!searchDirs.includes(this.cachedCustomBackupDir)) {
+        searchDirs.push(this.cachedCustomBackupDir);
+      }
+    }
+
+    const itemsMap = new Map<string, BackupMetadata>();
+
+    for (const dir of searchDirs) {
+      try {
+        const files = fs.readdirSync(dir);
+        for (const f of files) {
+          if (!/\.(?:sqlite3|sqlite|db|json)$/i.test(f)) continue;
+          const fullPath = path.join(dir, f);
+          try {
+            const stats = fs.statSync(fullPath);
+            if (!stats.isFile()) continue;
+            // Only add if not already added or if this is the target company/main directory
+            if (!itemsMap.has(f) || dir === targetDir) {
+              itemsMap.set(f, {
+                id: f,
+                filename: f,
+                filePath: fullPath,
+                sizeBytes: stats.size,
+                createdAt: stats.mtime.toISOString(),
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return Array.from(itemsMap.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   getDownloadableBackup(backupFilename: string, companyId?: string): { filename: string; filePath: string } {

@@ -500,6 +500,12 @@ export class CompanyService {
       'default_quotation_notes',
       'quotation_validity_days',
       'default_tax_inclusive',
+      'auto_backup_enabled',
+      'auto_backup_frequency',
+      'auto_backup_interval_days',
+      'auto_backup_retention_days',
+      'auto_backup_max_count',
+      'last_auto_backup_at',
     ]);
     const savePathKeys = new Set([
       'invoice_save_path',

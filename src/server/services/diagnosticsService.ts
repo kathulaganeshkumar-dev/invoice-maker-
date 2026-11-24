@@ -2,6 +2,7 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+// @ts-ignore
 import archiver from 'archiver';
 import { Knex } from 'knex';
 import { getLogsDir } from './logger';
@@ -86,9 +87,9 @@ export class DiagnosticsService {
       const chunks: Buffer[] = [];
       const archive = archiver('zip', { zlib: { level: 9 } });
 
-      archive.on('data', (chunk) => chunks.push(chunk));
+      archive.on('data', (chunk: any) => chunks.push(chunk));
       archive.on('end', () => resolve(Buffer.concat(chunks)));
-      archive.on('error', (err) => reject(err));
+      archive.on('error', (err: any) => reject(err));
 
       // Append sanitized system environment JSON
       archive.append(JSON.stringify(metadata, null, 2), { name: 'system_diagnostics.json' });

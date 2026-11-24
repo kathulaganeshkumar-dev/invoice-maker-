@@ -38,7 +38,7 @@ export async function checkDiskSpace(
     }
 
     const stats = await fs.promises.statfs(checkDir);
-    const bsize = stats.bsize || stats.frsize || 4096;
+    const bsize = stats.bsize || (stats as any).frsize || 4096;
     const freeBytes = Number(stats.bavail) * Number(bsize);
     const totalBytes = Number(stats.blocks) * Number(bsize);
     const freeMb = Math.round(freeBytes / (1024 * 1024));

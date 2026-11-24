@@ -124,21 +124,27 @@ export const QuotationsView: React.FC<Props> = ({
     ];
   }, [customers]);
 
-  const templateOptions = useMemo(() => {
-    return templates.map((tpl) => ({
-      value: tpl.id,
-      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
-      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
-    }));
+  const quotationTemplates = useMemo(() => {
+    return templates.filter(
+      (tpl) => !tpl.applies_to || tpl.applies_to === 'QUOTATION' || tpl.applies_to === 'BOTH'
+    );
   }, [templates]);
 
-  const printTemplateOptions = useMemo(() => {
-    return templates.map((tpl) => ({
+  const templateOptions = useMemo(() => {
+    return quotationTemplates.map((tpl) => ({
       value: tpl.id,
       label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
       sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
     }));
-  }, [templates]);
+  }, [quotationTemplates]);
+
+  const printTemplateOptions = useMemo(() => {
+    return quotationTemplates.map((tpl) => ({
+      value: tpl.id,
+      label: tpl.id.startsWith('builtin-') ? `${tpl.name} (Built-in)` : tpl.name,
+      sublabel: `${tpl.file_type} - ${tpl.orientation || 'Portrait'}`,
+    }));
+  }, [quotationTemplates]);
 
   const catalogItemOptions = useMemo(() => {
     return products.map((p) => {
@@ -225,7 +231,10 @@ export const QuotationsView: React.FC<Props> = ({
       setCustomers(cList);
       setProducts(pList);
       setTemplates(tList);
-      const defTemplate = tList.find((t) => t.is_default) || tList[0];
+      const availableQuotationTpls = tList.filter(
+        (t) => !t.applies_to || t.applies_to === 'QUOTATION' || t.applies_to === 'BOTH'
+      );
+      const defTemplate = availableQuotationTpls.find((t) => t.is_default) || availableQuotationTpls[0] || tList[0];
       if (defTemplate) {
         setSelectedTemplateId(defTemplate.id);
         setActivePrintTemplateId(defTemplate.id);
@@ -478,7 +487,7 @@ export const QuotationsView: React.FC<Props> = ({
 
   const handlePrintPdf = (quoteId: string, mode: 'DIGITAL_LETTERHEAD' | 'PREPRINTED_STATIONERY' = 'DIGITAL_LETTERHEAD') => {
     const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id || '';
-    const url = api.getQuotationPdfUrl(companyId, quoteId, mode, templateId || undefined);
+    const url = api.getQuotationPdfUrl(companyId, quoteId, { mode, templateId: templateId || undefined });
     window.open(url, '_blank');
   };
 

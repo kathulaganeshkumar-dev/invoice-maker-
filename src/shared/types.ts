@@ -23,8 +23,25 @@ export interface AppSettings {
   backup_save_path?: string;
   excel_export_save_path?: string;
   software_icon?: string | null;
+  auto_backup_enabled?: boolean;
+  auto_backup_frequency?: 'DAILY' | 'EVERY_N_DAYS';
+  auto_backup_interval_days?: number;
+  auto_backup_retention_days?: number;
+  auto_backup_max_count?: number;
+  last_auto_backup_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AutoBackupSettings {
+  auto_backup_enabled: boolean;
+  auto_backup_frequency: 'DAILY' | 'EVERY_N_DAYS';
+  auto_backup_interval_days: number;
+  auto_backup_retention_days: number;
+  auto_backup_max_count: number;
+  backup_save_path: string;
+  last_auto_backup_at?: string | null;
+  resolved_backup_dir?: string;
 }
 
 export interface Company {
@@ -115,6 +132,12 @@ export interface CompanySettings {
   default_quotation_notes?: string;
   quotation_validity_days?: number;
   default_tax_inclusive?: boolean;
+  auto_backup_enabled?: boolean;
+  auto_backup_frequency?: 'DAILY' | 'EVERY_N_DAYS';
+  auto_backup_interval_days?: number;
+  auto_backup_retention_days?: number;
+  auto_backup_max_count?: number;
+  last_auto_backup_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -338,6 +361,14 @@ export interface Invoice {
   is_reverse_charge: boolean;
   reference_number?: string;
   purchase_order_number?: string;
+  po_number?: string;
+  purchase_order_date?: string;
+  po_date?: string;
+  delivery_challan_number?: string;
+  delivery_challan_date?: string;
+  dc_number?: string;
+  dc_date?: string;
+  agent_name?: string;
   payment_terms?: string;
   items: InvoiceItem[];
   subtotal: string;
@@ -361,6 +392,13 @@ export interface Invoice {
   letterhead_template_id?: string;
   notes?: string;
   terms_conditions?: string;
+  terms_and_conditions?: string;
+  top_margin_mm?: number;
+  bottom_margin_mm?: number;
+  left_margin_mm?: number;
+  right_margin_mm?: number;
+  print_letterhead_overlay?: boolean;
+  sign_off_company?: string;
   created_by_device_id?: string;
   created_by_device_name?: string;
   created_at: string;
@@ -692,29 +730,50 @@ export interface LayoutCoordinates {
   fontFamily?: string;
 }
 
+export interface ColumnDefinition {
+  width: number;
+  label: string;
+  x?: number;
+  alignment?: 'left' | 'center' | 'right';
+}
+
 export interface LayoutConfiguration {
   id: string;
   template_id: string;
   invoice_number: LayoutCoordinates;
   invoice_date: LayoutCoordinates;
   due_date?: LayoutCoordinates;
+  po_number?: LayoutCoordinates;
+  po_date?: LayoutCoordinates;
+  challan_number?: LayoutCoordinates;
+  challan_date?: LayoutCoordinates;
+  agent_name?: LayoutCoordinates;
   customer_name: LayoutCoordinates;
   billing_address: LayoutCoordinates;
   shipping_address?: LayoutCoordinates;
   place_of_supply?: LayoutCoordinates;
   customer_gstin?: LayoutCoordinates;
+  customer_state?: LayoutCoordinates;
+  customer_state_code?: LayoutCoordinates;
   table_top_y: number;
   table_bottom_margin: number;
   table_columns: {
-    sr_no: { width: number; label: string };
-    item_name: { width: number; label: string };
-    hsn_sac: { width: number; label: string };
-    qty: { width: number; label: string };
-    rate: { width: number; label: string };
-    discount: { width: number; label: string };
-    taxable: { width: number; label: string };
-    gst: { width: number; label: string };
-    total: { width: number; label: string };
+    sr_no: ColumnDefinition;
+    item_name: ColumnDefinition;
+    hsn_sac: ColumnDefinition;
+    qty: ColumnDefinition;
+    unit?: ColumnDefinition;
+    rate: ColumnDefinition;
+    discount: ColumnDefinition;
+    taxable: ColumnDefinition;
+    gst: ColumnDefinition;
+    cgst_rate?: ColumnDefinition;
+    cgst_amt?: ColumnDefinition;
+    sgst_rate?: ColumnDefinition;
+    sgst_amt?: ColumnDefinition;
+    igst_rate?: ColumnDefinition;
+    igst_amt?: ColumnDefinition;
+    total: ColumnDefinition;
   };
   total_taxable_value: LayoutCoordinates;
   cgst: LayoutCoordinates;
@@ -727,7 +786,11 @@ export interface LayoutConfiguration {
   terms_conditions?: LayoutCoordinates;
   signature: LayoutCoordinates;
   footer: LayoutCoordinates;
+  detected_archetype?: 'VARUN_SYSTEMS' | 'VARUN_SHREE' | 'CUSTOM_GST_GRID' | 'STANDARD_OVERLAY';
+  is_igst?: boolean;
 }
+
+export type TemplateAppliesTo = 'INVOICE' | 'QUOTATION' | 'BOTH';
 
 export interface LetterheadTemplate {
   id: string;
@@ -739,20 +802,53 @@ export interface LetterheadTemplate {
   page_size: 'A4';
   orientation: 'PORTRAIT' | 'LANDSCAPE';
   is_default: boolean;
+  applies_to?: TemplateAppliesTo;
   layout_config: LayoutConfiguration;
   created_at: string;
   updated_at: string;
+}
+
+export interface DetectedColumn {
+  id: string;
+  label: string;
+  x: number;
+  width: number;
+  alignment: 'left' | 'center' | 'right';
 }
 
 export interface LetterheadOCRResult {
   raw_text: string;
   confidence: number;
   stored_file_path?: string;
-  detected_file_type?: 'PDF' | 'PNG' | 'JPG';
+  detected_file_type?: 'PDF' | 'PNG' | 'JPG' | 'DOCX' | 'XLSX';
   page_width_pt?: number;
   page_height_pt?: number;
   page_count?: number;
   recommended_orientation?: 'PORTRAIT' | 'LANDSCAPE';
+  detected_archetype?: 'VARUN_SYSTEMS' | 'VARUN_SHREE' | 'CUSTOM_GST_GRID' | 'STANDARD_OVERLAY';
+  is_igst?: boolean;
+  detected_columns?: DetectedColumn[];
+  table_header_y?: number;
+  table_rows_start_y?: number;
+  table_rows_end_y?: number;
+  detected_meta_fields?: {
+    invoice_number?: { x: number; y: number };
+    invoice_date?: { x: number; y: number };
+    due_date?: { x: number; y: number };
+    po_number?: { x: number; y: number };
+    po_date?: { x: number; y: number };
+    challan_number?: { x: number; y: number };
+    challan_date?: { x: number; y: number };
+    place_of_supply?: { x: number; y: number };
+    state?: { x: number; y: number };
+    state_code?: { x: number; y: number };
+    agent_name?: { x: number; y: number };
+  };
+  detected_customer_fields?: {
+    name?: { x: number; y: number; width?: number };
+    address?: { x: number; y: number; width?: number };
+    gstin?: { x: number; y: number };
+  };
   detected_entities: {
     company_name?: string;
     legal_name?: string;
