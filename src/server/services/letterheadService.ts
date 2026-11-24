@@ -49,11 +49,15 @@ export function getDefaultLayoutConfig(templateId: string): LayoutConfiguration 
 
 function getSystemTemplatePath(filename: string): string {
   const resourcesPath = (process as any).resourcesPath || '';
+  const execDir = process.execPath ? path.dirname(process.execPath) : '';
   const candidates = [
-    path.join(process.cwd(), 'assets', 'templates', filename),
     path.join(resourcesPath, 'assets', 'templates', filename),
-    path.join(__dirname, '..', '..', '..', 'assets', 'templates', filename),
+    path.join(execDir, 'resources', 'assets', 'templates', filename),
+    path.join(process.cwd(), 'assets', 'templates', filename),
+    path.join(__dirname, '..', 'assets', 'templates', filename),
     path.join(__dirname, '..', '..', 'assets', 'templates', filename),
+    path.join(__dirname, '..', '..', '..', 'assets', 'templates', filename),
+    path.join(execDir, 'assets', 'templates', filename),
   ];
   return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }

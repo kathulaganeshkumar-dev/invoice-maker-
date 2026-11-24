@@ -58,15 +58,16 @@ export const LetterheadsView: React.FC<Props> = ({ companyId }) => {
   }, [companyId]);
 
   useEffect(() => {
-    if (viewingCompanyId) {
-      loadTemplates(viewingCompanyId);
-    }
+    loadTemplates(viewingCompanyId || 'default');
   }, [viewingCompanyId]);
 
   const loadCompanies = async () => {
     try {
       const comps = await api.getCompanies();
       setCompanies(comps);
+      if (!viewingCompanyId && comps.length > 0) {
+        setViewingCompanyId(comps[0].id);
+      }
     } catch (err) {
       console.error(err);
     }

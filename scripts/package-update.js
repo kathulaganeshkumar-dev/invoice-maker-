@@ -49,10 +49,17 @@ async function run() {
     log('Extracting base asar...');
     execSync(`npx.cmd asar extract "${baseAsar}" "${tempAsarDir}"`, { cwd: rootDir, stdio: 'ignore' });
 
-    log('Updating application code (dist, dist-server, dist-electron)...');
+    log('Updating application code (dist, dist-server, dist-electron, assets/templates)...');
     copyRecursiveSync(distDir, path.join(tempAsarDir, 'dist'));
     copyRecursiveSync(distServerDir, path.join(tempAsarDir, 'dist-server'));
     copyRecursiveSync(distElectronDir, path.join(tempAsarDir, 'dist-electron'));
+    const templatesDir = path.join(rootDir, 'assets', 'templates');
+    if (fs.existsSync(templatesDir)) {
+      copyRecursiveSync(templatesDir, path.join(tempAsarDir, 'assets', 'templates'));
+      copyRecursiveSync(templatesDir, path.join(winUnpackedResources, 'assets', 'templates'));
+      copyRecursiveSync(templatesDir, path.join(releaseUpdateDir, 'assets', 'templates'));
+      log('Copied all templates to temp asar, win-unpacked resources, and release folder.');
+    }
     fs.copyFileSync(path.join(rootDir, 'package.json'), path.join(tempAsarDir, 'package.json'));
 
     log('Step 3: Repacking updated app.asar into win-unpacked resources...');
@@ -64,6 +71,27 @@ async function run() {
     }
     const updateAsar = path.join(releaseUpdateDir, 'app.asar');
     fs.copyFileSync(baseAsar, updateAsar);
+
+    log('Checking for local installations on this PC to update in-place...');
+    const localInstallPaths = [
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'enterprise-invoice-manager', 'resources'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'enterprise-management', 'resources'),
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Enterprise Invoice Manager', 'resources'),
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Enterprise Management', 'resources'),
+    ];
+    for (const resPath of localInstallPaths) {
+      if (fs.existsSync(resPath)) {
+        try {
+          fs.copyFileSync(baseAsar, path.join(resPath, 'app.asar'));
+          if (fs.existsSync(templatesDir)) {
+            copyRecursiveSync(templatesDir, path.join(resPath, 'assets', 'templates'));
+          }
+          log(`In-place updated installed software at: ${resPath}`);
+        } catch (e) {
+          log(`Notice: Could not write directly to ${resPath} (${e.message})`);
+        }
+      }
+    }
 
     // Generate 1-Click-Update.bat
     const batContent = `@echo off
@@ -161,6 +189,12 @@ if errorlevel 1 (
     echo Try running this script as Administrator (Right click -> Run as Administrator).
     pause
     exit /b 1
+)
+
+if exist "%~dp0assets\\templates" (
+    if not exist "%TARGET_RES%\\assets\\templates" mkdir "%TARGET_RES%\\assets\\templates"
+    xcopy /s /e /y /i "%~dp0assets\\templates" "%TARGET_RES%\\assets\\templates" >nul
+    echo Templates updated in resources.
 )
 
 echo.
