@@ -45,8 +45,8 @@ const SALES_DOC_TYPES: { value: DocumentType; label: string }[] = [
 
 export const DEFAULT_VARUN_INVOICE_TERMS = `1. Goods once sold will not be taken back.
 2. Provider as per OEM Terms & Conditions.
-3. Stander warranty 11months from the date of invoice.
-4. Warranty provided Manufactures Authorized Service.
+3. Standard warranty 11 months from the date of invoice.
+4. Warranty provided by Manufacturer's Authorized Service.
 5. Payments should be sent through A/C payee only.
 6. Payments should be made within 14 days otherwise interest will be charged @24% P.A.
 Thanking you and assuring of our best services and attention at all times.`;

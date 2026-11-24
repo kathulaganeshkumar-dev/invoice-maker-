@@ -11,6 +11,7 @@ import {
 import { calculateLineItem, calculateDocumentTotals } from '../finance/decimalCalc';
 import { convertAmountToWords } from '../finance/numberToWords';
 import { NumberingService } from './numberingService';
+import { DEFAULT_VARUN_INVOICE_TERMS } from './companyService';
 
 export class InvoiceService {
   constructor(private db: Knex) {}
@@ -276,7 +277,11 @@ export class InvoiceService {
         status: 'DRAFT',
         letterhead_template_id: input.letterhead_template_id || undefined,
         notes: input.notes || undefined,
-        terms_conditions: input.terms_conditions || input.terms_and_conditions || undefined,
+        terms_conditions:
+          (input.terms_conditions && input.terms_conditions.trim()) ||
+          (input.terms_and_conditions && input.terms_and_conditions.trim()) ||
+          (comp?.default_invoice_terms && comp.default_invoice_terms.trim()) ||
+          DEFAULT_VARUN_INVOICE_TERMS,
         top_margin_mm: input.top_margin_mm !== undefined ? Number(input.top_margin_mm) : 55.0,
         bottom_margin_mm: input.bottom_margin_mm !== undefined ? Number(input.bottom_margin_mm) : 32.0,
         left_margin_mm: input.left_margin_mm !== undefined ? Number(input.left_margin_mm) : 15.0,

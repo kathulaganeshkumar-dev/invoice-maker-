@@ -31,6 +31,7 @@
     "directories": {
       "output": "version 2.0"
     },
+    "icon": "assets/icons/icon.ico",
     "asar": true,
     "asarUnpack": [
       "**/*.node"
@@ -71,6 +72,7 @@
       "!**/*.lic"
     ],
     "win": {
+      "icon": "assets/icons/icon.ico",
       "target": [
         {
           "target": "nsis",

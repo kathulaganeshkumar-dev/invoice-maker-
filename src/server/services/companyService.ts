@@ -8,6 +8,21 @@ import { STANDARD_UNITS } from '../../shared/constants';
 import { getDefaultDataDir } from '../database/connection';
 import { validateSafeLocalSaveDir } from './pathSecurity';
 
+export const DEFAULT_VARUN_INVOICE_TERMS = `1. Goods once sold will not be taken back.
+2. Provider as per OEM Terms & Conditions.
+3. Standard warranty 11 months from the date of invoice.
+4. Warranty provided by Manufacturer's Authorized Service.
+5. Payments should be sent through A/C payee only.
+6. Payments should be made within 14 days otherwise interest will be charged @24% P.A.
+Thanking you and assuring of our best services and attention at all times.`;
+
+export const DEFAULT_VARUN_QUOTATION_TERMS = `Terms &Conditions: No warranty for burn / Physical Damage.
+1. Taxes: Inclusive of GST
+2. Payment: 100% Advance along with PO
+3. Validity: 7 Days
+4. Delivery: 1 week form the date of PO
+5. Installation and transport Included.`;
+
 export class CompanyService {
   constructor(private db: Knex) {}
 
@@ -16,12 +31,34 @@ export class CompanyService {
     if (!includeArchived) {
       query = query.where({ is_archived: false });
     }
-    return query;
+    const comps = await query;
+    return comps.map((c) => ({
+      ...c,
+      default_invoice_terms:
+        c.default_invoice_terms && c.default_invoice_terms.trim()
+          ? c.default_invoice_terms
+          : DEFAULT_VARUN_INVOICE_TERMS,
+      default_quotation_terms:
+        c.default_quotation_terms && c.default_quotation_terms.trim()
+          ? c.default_quotation_terms
+          : DEFAULT_VARUN_QUOTATION_TERMS,
+    }));
   }
 
   async getCompanyById(companyId: string): Promise<Company | null> {
     const comp = await this.db('companies').where({ id: companyId }).first();
-    return comp || null;
+    if (!comp) return null;
+    return {
+      ...comp,
+      default_invoice_terms:
+        comp.default_invoice_terms && comp.default_invoice_terms.trim()
+          ? comp.default_invoice_terms
+          : DEFAULT_VARUN_INVOICE_TERMS,
+      default_quotation_terms:
+        comp.default_quotation_terms && comp.default_quotation_terms.trim()
+          ? comp.default_quotation_terms
+          : DEFAULT_VARUN_QUOTATION_TERMS,
+    };
   }
 
   async createCompany(data: Partial<Company>): Promise<Company> {
@@ -55,8 +92,8 @@ export class CompanyService {
         bank_ifsc: data.bank_ifsc || undefined,
         bank_branch: data.bank_branch || undefined,
         upi_id: data.upi_id || undefined,
-        default_invoice_terms: data.default_invoice_terms || '',
-        default_quotation_terms: data.default_quotation_terms || '',
+        default_invoice_terms: (data.default_invoice_terms && data.default_invoice_terms.trim()) || DEFAULT_VARUN_INVOICE_TERMS,
+        default_quotation_terms: (data.default_quotation_terms && data.default_quotation_terms.trim()) || DEFAULT_VARUN_QUOTATION_TERMS,
         is_default: Boolean(data.is_default),
         is_archived: false,
         created_at: now,

@@ -310,11 +310,14 @@ export const api = {
     const qs = q.toString();
     return request<any[]>(`/companies/${companyId}/reports/staff-activity${qs ? `?${qs}` : ''}`);
   },
-  resetAllData: () =>
+  resetAllData: (adminPin?: string) =>
     request<{ success: boolean; message: string }>('/reset-all-data', {
       method: 'POST',
-      headers: { 'X-EIM-Confirm-Reset': 'CONFIRM_RESET_ALL_DATA' },
-      body: JSON.stringify({ confirm: 'RESET_ALL_DATA' }),
+      headers: {
+        'X-EIM-Confirm-Reset': 'CONFIRM_RESET_ALL_DATA',
+        ...(adminPin ? { 'X-EIM-Admin-Pin': adminPin } : {}),
+      },
+      body: JSON.stringify({ confirm: 'RESET_ALL_DATA', admin_pin: adminPin }),
     }),
 
   // Companies & Branches

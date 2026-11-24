@@ -83,14 +83,22 @@ function findLocalExecutablePath(): string {
     candidates.push(process.execPath);
   }
 
-  // 2. Workspace packaged Version 2.0 desktop executables
+  // 2. Standard Program Files installation directories
+  const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
+  const pfx86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  candidates.push(path.join(pf, 'Enterprise Management', 'Enterprise Management.exe'));
+  candidates.push(path.join(pf, 'Enterprise Invoice Manager', 'Enterprise Invoice Manager.exe'));
+  candidates.push(path.join(pfx86, 'Enterprise Management', 'Enterprise Management.exe'));
+  candidates.push(path.join(pfx86, 'Enterprise Invoice Manager', 'Enterprise Invoice Manager.exe'));
+
+  // 3. Workspace packaged Version 2.0 desktop executables
   const cwd = process.cwd();
   candidates.push(path.join(cwd, 'version 2.0', 'win-unpacked', 'Enterprise Management.exe'));
   candidates.push(path.join(cwd, 'version 2.0', 'win-unpacked', 'Enterprise Invoice Manager.exe'));
   candidates.push(path.join(cwd, 'version 2.0', 'Enterprise Management 2.0.0.exe'));
   candidates.push(path.join(cwd, 'version 2.0', 'Enterprise Invoice Manager 2.0.0.exe'));
 
-  // 3. Installed NSIS executable in LocalAppData
+  // 4. Installed NSIS executable in LocalAppData
   if (process.env.LOCALAPPDATA) {
     candidates.push(
       path.join(process.env.LOCALAPPDATA, 'Programs', 'enterprise-management', 'Enterprise Management.exe')
@@ -161,13 +169,23 @@ $defaultTarget = $env:EIM_DEFAULT_TARGET
 $reset = $env:EIM_RESET_ICON -eq '1'
 
 $shell = New-Object -ComObject WScript.Shell
-$activeDesktop = [Environment]::GetFolderPath('Desktop')
-$userDesktop = Join-Path $env:USERPROFILE 'Desktop'
-$startMenu = Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs'
 
-$searchDirs = @($activeDesktop, $userDesktop, $startMenu) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+$userDesktop = Join-Path $env:USERPROFILE 'Desktop'
+$oneDriveDesktop = Join-Path $env:USERPROFILE 'OneDrive\\Desktop'
+$activeDesktop = [Environment]::GetFolderPath('Desktop')
+$publicDesktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
+if (-not $publicDesktop) { $publicDesktop = 'C:\\Users\\Public\\Desktop' }
+
+$startMenu = Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs'
+$commonStartMenu = [Environment]::GetFolderPath('CommonStartMenu')
+if (-not $commonStartMenu) { $commonStartMenu = 'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs' }
+
+$searchDirs = @($activeDesktop, $userDesktop, $oneDriveDesktop, $publicDesktop, $startMenu, $commonStartMenu) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
 $updated = New-Object System.Collections.Generic.List[string]
 $desktopShortcutFound = $false
+
+# Primary desktop folder where shortcuts are visible to the user
+$primaryDesktop = if (Test-Path $oneDriveDesktop) { $oneDriveDesktop } elseif (Test-Path $activeDesktop) { $activeDesktop } else { $userDesktop }
 
 foreach ($dir in $searchDirs) {
   $lnks = Get-ChildItem -Path $dir -Include @('*Enterprise Management*.lnk', '*Enterprise Invoice Manager*.lnk') -Recurse -ErrorAction SilentlyContinue
@@ -186,43 +204,77 @@ foreach ($dir in $searchDirs) {
       }
       $sc.Save()
       $updated.Add($lnk.FullName)
-      if ($lnk.DirectoryName -eq $activeDesktop -or $lnk.DirectoryName -eq $userDesktop) {
+      if ($lnk.DirectoryName -like '*Desktop*') {
         $desktopShortcutFound = $true
       }
-    } catch {}
+    } catch {
+      # If Public Desktop shortcut failed to save due to write permissions, delete it and create in user desktop
+      if ($lnk.DirectoryName -eq $publicDesktop) {
+        $targetExe = $sc.TargetPath
+        if (-not $targetExe) { $targetExe = $defaultTarget }
+        Remove-Item -Path $lnk.FullName -Force -ErrorAction SilentlyContinue
+        if ($targetExe -and (Test-Path $targetExe) -and $primaryDesktop) {
+          $newPath = Join-Path $primaryDesktop $lnk.Name
+          try {
+            $nsc = $shell.CreateShortcut($newPath)
+            $nsc.TargetPath = $targetExe
+            $nsc.WorkingDirectory = Split-Path -Parent $targetExe
+            $nsc.Description = 'Enterprise Management Software'
+            if ($reset) {
+              $nsc.IconLocation = "$targetExe,0"
+            } elseif ($icoPath -and (Test-Path $icoPath)) {
+              $nsc.IconLocation = "$icoPath,0"
+            }
+            $nsc.Save()
+            $updated.Add($newPath)
+            $desktopShortcutFound = $true
+          } catch {}
+        }
+      }
+    }
   }
 }
 
-if (-not $desktopShortcutFound -and -not $reset -and $activeDesktop -and (Test-Path $activeDesktop) -and $defaultTarget -and (Test-Path $defaultTarget) -and $icoPath -and (Test-Path $icoPath)) {
+# Ensure desktop has shortcut pointing to the application with the custom icon
+if (-not $desktopShortcutFound -and $primaryDesktop -and (Test-Path $primaryDesktop) -and $defaultTarget -and (Test-Path $defaultTarget)) {
   try {
-    $newLnk = Join-Path $activeDesktop 'Enterprise Management.lnk'
+    $newLnk = Join-Path $primaryDesktop 'Enterprise Management.lnk'
     $sc = $shell.CreateShortcut($newLnk)
     $sc.TargetPath = $defaultTarget
     $sc.WorkingDirectory = Split-Path -Parent $defaultTarget
     $sc.Description = 'Enterprise Management Software'
-    $sc.IconLocation = "$icoPath,0"
+    if ($reset) {
+      $sc.IconLocation = "$defaultTarget,0"
+    } elseif ($icoPath -and (Test-Path $icoPath)) {
+      $sc.IconLocation = "$icoPath,0"
+    }
     $sc.Save()
     $updated.Add($newLnk)
   } catch {}
 }
 
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class EimShellNotify {
-  [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-  public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
-}
+# Notify Windows Shell of association and icon change
+try {
+  if (-not ([System.Management.Automation.PSTypeName]'EimShellNotify').Type) {
+    Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class EimShellNotify {
+      [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+      public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+    }
 "@
-[EimShellNotify]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+  }
+  [EimShellNotify]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+} catch {}
 
 $updated | ConvertTo-Json -Compress
 `;
 
   const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
 
-  try {
-    const { stdout } = await execFileAsync(
+  return new Promise<string[]>((resolve) => {
+    execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
       {
@@ -233,19 +285,22 @@ $updated | ConvertTo-Json -Compress
           EIM_RESET_ICON: resetToDefault ? '1' : '0',
         },
         timeout: 15000,
+      },
+      (err, stdout) => {
+        if (err) {
+          console.warn('[SoftwareIcon] Windows shortcut refresh notice:', err.message);
+        }
+        const out = String(stdout || '').trim();
+        if (!out) return resolve([]);
+        try {
+          const parsed = JSON.parse(out);
+          if (Array.isArray(parsed)) return resolve(parsed.map(String));
+          if (typeof parsed === 'string' && parsed) return resolve([parsed]);
+        } catch {}
+        resolve([]);
       }
     );
-
-    const out = String(stdout || '').trim();
-    if (!out) return [];
-    const parsed = JSON.parse(out);
-    if (Array.isArray(parsed)) return parsed.map(String);
-    if (typeof parsed === 'string' && parsed) return [parsed];
-    return [];
-  } catch (err) {
-    console.warn('[SoftwareIcon] Windows shortcut refresh warning:', err);
-    return [];
-  }
+  });
 }
 
 export async function applySoftwareIconToDesktop(dataUrl: string | null): Promise<ApplyDesktopIconResult> {

@@ -173,15 +173,27 @@ export function createApiRouter(db: Knex): Router {
     return res.status(500).json({ error: fallback });
   };
 
-  // ===================== RESET ALL APPLICATION DATA =====================
+  // ===================== RESET ALL APPLICATION DATA (FACTORY RESET) =====================
   router.post('/reset-all-data', adminRateLimiter, async (req: Request, res: Response) => {
     try {
-      if (!isLoopbackRequest(req)) {
-        return res.status(403).json({ error: 'Full data reset is only permitted from the local host machine.' });
+      const confirmHeader = String(req.headers['x-eim-confirm-reset'] || req.body?.confirm || '').trim().toUpperCase();
+      if (confirmHeader !== 'CONFIRM_RESET_ALL_DATA' && confirmHeader !== 'RESET_ALL_DATA' && confirmHeader !== 'RESET') {
+        return res.status(400).json({ error: 'Missing required reset confirmation. Header or body must confirm RESET.' });
       }
-      const confirmHeader = String(req.headers['x-eim-confirm-reset'] || '').trim();
-      if (confirmHeader !== 'CONFIRM_RESET_ALL_DATA') {
-        return res.status(403).json({ error: 'Missing required reset confirmation header.' });
+
+      // Authorization: Allow loopback requests OR require valid MD / Admin PIN
+      const isLoopback = isLoopbackRequest(req);
+      const suppliedPin = String(req.headers['x-eim-admin-pin'] || req.body?.admin_pin || '').trim();
+      const hasCustomPin = await workstationService.isCustomAdminPinSet();
+
+      if (!isLoopback && hasCustomPin) {
+        if (!suppliedPin) {
+          return res.status(403).json({ error: 'MD / Admin PIN is required to authorize factory data reset from this computer.' });
+        }
+        const valid = await workstationService.checkAdminPin(suppliedPin);
+        if (!valid) {
+          return res.status(403).json({ error: 'Incorrect MD / Admin PIN.' });
+        }
       }
 
       // Take an automatic safety snapshot before wiping all tables
@@ -191,50 +203,119 @@ export function createApiRouter(db: Knex): Router {
         console.warn('[Reset] Pre-reset safety backup warning:', backupErr);
       }
 
-      await db.transaction(async (trx) => {
-        const tablesToClear = [
-          'payment_allocations',
-          'customer_payments',
-          'supplier_payments',
-          'inventory_transactions',
-          'stock_balances',
-          'invoice_items',
-          'invoices',
-          'quotation_items',
-          'quotations',
-          'purchase_order_items',
-          'purchase_orders',
-          'purchase_invoice_items',
-          'purchase_invoices',
-          'customer_addresses',
-          'customers',
-          'suppliers',
-          'products',
-          'units',
-          'categories',
-          'warehouses',
-          'numbering_sequences',
-          'letterhead_templates',
-          'audit_logs',
-          'branches',
-          'company_settings',
-          'companies',
-          'workstation_permissions',
-        ];
-        for (const table of tablesToClear) {
-          const exists = await trx.schema.hasTable(table);
-          if (exists) {
-            await trx(table).del();
+      const isSqlite = !db.client.config.client || db.client.config.client === 'sqlite3';
+      if (isSqlite) {
+        await db.raw('PRAGMA foreign_keys = OFF').catch(() => {});
+      }
+
+      const tablesToClear = [
+        'payment_allocations',
+        'customer_payments',
+        'supplier_payments',
+        'inventory_transactions',
+        'stock_balances',
+        'invoice_items',
+        'invoices',
+        'quotation_items',
+        'quotations',
+        'purchase_order_items',
+        'purchase_orders',
+        'purchase_invoice_items',
+        'purchase_invoices',
+        'customer_addresses',
+        'customers',
+        'suppliers',
+        'products',
+        'units',
+        'categories',
+        'warehouses',
+        'quotation_sequences',
+        'numbering_sequences',
+        'letterhead_template_overrides',
+        'letterhead_templates',
+        'audit_logs',
+        'branches',
+        'company_settings',
+        'companies',
+        'workstation_permissions',
+      ];
+
+      for (const table of tablesToClear) {
+        const exists = await db.schema.hasTable(table);
+        if (exists) {
+          await db(table).del();
+        }
+      }
+
+      if (await db.schema.hasTable('app_settings')) {
+        await db('app_settings').update({
+          operating_mode: 'SINGLE_COMPUTER',
+          theme: 'light',
+          server_port: 4200,
+          show_company_selector_on_startup: 1,
+          admin_pin_hash: null,
+          default_staff_menus_json: null,
+          last_seen_utc: null,
+          license_data_json: null,
+          invoice_save_path: null,
+          quotation_save_path: null,
+          purchase_save_path: null,
+          report_save_path: null,
+          backup_save_path: null,
+          excel_export_save_path: null,
+          software_icon: null,
+          auto_backup_enabled: 1,
+          auto_backup_frequency: 'DAILY',
+          auto_backup_interval_days: 1,
+          auto_backup_retention_days: 30,
+          auto_backup_max_count: 30,
+          last_auto_backup_at: null,
+        }).catch(() => {});
+      }
+
+      if (isSqlite) {
+        await db.raw('PRAGMA foreign_keys = ON').catch(() => {});
+        try {
+          await db.raw('PRAGMA wal_checkpoint(TRUNCATE)');
+          await db.raw('VACUUM');
+        } catch {}
+      }
+
+      // Also clean up uploaded letterheads, icons, and temporary backups
+      const dataDir = getDefaultDataDir();
+      for (const sub of ['backups', 'letterheads', 'icons']) {
+        const subDir = path.join(dataDir, sub);
+        if (fs.existsSync(subDir)) {
+          try {
+            fs.rmSync(subDir, { recursive: true, force: true });
+            fs.mkdirSync(subDir, { recursive: true });
+          } catch (e) {
+            console.warn('[Reset] Error clearing subfolder:', sub, e);
           }
         }
-        if (await trx.schema.hasTable('app_settings')) {
-          await trx('app_settings').update({
-            admin_pin_hash: null,
-            default_staff_menus_json: null,
-          }).catch(() => {});
+      }
+
+      // Reset Direct LAN desktop config file to clean standalone defaults
+      const lanFile = path.join(dataDir, 'lan-config.json');
+      if (fs.existsSync(lanFile)) {
+        try {
+          const cleanLanConfig = {
+            role: 'STANDALONE',
+            hostIp: '',
+            port: 4200,
+            deviceId: 'pc-main-workstation',
+            deviceName: 'Main Workstation',
+            staffName: '',
+            minimizeToTray: true,
+            autoStartOnBoot: false,
+          };
+          fs.writeFileSync(lanFile, JSON.stringify(cleanLanConfig, null, 2), 'utf8');
+        } catch (err) {
+          console.warn('[Reset] Could not reset lan-config.json:', err);
         }
-      });
-      res.json({ success: true, message: 'All companies and data have been cleared successfully.' });
+      }
+
+      res.json({ success: true, message: 'All companies and business data have been completely wiped to factory state.' });
     } catch (err: any) {
       sendInternalError(res, err, 'Failed to reset application data.');
     }

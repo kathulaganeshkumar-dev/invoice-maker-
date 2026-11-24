@@ -376,6 +376,15 @@ async function createMainWindow() {
   const appUrl = activeAppOrigin || `http://127.0.0.1:${process.env.ACTUAL_SERVER_PORT || '4200'}`;
   let loaded = false;
 
+  // Clear session cache on launch to prevent stale script/styling execution across version updates
+  try {
+    if (mainWindow && mainWindow.webContents && mainWindow.webContents.session) {
+      await mainWindow.webContents.session.clearCache();
+    }
+  } catch (cacheErr) {
+    console.warn('[Electron] Failed to clear session cache:', cacheErr);
+  }
+
   console.log(`[Electron] Loading application URL: ${appUrl}`);
   for (let attempt = 1; attempt <= 15; attempt++) {
     try {
@@ -483,15 +492,33 @@ ipcMain.handle('app:set-title-bar-theme', async (_event, isDark: boolean) => {
 ipcMain.handle('app:set-software-icon', async (event, dataUrl: string | null) => {
   try {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-    if (!win || win.isDestroyed()) return false;
-    if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
-      const img = nativeImage.createFromDataURL(dataUrl);
-      if (!img.isEmpty()) {
-        win.setIcon(img);
-        return true;
+    if (win && !win.isDestroyed()) {
+      if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
+        const img = nativeImage.createFromDataURL(dataUrl);
+        if (!img.isEmpty()) {
+          win.setIcon(img);
+        }
       }
     }
-    return false;
+
+    // Refresh Windows Desktop and Start Menu shortcuts with the new icon
+    try {
+      let applyFn: any = null;
+      try {
+        applyFn = require('../dist-server/index').applySoftwareIconToDesktop;
+      } catch {
+        try {
+          applyFn = require('../src/server/services/softwareIconService').applySoftwareIconToDesktop;
+        } catch {}
+      }
+      if (typeof applyFn === 'function') {
+        await applyFn(dataUrl);
+      }
+    } catch (iconUpdateErr) {
+      console.warn('[Electron] Error syncing desktop shortcut icon:', iconUpdateErr);
+    }
+
+    return true;
   } catch (err) {
     console.warn('[Electron] Failed to update live window icon:', err);
     return false;
@@ -749,6 +776,31 @@ ipcMain.handle('app:update-from-lan', async () => {
     };
   } catch (err: any) {
     return { success: false, error: 'Failed to update from Main Office PC: ' + err.message };
+  }
+});
+
+ipcMain.handle('app:factory-reset', async () => {
+  try {
+    console.log('[Electron] Executing Desktop Factory Reset & Storage Clear...');
+    if (mainWindow && mainWindow.webContents && mainWindow.webContents.session) {
+      await mainWindow.webContents.session.clearStorageData().catch(() => {});
+      await mainWindow.webContents.session.clearCache().catch(() => {});
+    }
+    const cleanLanConfig: LanDesktopConfig = {
+      role: 'STANDALONE',
+      hostIp: '',
+      port: 4200,
+      deviceId: 'pc-main-workstation',
+      deviceName: 'Main Workstation',
+      staffName: '',
+      minimizeToTray: true,
+      autoStartOnBoot: false,
+    };
+    saveLanConfig(resolvedDataDir, cleanLanConfig);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Electron] Factory reset error:', err);
+    return { success: false, error: err.message };
   }
 });
 

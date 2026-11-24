@@ -171,21 +171,27 @@ export function saveLanConfig(dataDir: string, input: Partial<LanDesktopConfig>)
 }
 
 export function getLocalLanIps(): string[] {
-  const ips: string[] = [];
+  const lanIps: string[] = [];
+  const vpnIps: string[] = [];
   try {
     const interfaces = os.networkInterfaces();
-    for (const entries of Object.values(interfaces)) {
+    for (const [ifaceName, entries] of Object.entries(interfaces)) {
       if (!entries) continue;
+      const isVpnAdapter = /tailscale|vpn|wireguard|zerotier|wintun/i.test(ifaceName);
       for (const info of entries) {
         if (info.family === 'IPv4' && !info.internal && !info.address.startsWith('169.254.')) {
-          ips.push(info.address);
+          if (isVpnAdapter || info.address.startsWith('100.')) {
+            vpnIps.push(info.address);
+          } else {
+            lanIps.push(info.address);
+          }
         }
       }
     }
   } catch {
     // ignore OS network interface errors
   }
-  return Array.from(new Set(ips));
+  return Array.from(new Set([...lanIps, ...vpnIps]));
 }
 
 export function testLanHostConnection(

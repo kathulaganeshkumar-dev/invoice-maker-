@@ -51,6 +51,8 @@ export async function stopServer(): Promise<void> {
   logger.info('[Server] Database pool closed.');
 }
 
+export { applySoftwareIconToDesktop } from './services/softwareIconService';
+
 export async function startServer(port = 4200): Promise<express.Express> {
   const app = express();
   app.disable('x-powered-by');
@@ -199,13 +201,19 @@ export async function startServer(port = 4200): Promise<express.Express> {
 
   // Local LAN network info for Direct Desktop-to-Desktop Host setup display
   app.get('/api/network-info', (_req, res) => {
-    const ips: string[] = [];
+    const lanIps: string[] = [];
+    const vpnIps: string[] = [];
     try {
-      for (const entries of Object.values(os.networkInterfaces())) {
+      for (const [ifaceName, entries] of Object.entries(os.networkInterfaces())) {
         if (!entries) continue;
+        const isVpnAdapter = /tailscale|vpn|wireguard|zerotier|wintun/i.test(ifaceName);
         for (const info of entries) {
           if (info.family === 'IPv4' && !info.internal && !info.address.startsWith('169.254.')) {
-            ips.push(info.address);
+            if (isVpnAdapter || info.address.startsWith('100.')) {
+              vpnIps.push(info.address);
+            } else {
+              lanIps.push(info.address);
+            }
           }
         }
       }
@@ -213,7 +221,7 @@ export async function startServer(port = 4200): Promise<express.Express> {
       // ignore
     }
     res.json({
-      localIps: Array.from(new Set(ips)),
+      localIps: Array.from(new Set([...lanIps, ...vpnIps])),
       serverHost: process.env.SERVER_HOST || '127.0.0.1',
       serverPort: Number(process.env.ACTUAL_SERVER_PORT || port),
     });
@@ -301,10 +309,10 @@ export async function startServer(port = 4200): Promise<express.Express> {
 
   app.use(
     express.static(distPath, {
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('index.html')) {
-          res.setHeader('Cache-Control', 'no-store');
-        }
+      setHeaders: (res, _filePath) => {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
       },
     })
   );
@@ -313,7 +321,9 @@ export async function startServer(port = 4200): Promise<express.Express> {
       return next();
     }
     const indexFile = path.join(distPath, 'index.html');
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(indexFile);
   });
 

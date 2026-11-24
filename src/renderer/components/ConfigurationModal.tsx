@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CompanySettings, AppSettings, Company, NumberingSequence } from '../../shared/types';
 import { api, setLocalDeviceIdentity, setSessionAdminPin, getSessionAdminPin } from '../services/api';
 import { DEFAULT_VARUN_INVOICE_TERMS } from '../views/InvoicesView';
+import { DEFAULT_VARUN_QUOTATION_TERMS } from '../views/QuotationsView';
 import { ModalPortal } from './ModalPortal';
 import {
   Settings,
@@ -61,6 +62,9 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [error, setError] = useState<string>('');
 
   const [resetting, setResetting] = useState<boolean>(false);
+  const [resetConfirmationInput, setResetConfirmationInput] = useState<string>('');
+  const [resetAdminPinInput, setResetAdminPinInput] = useState<string>('');
+  const [resetNotice, setResetNotice] = useState<{ success: boolean; message: string } | null>(null);
   const [iconSaving, setIconSaving] = useState<boolean>(false);
   const [iconStatus, setIconStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -334,7 +338,20 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
           api.getSequences(companyId),
         ]);
         if (csRes.status === 'fulfilled') setCompanySettings(csRes.value);
-        if (compRes.status === 'fulfilled') setCompany(compRes.value);
+        if (compRes.status === 'fulfilled' && compRes.value) {
+          const c = compRes.value;
+          setCompany({
+            ...c,
+            default_invoice_terms:
+              c.default_invoice_terms && c.default_invoice_terms.trim()
+                ? c.default_invoice_terms
+                : DEFAULT_VARUN_INVOICE_TERMS,
+            default_quotation_terms:
+              c.default_quotation_terms && c.default_quotation_terms.trim()
+                ? c.default_quotation_terms
+                : DEFAULT_VARUN_QUOTATION_TERMS,
+          });
+        }
         if (seqRes.status === 'fulfilled') setSequences(seqRes.value);
       } else {
         setCompanySettings(null);
@@ -365,7 +382,18 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         });
       }
       if (company) {
-        await api.updateCompany(company.id, company);
+        const companyToSave = {
+          ...company,
+          default_invoice_terms:
+            company.default_invoice_terms !== undefined && company.default_invoice_terms !== null && company.default_invoice_terms !== ''
+              ? company.default_invoice_terms
+              : DEFAULT_VARUN_INVOICE_TERMS,
+          default_quotation_terms:
+            company.default_quotation_terms !== undefined && company.default_quotation_terms !== null && company.default_quotation_terms !== ''
+              ? company.default_quotation_terms
+              : DEFAULT_VARUN_QUOTATION_TERMS,
+        };
+        await api.updateCompany(company.id, companyToSave);
       }
       if (activeCategory === 'Deployment_Mode') {
         try {
@@ -1242,22 +1270,52 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   };
 
   const handleResetAllData = async () => {
-    const confirmation = window.prompt(
-      'DANGER: This will permanently delete ALL companies, invoices, customers, products, payments, and business data from the database.\n\nType RESET to confirm:'
-    );
-    if (confirmation !== 'RESET') {
-      if (confirmation !== null) alert('Confirmation text did not match "RESET". Action cancelled.');
+    if (resetConfirmationInput.trim().toUpperCase() !== 'RESET') {
+      setResetNotice({ success: false, message: 'Please type RESET into the confirmation field to proceed.' });
       return;
     }
 
     setResetting(true);
+    setResetNotice(null);
     try {
-      await api.resetAllData();
-      alert('All companies and data have been completely wiped. The application will now reload.');
-      window.location.reload();
+      // 1. Call Desktop IPC factory reset if running in Electron
+      const electronAPI = (window as any)?.electronAPI;
+      if (electronAPI?.factoryReset) {
+        try {
+          await electronAPI.factoryReset();
+        } catch (ipcErr) {
+          console.warn('Electron IPC factory reset warning:', ipcErr);
+        }
+      }
+
+      // 2. Call API endpoint to purge all tables and reset app settings
+      const res = await api.resetAllData(resetAdminPinInput.trim() || undefined);
+
+      // 3. Wipe all client-side localStorage state
+      try {
+        localStorage.clear();
+      } catch (lsErr) {
+        console.warn('LocalStorage clear warning:', lsErr);
+      }
+
+      setResetNotice({
+        success: true,
+        message: res?.message || 'Factory Reset successful! All companies and business data have been wiped.',
+      });
+
+      // 4. Reload application after 1.5 seconds so user can see confirmation
+      setTimeout(() => {
+        if (electronAPI?.relaunchApp) {
+          electronAPI.relaunchApp();
+        } else {
+          window.location.href = '/';
+        }
+      }, 1500);
     } catch (err: any) {
-      alert(err.message || 'Error clearing data');
-    } finally {
+      setResetNotice({
+        success: false,
+        message: err?.message || 'Failed to execute factory reset. Please verify MD / Admin PIN.',
+      });
       setResetting(false);
     }
   };
@@ -1986,10 +2044,14 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       </button>
                     </div>
                     <textarea
-                      rows={6}
-                      value={company.default_invoice_terms || ''}
+                      rows={8}
+                      value={
+                        company.default_invoice_terms !== undefined && company.default_invoice_terms !== null && company.default_invoice_terms !== ''
+                          ? company.default_invoice_terms
+                          : DEFAULT_VARUN_INVOICE_TERMS
+                      }
                       onChange={(e) => updateCompanyField('default_invoice_terms', e.target.value)}
-                      placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. charged after due date.&#10;3. Subject to local jurisdiction."
+                      placeholder={DEFAULT_VARUN_INVOICE_TERMS}
                       className="w-full border border-slate-300 dark:border-slate-600 rounded p-2.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                     />
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -2049,21 +2111,26 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Quotation Terms & Conditions (Varun Systems):</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300">Default Quotation Terms &amp; Conditions (Varun Systems):</label>
+                      <button
+                        type="button"
+                        onClick={() => updateCompanyField('default_quotation_terms', DEFAULT_VARUN_QUOTATION_TERMS)}
+                        className="text-[11px] text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-semibold cursor-pointer"
+                        title="Fill standard Varun Systems 5-point quotation terms"
+                      >
+                        Reset to Varun Systems Defaults
+                      </button>
+                    </div>
                     <textarea
                       rows={8}
                       value={
                         company.default_quotation_terms !== undefined && company.default_quotation_terms !== null && company.default_quotation_terms !== ''
                           ? company.default_quotation_terms
-                          : `Terms &Conditions: No warranty for burn / Physical Damage.
-1. Taxes: Inclusive of GST
-2. Payment: 100% Advance along with PO
-3. Validity: 7 Days
-4. Delivery: 1 week form the date of PO
-5. Installation and transport Included.`
+                          : DEFAULT_VARUN_QUOTATION_TERMS
                       }
                       onChange={(e) => updateCompanyField('default_quotation_terms', e.target.value)}
-                      placeholder="Terms &Conditions: No warranty for burn / Physical Damage.&#10;1. Taxes: Inclusive of GST&#10;2. Payment: 100% Advance along with PO&#10;3. Validity: 7 Days&#10;4. Delivery: 1 week form the date of PO&#10;5. Installation and transport Included."
+                      placeholder={DEFAULT_VARUN_QUOTATION_TERMS}
                       className="w-full border border-slate-300 dark:border-slate-600 rounded p-2.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                     />
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -2687,23 +2754,46 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                 Host IP Address (detected on office network):
                               </span>
                               {lanLocalIps.length > 0 ? (
-                                <div className="flex flex-wrap gap-2">
-                                  {lanLocalIps.map((ip) => (
-                                    <div
-                                      key={ip}
-                                      className="inline-flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 rounded-lg font-mono font-bold text-emerald-900 dark:text-emerald-200 shadow-sm"
-                                    >
-                                      <span>{ip}</span>
-                                      <span className="text-slate-400 text-[11px] font-sans font-normal">Port {lanPort}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCopyLanIp(ip)}
-                                        className="px-2 py-0.5 text-[10px] font-sans font-semibold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded transition-colors shadow-xs"
-                                      >
-                                        {copiedIp === ip ? 'Copied!' : 'Copy IP'}
-                                      </button>
-                                    </div>
-                                  ))}
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap gap-2">
+                                    {lanLocalIps.map((ip) => {
+                                      const isVpn = ip.startsWith('100.');
+                                      const isLocalLan = ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.');
+                                      return (
+                                        <div
+                                          key={ip}
+                                          className={`inline-flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-slate-800 border rounded-lg font-mono font-bold shadow-sm ${
+                                            isLocalLan
+                                              ? 'border-emerald-400 dark:border-emerald-600 text-emerald-900 dark:text-emerald-200'
+                                              : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'
+                                          }`}
+                                        >
+                                          <span>{ip}</span>
+                                          <span className="text-slate-400 text-[11px] font-sans font-normal">Port {lanPort}</span>
+                                          {isLocalLan && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-sans font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 rounded">
+                                              Office Wi-Fi / LAN (Use This)
+                                            </span>
+                                          )}
+                                          {isVpn && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-sans font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 rounded">
+                                              Tailscale / VPN
+                                            </span>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyLanIp(ip)}
+                                            className="px-2 py-0.5 text-[10px] font-sans font-semibold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded transition-colors shadow-xs"
+                                          >
+                                            {copiedIp === ip ? 'Copied!' : 'Copy IP'}
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                                    💡 <strong>Which IP to use:</strong> Enter the <strong>Office Wi-Fi / LAN</strong> IP (<code className="text-emerald-700 dark:text-emerald-300 font-bold">192.168.x.x</code>) on Staff PCs connected to the same Wi-Fi router. The <code className="text-amber-700 dark:text-amber-300 font-bold">100.x.x.x</code> IP is your virtual Tailscale VPN adapter.
+                                  </p>
                                 </div>
                               ) : (
                                 <div className="text-slate-600 dark:text-slate-400">
@@ -3701,27 +3791,100 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     <span>Danger Zone: Clear All Companies &amp; Data (Factory Reset)</span>
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Reset the local database to a completely clean slate.
+                    Reset the local software and database to a completely clean factory state.
                   </p>
                 </div>
 
-                <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900/60 rounded-xl p-5 shadow-sm space-y-3">
+                <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900/60 rounded-xl p-5 shadow-sm space-y-4">
                   <div className="flex items-center space-x-2 text-red-700 dark:text-red-400 font-bold text-sm">
                     <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                    <span>Danger Zone: Clear All Companies &amp; Data (Factory Reset)</span>
+                    <span>Permanent Data Erasure &amp; Clean Slate Protocol</span>
                   </div>
-                  <p className="text-xs text-red-600/90 dark:text-red-400/90">
-                    Permanently erase all companies, operating branches, invoices, customers, suppliers, inventory, and payment records. Preserves application settings in a pristine clean state.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleResetAllData}
-                    disabled={resetting}
-                    className="inline-flex items-center space-x-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>{resetting ? 'Resetting Data...' : 'Reset & Wipe All Data'}</span>
-                  </button>
+
+                  <div className="text-xs text-red-700/90 dark:text-red-300/90 space-y-1.5 bg-red-100/50 dark:bg-red-950/40 p-3.5 rounded-lg border border-red-200/80 dark:border-red-900/40">
+                    <p className="font-semibold text-red-800 dark:text-red-200">
+                      Executing Factory Reset will permanently delete:
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5 ml-1">
+                      <li>All Companies, Branches, and Business Profiles</li>
+                      <li>All Invoices, Quotations, Purchase Orders, and Payment Allocations</li>
+                      <li>All Customers, Suppliers, Products, Units, and Categories</li>
+                      <li>All Inventory Transactions and Warehouse Stock Balances</li>
+                      <li>All Numbering Sequences and Quotation Sequences (starts fresh from #1)</li>
+                      <li>All Workstation permissions, uploaded letterheads, and temporary backups</li>
+                    </ul>
+                  </div>
+
+                  {resetNotice && (
+                    <div
+                      className={`p-3 rounded-lg text-xs font-medium border flex items-center space-x-2 ${
+                        resetNotice.success
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                          : 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-200 border-red-300 dark:border-red-800'
+                      }`}
+                    >
+                      {resetNotice.success ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      )}
+                      <span>{resetNotice.message}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                        Type <span className="text-red-600 font-mono font-black">RESET</span> to confirm:
+                      </label>
+                      <input
+                        type="text"
+                        value={resetConfirmationInput}
+                        onChange={(e) => {
+                          setResetConfirmationInput(e.target.value.toUpperCase());
+                          if (resetNotice) setResetNotice(null);
+                        }}
+                        disabled={resetting}
+                        placeholder="Type RESET here"
+                        className="w-full px-3 py-2 text-xs font-mono font-bold tracking-wider rounded-lg border border-red-300 dark:border-red-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                        MD / Admin PIN <span className="font-normal text-slate-500">(Default: 1234)</span>:
+                      </label>
+                      <input
+                        type="password"
+                        maxLength={4}
+                        value={resetAdminPinInput}
+                        onChange={(e) => {
+                          setResetAdminPinInput(e.target.value.replace(/\D/g, ''));
+                          if (resetNotice) setResetNotice(null);
+                        }}
+                        disabled={resetting}
+                        placeholder="Enter 4-digit PIN"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center space-x-3">
+                    <button
+                      type="button"
+                      onClick={handleResetAllData}
+                      disabled={resetting || resetConfirmationInput.trim() !== 'RESET'}
+                      className="inline-flex items-center space-x-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg active:scale-95"
+                    >
+                      <RotateCcw className={`w-4 h-4 ${resetting ? 'animate-spin' : ''}`} />
+                      <span>{resetting ? 'Wiping All Data &amp; Resetting...' : 'Permanently Wipe All Data &amp; Factory Reset'}</span>
+                    </button>
+                    {resetConfirmationInput.trim() !== 'RESET' && (
+                      <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                        Type RESET above to enable this button
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

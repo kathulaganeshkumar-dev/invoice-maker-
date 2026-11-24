@@ -29,6 +29,7 @@ const BUSINESS_TABLES = [
   'letterhead_templates',
   'letterhead_template_overrides',
   'numbering_sequences',
+  'quotation_sequences',
   'company_settings',
   'branches',
   'companies',

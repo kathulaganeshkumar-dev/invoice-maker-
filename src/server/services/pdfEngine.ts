@@ -1935,8 +1935,8 @@ export class PdfEngine {
     const defaultTerms = [
       '1. Goods once sold will not be taken back.',
       '2. Provider as per OEM Terms & Conditions.',
-      '3. Stander warranty 11months from the date of invoice.',
-      '4. Warranty provided Manufactures Authorized Service.',
+      '3. Standard warranty 11 months from the date of invoice.',
+      '4. Warranty provided by Manufacturer\'s Authorized Service.',
       '5. Payments should be sent through A/C payee only.',
       '6. Payments should be made within 14 days otherwise interest will be charged @24% P.A.',
       'Thanking you and assuring of our best services and attention at all times.',
@@ -1947,17 +1947,24 @@ export class PdfEngine {
       ((invoice as any).terms_and_conditions && (invoice as any).terms_and_conditions.trim()) ||
       (options.company?.default_invoice_terms && options.company.default_invoice_terms.trim());
 
-    const termsToRender = rawTerms
+    const rawTermsList = rawTerms
       ? rawTerms.split(/[\r\n]+/).map((l: string) => l.trim()).filter(Boolean)
       : defaultTerms;
+
+    const termMaxW = midDividerX - leftX - 10;
+    const termsToRender: string[] = [];
+    for (const rLine of rawTermsList) {
+      termsToRender.push(...splitTextToLines(rLine, termMaxW, fontRegular, 7.5));
+    }
 
     const totalLines = termsToRender.length;
     const termFontSize = totalLines > 7 ? 6.5 : 7.5;
     const lineSpacing = totalLines > 7 ? Math.min(12, Math.max(8.5, Math.floor((bottomBoxH - 12) / totalLines))) : 12;
 
     let termLineY = bottomBoxStartY + 10;
-    for (const tLine of termsToRender.slice(0, 10)) {
-      page.drawText(tLine.slice(0, 80), {
+    for (const tLine of termsToRender) {
+      if (termLineY > bottomBoxStartY + bottomBoxH - 6) break;
+      page.drawText(tLine, {
         x: leftX + 5,
         y: toPdfY(termLineY),
         size: termFontSize,

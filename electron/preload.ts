@@ -25,4 +25,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installOfflineUpdate: (opts?: { filePath?: string }) => ipcRenderer.invoke('app:install-offline-update', opts),
   exportUpdatePackage: () => ipcRenderer.invoke('app:export-update-package'),
   updateFromLan: () => ipcRenderer.invoke('app:update-from-lan'),
+  factoryReset: () => ipcRenderer.invoke('app:factory-reset'),
 });

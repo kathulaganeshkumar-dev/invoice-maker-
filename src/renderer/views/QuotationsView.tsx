@@ -47,6 +47,8 @@ export const DEFAULT_VARUN_TERMS = `Terms &Conditions: No warranty for burn / Ph
 4. Delivery: 1 week form the date of PO
 5. Installation and transport Included.`;
 
+export const DEFAULT_VARUN_QUOTATION_TERMS = DEFAULT_VARUN_TERMS;
+
 export const QuotationsView: React.FC<Props> = ({
   companyId,
   onNavigateToInvoice,
