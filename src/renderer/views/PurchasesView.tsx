@@ -243,11 +243,67 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
     };
   }, [items, overallDiscountType, overallDiscountValue]);
 
+  const loadBillsSilently = async () => {
+    try {
+      const data = await api.getPurchaseInvoices(companyId);
+      setBills(data);
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadMasterSilently = async () => {
+    try {
+      const [sList, pList, wList, cList, uList, comp] = await Promise.all([
+        api.getSuppliers(companyId),
+        api.getProducts(companyId, { item_type: 'PRODUCT' }),
+        api.getWarehouses(companyId),
+        api.getCategories(companyId),
+        api.getUnits(companyId),
+        api.getCompany(companyId).catch(() => null),
+      ]);
+      setSuppliers(sList);
+      setProducts(pList);
+      setWarehouses(wList);
+      setCategories(cList);
+      setUnits(uList);
+      if (comp?.state) {
+        setCompanyDefaultState(comp.state);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (companyId) {
       loadBills();
       loadMaster();
     }
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId) return;
+
+    const handleSync = () => {
+      loadBillsSilently();
+      loadMasterSilently();
+    };
+
+    const syncTimer = setInterval(() => {
+      loadBillsSilently();
+    }, 3000);
+
+    window.addEventListener('eim-data-changed', handleSync);
+    window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', handleSync);
+      window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
   }, [companyId]);
 
   // Automatically calculate Due Date from Bill Date + Supplier's Payment Reminder Days
@@ -330,8 +386,8 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
   };
 
   const handleAddItem = () => {
-    setItems([
-      ...items,
+    setItems((prev) => [
+      ...prev,
       {
         product_id: '',
         item_name: '',
@@ -345,6 +401,59 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
       },
     ]);
   };
+
+  // Keyboard Shortcuts: 'Ctrl +' to add new product row, 'Escape' to close open modal/window
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Shortcut: Ctrl + (or Ctrl + =) to add item row when create modal is open
+      const isCtrlPlus =
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd' || e.code === 'Equal' || e.key === 'Add');
+
+      if (isCtrlPlus && isModalOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAddItem();
+        return;
+      }
+
+      // 2. Shortcut: Esc to close open modals
+      if (e.key === 'Escape') {
+        if (isQuickProductOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsQuickProductOpen(false);
+          return;
+        }
+        if (isWarehouseManagerOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsWarehouseManagerOpen(false);
+          return;
+        }
+        if (isModalOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsModalOpen(false);
+          return;
+        }
+        if (viewingBill) {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewingBill(null);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isModalOpen,
+    isQuickProductOpen,
+    isWarehouseManagerOpen,
+    viewingBill,
+  ]);
 
   const handleRemoveItem = (index: number) => {
     if (items.length > 1) {
@@ -1152,9 +1261,13 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                   <button
                     type="button"
                     onClick={handleAddItem}
-                    className="inline-flex items-center space-x-1 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-bold"
+                    className="inline-flex items-center space-x-1 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white font-bold cursor-pointer"
+                    title="Add new product row (Shortcut: Ctrl +)"
                   >
                     <span>+ Add Item Row</span>
+                    <kbd className="ml-1 text-[10px] font-mono font-normal px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400">
+                      Ctrl +
+                    </kbd>
                   </button>
                 </div>
 
@@ -1276,9 +1389,10 @@ export const PurchasesView: React.FC<Props> = ({ companyId }) => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold"
+                  className="px-4 py-1.5 border border-slate-300 rounded text-xs font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+                  title="Cancel and close window (Esc)"
                 >
-                  Cancel
+                  Cancel (Esc)
                 </button>
                 <button
                   type="button"

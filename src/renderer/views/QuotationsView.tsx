@@ -30,6 +30,9 @@ import {
   User,
   Edit2,
   Check,
+  Eye,
+  Download,
+  Pencil,
 } from 'lucide-react';
 
 interface Props {
@@ -38,6 +41,7 @@ interface Props {
   modalOnly?: boolean;
   onCloseModal?: () => void;
   onQuotationCreated?: (quotation: Quotation) => void;
+  isOwnerOrHost?: boolean;
 }
 
 export const DEFAULT_VARUN_TERMS = `Terms &Conditions: No warranty for burn / Physical Damage.
@@ -55,6 +59,7 @@ export const QuotationsView: React.FC<Props> = ({
   modalOnly = false,
   onCloseModal,
   onQuotationCreated,
+  isOwnerOrHost: propIsOwnerOrHost = true,
 }) => {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -65,9 +70,11 @@ export const QuotationsView: React.FC<Props> = ({
   const [loading, setLoading] = useState<boolean>(!modalOnly);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(Boolean(modalOnly));
   const [viewingQuotation, setViewingQuotation] = useState<Quotation | null>(null);
+  const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
 
   const closeCreateModal = () => {
     setIsCreateModalOpen(false);
+    setEditingQuotation(null);
     if (modalOnly && onCloseModal) {
       onCloseModal();
     }
@@ -107,6 +114,30 @@ export const QuotationsView: React.FC<Props> = ({
   });
   const [editingCreatorQuotationId, setEditingCreatorQuotationId] = useState<string | null>(null);
   const [editingCreatorValue, setEditingCreatorValue] = useState<string>('');
+  const [internalIsOwner, setInternalIsOwner] = useState<boolean>(() => {
+    try {
+      const lanRole = localStorage.getItem('eim_lan_role');
+      const customHost = localStorage.getItem('eim_lan_host_ip');
+      return lanRole !== 'LAN_CLIENT' || !customHost;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    api.getMyWorkstationPermission().then((res) => {
+      const ws = res?.workstation;
+      if (ws) {
+        setInternalIsOwner(Boolean(ws.is_admin));
+      }
+    }).catch(() => {
+      const isLocal = typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
+      const isStaff = typeof window !== 'undefined' && localStorage.getItem('eim_lan_role') === 'LAN_CLIENT';
+      setInternalIsOwner(isLocal && !isStaff);
+    });
+  }, []);
+
+  const isOwnerOrHost = propIsOwnerOrHost && internalIsOwner;
 
   const customerOptions = useMemo(() => {
     return [
@@ -168,6 +199,9 @@ export const QuotationsView: React.FC<Props> = ({
   }, [products]);
 
   useEffect(() => {
+    setQuotations([]);
+    setCustomers([]);
+    setProducts([]);
     if (companyId) {
       if (!modalOnly) {
         loadQuotations();
@@ -221,6 +255,17 @@ export const QuotationsView: React.FC<Props> = ({
     }
   };
 
+  const handleOpenQuotation = async (q: Quotation) => {
+    try {
+      const full = await api.getQuotation(companyId, q.id);
+      setViewingQuotation(full || q);
+      setActivePrintTemplateId(full?.letterhead_template_id || q.letterhead_template_id || (templates[0]?.id || ''));
+    } catch {
+      setViewingQuotation(q);
+      setActivePrintTemplateId(q.letterhead_template_id || (templates[0]?.id || ''));
+    }
+  };
+
   const loadMaster = async () => {
     try {
       const [cList, pList, tList, comp, wsRes] = await Promise.all([
@@ -259,8 +304,8 @@ export const QuotationsView: React.FC<Props> = ({
   };
 
   const handleAddItem = (isNonStock = false) => {
-    setItems([
-      ...items,
+    setItems((prev) => [
+      ...prev,
       {
         item_name: '',
         description: '',
@@ -274,6 +319,52 @@ export const QuotationsView: React.FC<Props> = ({
       },
     ]);
   };
+
+  // Keyboard Shortcuts: 'Ctrl +' to add new item row, 'Escape' to close open modal/window
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Shortcut: Ctrl + (or Ctrl + =) to add item row when create modal is open
+      const isCtrlPlus =
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd' || e.code === 'Equal' || e.key === 'Add');
+
+      if (isCtrlPlus && isCreateModalOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAddItem(false);
+        return;
+      }
+
+      // 2. Shortcut: Esc to close open modals
+      if (e.key === 'Escape') {
+        if (isQuickAddCustomerOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsQuickAddCustomerOpen(false);
+          return;
+        }
+        if (isCreateModalOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeCreateModal();
+          return;
+        }
+        if (viewingQuotation) {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewingQuotation(null);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isCreateModalOpen,
+    isQuickAddCustomerOpen,
+    viewingQuotation,
+  ]);
 
   const handleRemoveItem = (index: number) => {
     if (items.length > 1) {
@@ -356,6 +447,51 @@ export const QuotationsView: React.FC<Props> = ({
 
 
 
+  const handleEditQuotation = async (q: Quotation) => {
+    try {
+      const full = await api.getQuotation(companyId, q.id);
+      const target = full || q;
+      setEditingQuotation(target);
+      setSelectedCustomerId(target.customer_id || '');
+      setCustomerNameInput(target.customer_name || '');
+      setCustomerGstinInput(target.customer_gstin || '');
+      setBillingAddressInput(target.billing_address || '');
+      setQuoteDate(target.quotation_date ? target.quotation_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+      setValidUntil(target.valid_until_date ? target.valid_until_date.split('T')[0] : new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
+      setSelectedTemplateId(target.letterhead_template_id || '');
+      setCreatorName(target.created_by_device_name || '');
+      setTopMarginMm(target.top_margin_mm !== undefined && target.top_margin_mm !== null ? Number(target.top_margin_mm) : 55);
+      setBottomMarginMm(target.bottom_margin_mm !== undefined && target.bottom_margin_mm !== null ? Number(target.bottom_margin_mm) : 32);
+      setTermsAndConditions(target.terms_and_conditions || companyDefaultTerms);
+      setCustomRoundOff(target.round_off ? String(target.round_off) : '0.00');
+      setNotes(target.notes || '');
+
+      if (target.items && target.items.length > 0) {
+        setItems(
+          target.items.map((it: any) => ({
+            item_id: it.item_id || it.product_id || undefined,
+            item_name: it.item_name || it.description || '',
+            description: it.description || '',
+            hsn_or_sac: it.hsn_or_sac || '9999',
+            quantity: String(it.quantity || '1'),
+            units: it.units || String(it.quantity || '01').padStart(2, '0'),
+            rate: String(it.rate || it.unit_price || '0.00'),
+            gst_rate: String(it.gst_rate || '18.00'),
+            unit: it.unit || 'NOS',
+          }))
+        );
+      } else {
+        setItems([
+          { item_name: '', description: '', hsn_or_sac: '', quantity: '1', units: '01', rate: '', gst_rate: '18.00', unit: 'NOS' },
+        ]);
+      }
+
+      setIsCreateModalOpen(true);
+    } catch (err: any) {
+      alert(err.message || 'Error loading quotation details for editing');
+    }
+  };
+
   const handleCreateQuotation = async () => {
     const cust = customers.find((c) => c.id === selectedCustomerId);
     const finalCustName = cust ? cust.name : customerNameInput.trim();
@@ -415,6 +551,62 @@ export const QuotationsView: React.FC<Props> = ({
         }
       }
 
+      if (editingQuotation) {
+        const updated = await api.updateQuotation(companyId, editingQuotation.id, {
+          customer_id: cust ? cust.id : undefined,
+          customer_name: finalCustName,
+          customer_gstin: cust ? cust.gstin : customerGstinInput.trim() || undefined,
+          billing_address: cust ? cust.billing_address : billingAddressInput.trim() || undefined,
+          place_of_supply_state: cust ? cust.state : undefined,
+          place_of_supply_code: cust ? cust.state_code : undefined,
+          quotation_date: quoteDate,
+          valid_until_date: validUntil,
+          letterhead_template_id: selectedTemplateId || undefined,
+          created_by_device_name: creatorName.trim() || undefined,
+          top_margin_mm: topMarginMm,
+          bottom_margin_mm: bottomMarginMm,
+          terms_and_conditions: termsAndConditions,
+          round_off: customRoundOff && customRoundOff.trim() !== '' ? customRoundOff.trim() : '0.00',
+          items: finalItems,
+          notes,
+        });
+
+        // Mirror locally on workstation if path is set
+        try {
+          const localPath = localStorage.getItem('eim_local_quotation_save_path');
+          if (localPath && localPath.trim() && (window as any)?.electronAPI?.saveFileLocally) {
+            const pdfUrl = api.getQuotationPdfUrl(companyId, updated.id);
+            fetch(pdfUrl)
+              .then((r) => r.blob())
+              .then((blob) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const base64data = (reader.result as string).split(',')[1];
+                  (window as any).electronAPI.saveFileLocally({
+                    folderPath: localPath.trim(),
+                    filename: updated.quotation_number,
+                    fileBase64: base64data,
+                  });
+                };
+                reader.readAsDataURL(blob);
+              })
+              .catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Could not mirror updated quotation PDF locally:', e);
+        }
+
+        resetForm();
+        setEditingQuotation(null);
+        window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'quotation' } }));
+        closeCreateModal();
+        if (!modalOnly) {
+          await loadQuotations();
+        }
+        alert(`Quotation ${updated.quotation_number} updated successfully in database!`);
+        return;
+      }
+
       const created = await api.createQuotation(companyId, {
         customer_id: cust ? cust.id : undefined,
         customer_name: finalCustName,
@@ -433,6 +625,31 @@ export const QuotationsView: React.FC<Props> = ({
         items: finalItems,
         notes,
       });
+
+      // Workstation local copy mirroring (if staff has configured a local quotation save folder on this PC)
+      try {
+        const localPath = localStorage.getItem('eim_local_quotation_save_path');
+        if (localPath && localPath.trim() && (window as any)?.electronAPI?.saveFileLocally) {
+          const pdfUrl = api.getQuotationPdfUrl(companyId, created.id);
+          fetch(pdfUrl)
+            .then((r) => r.blob())
+            .then((blob) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64data = (reader.result as string).split(',')[1];
+                (window as any).electronAPI.saveFileLocally({
+                  folderPath: localPath.trim(),
+                  filename: created.quotation_number,
+                  fileBase64: base64data,
+                });
+              };
+              reader.readAsDataURL(blob);
+            })
+            .catch(() => {});
+        }
+      } catch (e) {
+        console.warn('Could not auto-save workstation local quotation copy:', e);
+      }
 
       resetForm();
       window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'quotation' } }));
@@ -493,6 +710,58 @@ export const QuotationsView: React.FC<Props> = ({
     window.open(url, '_blank');
   };
 
+  const handleSaveLocalCopy = async (quoteId: string, quoteNumber: string) => {
+    try {
+      let targetFolder = localStorage.getItem('eim_local_quotation_save_path') || '';
+      const electronAPI = (window as any)?.electronAPI;
+
+      if (!targetFolder && electronAPI?.selectFolder) {
+        const chosen = await electronAPI.selectFolder();
+        if (chosen) {
+          targetFolder = chosen;
+          localStorage.setItem('eim_local_quotation_save_path', chosen);
+        } else {
+          return;
+        }
+      }
+
+      const templateId = activePrintTemplateId || selectedTemplateId || templates[0]?.id || '';
+      const pdfUrl = api.getQuotationPdfUrl(companyId, quoteId, { mode: 'DIGITAL_LETTERHEAD', templateId: templateId || undefined });
+      const res = await fetch(pdfUrl);
+      if (!res.ok) throw new Error('Failed to generate Quotation PDF from server');
+      const blob = await res.blob();
+
+      if (targetFolder && electronAPI?.saveFileLocally) {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64data = (reader.result as string).split(',')[1];
+          const saveRes = await electronAPI.saveFileLocally({
+            folderPath: targetFolder,
+            filename: quoteNumber,
+            fileBase64: base64data,
+          });
+          if (saveRes?.success) {
+            alert(`Quotation ${quoteNumber} saved locally on this computer:\n\n${saveRes.savedPath}`);
+          } else {
+            alert(`Failed to save locally: ${saveRes?.error || 'Unknown error'}`);
+          }
+        };
+        reader.readAsDataURL(blob);
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${quoteNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (err: any) {
+      alert(`Could not save quotation: ${err.message}`);
+    }
+  };
+
   const resetForm = () => {
     setSelectedCustomerId('');
     setCustomerNameInput('');
@@ -503,6 +772,7 @@ export const QuotationsView: React.FC<Props> = ({
     setTermsAndConditions(companyDefaultTerms || DEFAULT_VARUN_TERMS);
     setCustomRoundOff('0.00');
     setAutoSaveNewItems(true);
+    setEditingQuotation(null);
   };
 
   const previewCalculatedLines = useMemo(() => {
@@ -810,14 +1080,14 @@ export const QuotationsView: React.FC<Props> = ({
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
             <tr>
-              <th className="py-3 px-4">Quote # (Click to View)</th>
-              <th className="py-3 px-4">Date</th>
-              <th className="py-3 px-4">Valid Until</th>
-              <th className="py-3 px-4">Customer</th>
-              <th className="py-3 px-4">Created By</th>
-              <th className="py-3 px-4 text-right">Grand Total</th>
-              <th className="py-3 px-4 text-center">Status</th>
-              <th className="py-3 px-4 text-center">Actions</th>
+              <th className="py-3 px-4 whitespace-nowrap">Quote # (Click to View)</th>
+              <th className="py-3 px-4 whitespace-nowrap">Date</th>
+              <th className="py-3 px-4 whitespace-nowrap">Valid Until</th>
+              <th className="py-3 px-4 whitespace-nowrap">Customer</th>
+              <th className="py-3 px-4 whitespace-nowrap">Created By</th>
+              <th className="py-3 px-4 text-right whitespace-nowrap">Grand Total</th>
+              <th className="py-3 px-4 text-center whitespace-nowrap">Status</th>
+              <th className="py-3 px-4 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -829,15 +1099,19 @@ export const QuotationsView: React.FC<Props> = ({
               </tr>
             ) : (
               filtered.map((q) => (
-                <tr key={q.id}>
+                <tr
+                  key={q.id}
+                  onClick={() => handleOpenQuotation(q)}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                >
                   <td className="py-3 px-4 font-mono font-bold">
                     <button
                       type="button"
-                      onClick={() => {
-                        setViewingQuotation(q);
-                        setActivePrintTemplateId(q.letterhead_template_id || (templates[0]?.id || ''));
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenQuotation(q);
                       }}
-                      className="font-semibold text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                      className="font-semibold text-slate-800 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer"
                       title="Click to view full quotation"
                     >
                       {q.quotation_number}
@@ -892,23 +1166,25 @@ export const QuotationsView: React.FC<Props> = ({
                               ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                               : 'bg-sky-50 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border-sky-200 dark:border-sky-800'
                           }`}
-                          title={`Created by: ${getCreatorDisplay(q)} (Click pencil to edit)`}
+                          title={isOwnerOrHost ? `Created by: ${getCreatorDisplay(q)} (Click pencil to edit)` : `Created by: ${getCreatorDisplay(q)}`}
                         >
                           <User className="w-3 h-3 mr-1 opacity-70" />
                           <span>{getCreatorDisplay(q)}</span>
                         </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingCreatorQuotationId(q.id);
-                            setEditingCreatorValue(getCreatorDisplay(q));
-                          }}
-                          className="p-1 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                          title="Change creator name"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
+                        {isOwnerOrHost && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCreatorQuotationId(q.id);
+                              setEditingCreatorValue(getCreatorDisplay(q));
+                            }}
+                            className="p-1 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            title="Change creator name (Host / Owner only)"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -930,8 +1206,18 @@ export const QuotationsView: React.FC<Props> = ({
                       {q.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-center">
+                  <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center space-x-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenQuotation(q)}
+                        className="inline-flex items-center space-x-1 px-2 py-1 border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/60 text-brand-700 dark:text-brand-300 rounded text-xs font-semibold transition-colors shadow-xs"
+                        title="Open Quotation Details"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                        <span>Open</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -947,15 +1233,27 @@ export const QuotationsView: React.FC<Props> = ({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setViewingQuotation(q);
-                          setActivePrintTemplateId(q.letterhead_template_id || (templates[0]?.id || ''));
-                        }}
+                        onClick={() => handleOpenQuotation(q)}
                         className="p-1 text-slate-500 hover:text-brand-600"
                         title="View / Print Quotation"
                       >
                         <Printer className="w-4 h-4" />
                       </button>
+
+                      {q.status !== 'CONVERTED' && isOwnerOrHost && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditQuotation(q);
+                          }}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 border border-brand-300 dark:border-brand-700 bg-brand-50/70 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/60 text-brand-700 dark:text-brand-300 rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+                          title="Edit this quotation (Updates database & archives)"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                          <span>Edit</span>
+                        </button>
+                      )}
 
                       {q.status !== 'CONVERTED' && (
                         <button
@@ -969,14 +1267,16 @@ export const QuotationsView: React.FC<Props> = ({
                         </button>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteQuotation(q.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                        title="Delete Quotation"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isOwnerOrHost && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuotation(q.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                          title="Delete Quotation (Host / Owner only)"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1039,6 +1339,16 @@ export const QuotationsView: React.FC<Props> = ({
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print / Download PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSaveLocalCopy(viewingQuotation.id, viewingQuotation.quotation_number)}
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 border border-brand-300 dark:border-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/60 dark:hover:bg-brand-900 text-brand-900 dark:text-brand-200 rounded-lg text-xs font-semibold shadow-xs cursor-pointer transition-all"
+                    title="Save an extra PDF copy to this computer's local folder"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Save to This PC</span>
                   </button>
                 </div>
               </div>
@@ -1255,16 +1565,37 @@ export const QuotationsView: React.FC<Props> = ({
 
             {/* Modal Footer */}
             <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => handleDeleteQuotation(viewingQuotation.id)}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-rose-300 text-rose-600 hover:bg-rose-50 rounded text-xs font-bold transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Delete Quotation</span>
-              </button>
+              <div>
+                {isOwnerOrHost && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteQuotation(viewingQuotation.id)}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-rose-300 text-rose-600 hover:bg-rose-50 rounded text-xs font-bold transition-colors cursor-pointer"
+                    title="Delete Quotation (Host / Owner only)"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Quotation</span>
+                  </button>
+                )}
+              </div>
 
               <div className="flex items-center space-x-2">
+                {viewingQuotation.status !== 'CONVERTED' && isOwnerOrHost && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const toEdit = viewingQuotation;
+                      setViewingQuotation(null);
+                      handleEditQuotation(toEdit);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 border border-brand-300 dark:border-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/60 dark:hover:bg-brand-900 text-brand-900 dark:text-brand-200 rounded text-xs font-semibold shadow-xs cursor-pointer transition-all"
+                    title="Edit this quotation details"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                    <span>Edit Quotation</span>
+                  </button>
+                )}
+
                 {viewingQuotation.status !== 'CONVERTED' && (
                   <button
                     type="button"
@@ -1297,9 +1628,13 @@ export const QuotationsView: React.FC<Props> = ({
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <span>Create Commercial Quotation</span>
+                <span>
+                  {editingQuotation
+                    ? `Edit Commercial Quotation: ${editingQuotation.quotation_number}`
+                    : 'Create Commercial Quotation'}
+                </span>
               </h2>
-              <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600">
+              <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600 cursor-pointer" title="Close window (Esc)">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1377,21 +1712,34 @@ export const QuotationsView: React.FC<Props> = ({
                     <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
                       <User className="w-3.5 h-3.5 text-sky-600" />
                       <span>Created By (Staff / Owner)</span>
+                      {!isOwnerOrHost && (
+                        <span className="text-[10px] text-slate-400 font-normal ml-1">
+                          (Locked to your profile)
+                        </span>
+                      )}
                     </label>
                   </div>
                   <input
                     type="text"
-                    list="staff-creators-list"
+                    list={isOwnerOrHost ? 'staff-creators-list' : undefined}
                     value={creatorName}
-                    onChange={(e) => setCreatorName(e.target.value)}
+                    readOnly={!isOwnerOrHost}
+                    disabled={!isOwnerOrHost}
+                    onChange={(e) => isOwnerOrHost && setCreatorName(e.target.value)}
                     placeholder="e.g. Veer, Sandhya, Admin / Owner"
-                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-semibold outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                    className={`w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs font-semibold outline-none ${
+                      isOwnerOrHost
+                        ? 'bg-white dark:bg-slate-700 font-semibold focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                    }`}
                   />
-                  <datalist id="staff-creators-list">
-                    {availableStaffNames.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
+                  {isOwnerOrHost && (
+                    <datalist id="staff-creators-list">
+                      {availableStaffNames.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
+                  )}
                 </div>
               </div>
 
@@ -1618,10 +1966,14 @@ export const QuotationsView: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={() => handleAddItem(false)}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all shadow-xs"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                    title="Add new item row (Shortcut: Ctrl +)"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Item Row</span>
+                    <kbd className="ml-1 text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400">
+                      Ctrl +
+                    </kbd>
                   </button>
                 </div>
 
@@ -1732,16 +2084,17 @@ export const QuotationsView: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={closeCreateModal}
-                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                title="Cancel and close window (Esc)"
               >
-                Cancel
+                Cancel (Esc)
               </button>
               <button
                 type="button"
                 onClick={handleCreateQuotation}
-                className="px-4 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-semibold shadow-xs"
+                className="px-4 py-1.5 border border-brand-300 dark:border-brand-700 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold shadow-xs cursor-pointer transition-colors"
               >
-                Create Quotation
+                {editingQuotation ? 'Update Quotation & Save Changes' : 'Create Quotation'}
               </button>
             </div>
           </div>

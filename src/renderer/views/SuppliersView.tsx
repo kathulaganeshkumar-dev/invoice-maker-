@@ -190,11 +190,59 @@ export const SuppliersView: React.FC<Props> = ({ companyId }) => {
     }));
   }, []);
 
+  const loadSuppliersSilently = async () => {
+    try {
+      const [data, bills, orders, payments] = await Promise.all([
+        api.getSuppliers(companyId),
+        api.getPurchaseInvoices(companyId).catch(() => []),
+        api.getPurchaseOrders(companyId).catch(() => []),
+        api.getSupplierPayments(companyId).catch(() => []),
+      ]);
+      setSuppliers(data);
+      setPurchaseBills(bills);
+      setPurchaseOrders(orders);
+      setSupplierPayments(payments);
+
+      // If viewing a supplier, refresh their record live
+      if (viewingSupplier) {
+        const fresh = data.find((s) => s.id === viewingSupplier.id);
+        if (fresh) {
+          setViewingSupplier(fresh);
+        }
+      }
+    } catch {
+      // ignore silent background errors
+    }
+  };
+
   useEffect(() => {
     if (companyId) {
       loadSuppliers();
     }
   }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId) return;
+
+    const handleSync = () => {
+      loadSuppliersSilently();
+    };
+
+    const syncTimer = setInterval(() => {
+      loadSuppliersSilently();
+    }, 3000);
+
+    window.addEventListener('eim-data-changed', handleSync);
+    window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', handleSync);
+      window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
+  }, [companyId, viewingSupplier?.id]);
 
   const loadSuppliers = async () => {
     setLoading(true);

@@ -86,6 +86,28 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
     warehouse_id: '',
   });
 
+  const loadDataSilently = async () => {
+    try {
+      const [wList, bList, tList, pList, cList] = await Promise.all([
+        api.getWarehouses(companyId),
+        api.getStockBalances(companyId, selectedWarehouseId || undefined),
+        api.getInventoryTransactions(companyId),
+        api.getProducts(companyId, { item_type: 'PRODUCT' }),
+        api.getCategories(companyId),
+      ]);
+      setWarehouses(wList);
+      setBalances(bList);
+      setTransactions(tList);
+      setProducts(pList);
+      setCategories(cList || []);
+      if (wList.length > 0 && selectedWarehouseId && !wList.some((w) => w.id === selectedWarehouseId)) {
+        setSelectedWarehouseId('');
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (companyId) {
       loadData();
@@ -93,16 +115,27 @@ export const InventoryView: React.FC<Props> = ({ companyId }) => {
   }, [companyId, selectedWarehouseId]);
 
   useEffect(() => {
+    if (!companyId) return;
+
     const handleSync = () => {
-      if (companyId) loadData();
+      loadDataSilently();
     };
+
+    const syncTimer = setInterval(() => {
+      loadDataSilently();
+    }, 3000);
+
     window.addEventListener('eim-data-changed', handleSync);
     window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
     return () => {
+      clearInterval(syncTimer);
       window.removeEventListener('eim-data-changed', handleSync);
       window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
-  }, [companyId]);
+  }, [companyId, selectedWarehouseId]);
 
   const loadData = async () => {
     setLoading(true);

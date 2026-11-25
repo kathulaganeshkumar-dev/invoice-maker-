@@ -510,6 +510,8 @@ export class QuotationService {
       terms_conditions: q.terms_conditions,
       letterhead_template_id: q.letterhead_template_id,
       round_off: q.round_off,
+      created_by_device_id: q.created_by_device_id,
+      created_by_device_name: q.created_by_device_name,
       items: q.items.map((item) => ({
         item_id: item.item_id,
         item_type: item.item_type,

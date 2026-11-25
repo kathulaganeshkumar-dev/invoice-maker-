@@ -22,6 +22,8 @@ import {
   LetterheadOCRResult,
   AppSettings,
   AutoBackupSettings,
+  SoftwareActivityItem,
+  ActivitySummary,
 } from '../../shared/types';
 
 export const getBaseUrl = (): string => {
@@ -75,15 +77,37 @@ export function setLocalDeviceIdentity(deviceId: string, deviceName?: string, st
 export async function initDeviceIdentity(): Promise<{ deviceId: string; deviceName: string; staffName?: string }> {
   try {
     const electronAPI = (window as any)?.electronAPI;
+    let config: any = null;
     if (electronAPI?.getLanConfig) {
       const info = await electronAPI.getLanConfig();
-      const dId = info?.config?.deviceId;
-      const dName = info?.config?.deviceName;
-      const sName = info?.config?.staffName;
+      config = info?.config;
+    } else {
+      try {
+        const res = await request<{ config: any }>('/system/lan-config');
+        config = res?.config;
+      } catch {
+        // ignore
+      }
+    }
+
+    if (config) {
+      const dId = config.deviceId;
+      const dName = config.deviceName;
+      const sName = config.staffName;
       if (dId) {
         setLocalDeviceIdentity(dId, dName || 'Office PC', sName || '');
-        return { deviceId: cachedDeviceId, deviceName: cachedDeviceName, staffName: cachedStaffName };
       }
+      // Automatically keep Staff Mode and Server IP synchronized in localStorage for auto-connect
+      if (config.role === 'LAN_CLIENT' && config.hostIp && config.hostIp.trim()) {
+        localStorage.setItem('eim_lan_role', 'LAN_CLIENT');
+        localStorage.setItem('eim_lan_host_ip', config.hostIp.trim());
+        localStorage.setItem('eim_lan_host_port', String(Number(config.port) || 4200));
+        if (sName) {
+          localStorage.setItem('eim_staff_name', sName.trim());
+          localStorage.setItem('eim_workstation_name', sName.trim());
+        }
+      }
+      return { deviceId: cachedDeviceId, deviceName: cachedDeviceName, staffName: cachedStaffName };
     }
   } catch {
     // fallback to browser localStorage
@@ -216,6 +240,13 @@ export const api = {
   getUpdateBundleDownloadUrl: () => `${getBaseUrl()}/system/update-bundle`,
   getNetworkInfo: () =>
     request<{ localIps: string[]; serverHost: string; serverPort: number }>('/network-info'),
+  getLanConfig: () =>
+    request<{ config: any }>('/system/lan-config'),
+  saveLanConfig: (config: any) =>
+    request<{ success: boolean; config: any }>('/system/lan-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
 
   // Workstation Menu Permissions & MD Staff Oversight
   getMyWorkstationPermission: () =>
@@ -425,6 +456,11 @@ export const api = {
     request<Invoice>(`/companies/${companyId}/invoices/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   deleteInvoice: (companyId: string, id: string) =>
     request<{ success: boolean }>(`/companies/${companyId}/invoices/${id}`, { method: 'DELETE' }),
+  updateInvoice: (companyId: string, id: string, data: any) =>
+    request<Invoice>(`/companies/${companyId}/invoices/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   updateInvoiceCreator: (companyId: string, id: string, creatorName: string) =>
     request<Invoice>(`/companies/${companyId}/invoices/${id}/creator`, {
       method: 'PATCH',
@@ -527,6 +563,41 @@ export const api = {
     const qs = params.toString();
     return request<any>(`/companies/${companyId}/reports/gst-sales${qs ? `?${qs}` : ''}`);
   },
+  getTallyGstr1Report: (companyId: string, startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const qs = params.toString();
+    return request<any>(`/companies/${companyId}/reports/tally-gstr1${qs ? `?${qs}` : ''}`);
+  },
+  getTallyGstr3BReport: (companyId: string, startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const qs = params.toString();
+    return request<any>(`/companies/${companyId}/reports/tally-gstr3b${qs ? `?${qs}` : ''}`);
+  },
+  getTallyGstr2Report: (companyId: string, startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const qs = params.toString();
+    return request<any>(`/companies/${companyId}/reports/tally-gstr2${qs ? `?${qs}` : ''}`);
+  },
+  getGstr1ExcelUrl: (companyId: string, startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const qs = params.toString();
+    return `${getBaseUrl()}/companies/${companyId}/reports/gstr1-excel${qs ? `?${qs}` : ''}`;
+  },
+  getGstr1JsonUrl: (companyId: string, startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const qs = params.toString();
+    return `${getBaseUrl()}/companies/${companyId}/reports/gstr1-json${qs ? `?${qs}` : ''}`;
+  },
 
   // Letterheads
   getLetterheads: (companyId: string) => request<LetterheadTemplate[]>(`/companies/${companyId}/letterheads`),
@@ -620,4 +691,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(companyId ? { companyId } : {}),
     }),
+
+  // Software Activity & Audit Trail (Owner Exclusive)
+  getActivityFeed: (
+    companyId: string,
+    params?: {
+      staff?: string;
+      module?: string;
+      start_date?: string;
+      end_date?: string;
+      search?: string;
+      limit?: number;
+    }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.staff) q.append('staff', params.staff);
+    if (params?.module) q.append('module', params.module);
+    if (params?.start_date) q.append('start_date', params.start_date);
+    if (params?.end_date) q.append('end_date', params.end_date);
+    if (params?.search) q.append('search', params.search);
+    if (params?.limit) q.append('limit', String(params.limit));
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return request<SoftwareActivityItem[]>(`/companies/${companyId}/activity${qs}`);
+  },
+  getActivitySummary: (companyId: string) =>
+    request<ActivitySummary>(`/companies/${companyId}/activity/summary`),
 };

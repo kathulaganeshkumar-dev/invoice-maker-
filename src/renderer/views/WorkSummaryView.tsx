@@ -40,10 +40,43 @@ export const WorkSummaryView: React.FC<Props> = ({ companyId }) => {
     return { start: toIso(startMonth), end: toIso(endMonth) };
   };
 
+  const loadDataSilently = async () => {
+    try {
+      const { start, end } = getActivityDateBounds(activityRange);
+      const staffData = await api.getStaffActivityReport(companyId, start, end).catch(() => []);
+      setStaffActivity(Array.isArray(staffData) ? staffData : []);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (companyId) {
       loadData();
     }
+  }, [companyId, activityRange]);
+
+  useEffect(() => {
+    if (!companyId) return;
+
+    const handleSync = () => {
+      loadDataSilently();
+    };
+
+    const syncTimer = setInterval(() => {
+      loadDataSilently();
+    }, 4000);
+
+    window.addEventListener('eim-data-changed', handleSync);
+    window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', handleSync);
+      window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
   }, [companyId, activityRange]);
 
   const loadData = async () => {

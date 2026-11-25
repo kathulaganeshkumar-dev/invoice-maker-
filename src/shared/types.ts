@@ -879,7 +879,49 @@ export interface AuditLog {
   company_id: string;
   entity_type: string;
   entity_id: string;
-  action: 'CREATE' | 'UPDATE' | 'FINALIZE' | 'CANCEL' | 'DELETE' | 'BACKUP' | 'RESTORE';
+  action: 'CREATE' | 'UPDATE' | 'FINALIZE' | 'CANCEL' | 'DELETE' | 'BACKUP' | 'RESTORE' | 'CONVERT' | 'PAYMENT' | 'UPDATE_CREATOR' | string;
   details: string;
   timestamp: string;
+  staff_name?: string | null;
+  device_name?: string | null;
+  device_id?: string | null;
+  module?: string | null;
+  document_number?: string | null;
+  party_name?: string | null;
+  amount?: string | null;
+}
+
+export interface SoftwareActivityItem {
+  id: string;
+  timestamp: string;
+  date: string;
+  time: string;
+  staff_name: string;
+  device_name?: string | null;
+  device_id?: string | null;
+  module: 'INVOICE' | 'QUOTATION' | 'PAYMENT' | 'PURCHASE' | 'CUSTOMER' | 'SUPPLIER' | 'INVENTORY' | 'SYSTEM' | string;
+  action: 'CREATE' | 'UPDATE' | 'FINALIZE' | 'CANCEL' | 'DELETE' | 'CONVERT' | 'PAYMENT' | 'UPDATE_CREATOR' | 'LOGIN' | string;
+  title: string;
+  details: string;
+  entity_id?: string;
+  document_number?: string;
+  party_name?: string;
+  amount?: string | number | null;
+}
+
+export interface ActivitySummary {
+  total_today: number;
+  invoices_today_count: number;
+  invoices_today_total: string;
+  quotations_today_count: number;
+  quotations_today_total: string;
+  payments_today_count: number;
+  payments_today_total: string;
+  active_staff_count: number;
+  staff_breakdown: Array<{
+    staff_name: string;
+    total_actions: number;
+    invoices_count: number;
+    quotations_count: number;
+  }>;
 }

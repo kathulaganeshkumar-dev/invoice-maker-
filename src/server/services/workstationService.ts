@@ -42,15 +42,7 @@ export const MENU_CATALOG: { id: MenuId; label: string; group: 'Insights' | 'Ope
 ];
 
 export const DEFAULT_STAFF_MENUS: MenuId[] = [
-  'invoices',
-  'invoices_other',
-  'quotations',
-  'customers',
-  'suppliers',
-  'products',
-  'purchases',
-  'inventory',
-  'payments',
+  ...ALL_MENU_IDS,
 ];
 
 export const PRESET_PERMISSIONS = {

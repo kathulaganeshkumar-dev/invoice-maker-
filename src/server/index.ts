@@ -4,16 +4,18 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { initDatabase, getDatabase, closeDatabase } from './database/connection';
+import { initDatabase, getDatabase, closeDatabase, getDefaultDataDir } from './database/connection';
 import { seedInitialData } from './database/seed';
 import { createApiRouter } from './routes';
 import { BackupRestoreService } from './services/backupRestoreService';
 import { logger } from './services/logger';
+import { serverEvents, NOTIFY_DATA_CHANGE } from './events';
 
 let activeHttpServer: any = null;
 let activeWatchInterval: NodeJS.Timeout | null = null;
 let activeAutoBackupInterval: NodeJS.Timeout | null = null;
 const sseClients = new Set<express.Response>();
+const realtimeClients = new Set<express.Response>();
 
 export async function stopServer(): Promise<void> {
   logger.info('[Server] Stopping embedded Express server...');
@@ -33,6 +35,14 @@ export async function stopServer(): Promise<void> {
     }
   }
   sseClients.clear();
+  for (const client of realtimeClients) {
+    try {
+      client.end();
+    } catch {
+      // ignore
+    }
+  }
+  realtimeClients.clear();
 
   if (activeHttpServer) {
     await new Promise<void>((resolve) => {
@@ -199,18 +209,18 @@ export async function startServer(port = 4200): Promise<express.Express> {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Local LAN network info for Direct Desktop-to-Desktop Host setup display
+  // Local LAN & Tailscale network info for Direct Desktop-to-Desktop & Remote Worker setup
   app.get('/api/network-info', (_req, res) => {
     const lanIps: string[] = [];
-    const vpnIps: string[] = [];
+    const tailscaleIps: string[] = [];
     try {
       for (const [ifaceName, entries] of Object.entries(os.networkInterfaces())) {
         if (!entries) continue;
-        const isVpnAdapter = /tailscale|vpn|wireguard|zerotier|wintun/i.test(ifaceName);
+        const isTailscaleOrVpn = /tailscale|vpn|wireguard|zerotier|wintun/i.test(ifaceName);
         for (const info of entries) {
           if (info.family === 'IPv4' && !info.internal && !info.address.startsWith('169.254.')) {
-            if (isVpnAdapter || info.address.startsWith('100.')) {
-              vpnIps.push(info.address);
+            if (isTailscaleOrVpn || info.address.startsWith('100.')) {
+              tailscaleIps.push(info.address);
             } else {
               lanIps.push(info.address);
             }
@@ -220,10 +230,54 @@ export async function startServer(port = 4200): Promise<express.Express> {
     } catch {
       // ignore
     }
+
+    const uniqueTailscale = Array.from(new Set(tailscaleIps));
+    const uniqueLan = Array.from(new Set(lanIps));
+    const primaryTailscaleIp = uniqueTailscale.find((ip) => ip.startsWith('100.')) || uniqueTailscale[0] || null;
+
     res.json({
-      localIps: Array.from(new Set([...lanIps, ...vpnIps])),
-      serverHost: process.env.SERVER_HOST || '127.0.0.1',
+      localIps: primaryTailscaleIp ? [primaryTailscaleIp, ...uniqueLan] : uniqueLan,
+      tailscaleIp: primaryTailscaleIp,
+      tailscaleIps: uniqueTailscale,
+      lanIps: uniqueLan,
+      serverHost: process.env.SERVER_HOST || '0.0.0.0',
       serverPort: Number(process.env.ACTUAL_SERVER_PORT || port),
+    });
+  });
+
+  // Real-time server-sent events (SSE) stream for instant multi-user synchronization across LAN & Tailscale
+  serverEvents.on(NOTIFY_DATA_CHANGE, (data) => {
+    const payload = JSON.stringify({ type: 'data-changed', ...data });
+    for (const client of realtimeClients) {
+      try {
+        client.write(`data: ${payload}\n\n`);
+      } catch {
+        realtimeClients.delete(client);
+      }
+    }
+  });
+
+  app.get('/api/realtime-sync', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: Date.now() })}\n\n`);
+
+    realtimeClients.add(res);
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(heartbeat);
+        realtimeClients.delete(res);
+      }
+    }, 20000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      realtimeClients.delete(res);
     });
   });
 
@@ -320,6 +374,26 @@ export async function startServer(port = 4200): Promise<express.Express> {
     if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
       return next();
     }
+    // Auto-forward browser users if this PC is configured as a Staff PC (LAN_CLIENT)
+    if (req.query.local !== '1' && (req.hostname === '127.0.0.1' || req.hostname === 'localhost')) {
+      try {
+        const lanFile = path.join(getDefaultDataDir(), 'lan-config.json');
+        if (fs.existsSync(lanFile)) {
+          const cfg = JSON.parse(fs.readFileSync(lanFile, 'utf8'));
+          if (cfg?.role === 'LAN_CLIENT' && cfg?.hostIp && cfg.hostIp.trim()) {
+            const hostIp = cfg.hostIp.trim();
+            const port = Number(cfg.port) || 4200;
+            if (hostIp !== '127.0.0.1' && hostIp !== 'localhost') {
+              const targetUrl = `http://${hostIp}:${port}${req.originalUrl || '/'}`;
+              logger.info(`[Server] Auto-forwarding staff browser to Main Office Server: ${targetUrl}`);
+              return res.redirect(targetUrl);
+            }
+          }
+        }
+      } catch {
+        // ignore and serve index.html
+      }
+    }
     const indexFile = path.join(distPath, 'index.html');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -354,6 +428,12 @@ export async function startServer(port = 4200): Promise<express.Express> {
 
 // Auto-start if executed directly via CLI
 if (require.main === module) {
+  process.on('uncaughtException', (err) => {
+    console.error('[Fatal UncaughtException]:', err);
+  });
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[Fatal UnhandledRejection] at:', promise, 'reason:', reason);
+  });
   const port = Number(process.env.PORT) || 4200;
   startServer(port).catch((err) => {
     console.error('Fatal Server Error:', err);

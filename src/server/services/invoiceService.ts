@@ -321,6 +321,371 @@ export class InvoiceService {
   }
 
   /**
+   * Updates an existing invoice (draft or finalized).
+   * Automatically recalculates totals, line items, customer balance, and inventory.
+   */
+  async updateInvoice(companyId: string, invoiceId: string, input: any): Promise<Invoice> {
+    return this.db.transaction(async (trx) => {
+      const existing = await trx('invoices').where({ company_id: companyId, id: invoiceId }).first();
+      if (!existing) throw new Error('Invoice not found');
+      if (existing.status === 'CANCELLED') {
+        throw new Error('Cannot edit a cancelled invoice.');
+      }
+
+      const now = new Date().toISOString();
+      const wasFinalized = existing.status === 'FINALIZED';
+
+      // 1. Revert previous customer balance and stock movements if it was finalized
+      if (wasFinalized) {
+        const grandTotalDec = new Decimal(existing.grand_total || 0);
+        if (existing.customer_id) {
+          const oldCust = await trx('customers').where({ id: existing.customer_id, company_id: companyId }).first();
+          if (oldCust) {
+            const prevBal = new Decimal(oldCust.current_balance || 0);
+            const revertedBal =
+              existing.document_type === 'CREDIT_NOTE' ? prevBal.add(grandTotalDec) : prevBal.sub(grandTotalDec);
+            await trx('customers').where({ id: existing.customer_id, company_id: companyId }).update({
+              current_balance: revertedBal.toFixed(2),
+              updated_at: now,
+            });
+          }
+        }
+
+        const oldMovements = await trx('inventory_transactions').where({
+          reference_document_id: invoiceId,
+          company_id: companyId,
+        });
+
+        for (const mov of oldMovements) {
+          const qty = new Decimal(mov.quantity).abs();
+          const prodRec = await trx('products').where({ id: mov.product_id, company_id: companyId }).first();
+          if (prodRec) {
+            const restoredStock = new Decimal(prodRec.current_stock || 0).add(qty);
+            await trx('products').where({ id: mov.product_id, company_id: companyId }).update({
+              current_stock: restoredStock.toFixed(2),
+              updated_at: now,
+            });
+          }
+          const existingBal = await trx('stock_balances')
+            .where({ company_id: companyId, warehouse_id: mov.warehouse_id, product_id: mov.product_id })
+            .first();
+          if (existingBal) {
+            const newWhQty = new Decimal(existingBal.quantity_on_hand || 0).add(qty);
+            const avgCost = new Decimal(existingBal.average_unit_cost || mov.unit_cost || 0);
+            await trx('stock_balances').where({ id: existingBal.id }).update({
+              quantity_on_hand: newWhQty.toFixed(2),
+              total_stock_value: newWhQty.mul(avgCost).toFixed(2),
+              last_updated_at: now,
+            });
+          }
+        }
+        await trx('inventory_transactions').where({ reference_document_id: invoiceId, company_id: companyId }).del();
+      }
+
+      // 2. Resolve branch and Place of Supply
+      let branch = null;
+      if (input.branch_id || existing.branch_id) {
+        branch = await trx('branches').where({ id: input.branch_id || existing.branch_id, company_id: companyId }).first();
+      }
+      const supplierStateCode = branch?.state_code || '23';
+      const posCode = input.place_of_supply_code || existing.place_of_supply_code || supplierStateCode;
+      const isInterState = supplierStateCode !== posCode;
+
+      // 3. Calculate Line Items
+      const calculatedItems: InvoiceItem[] = [];
+      const lineInputs = input.items || [];
+
+      for (let i = 0; i < lineInputs.length; i++) {
+        const item = lineInputs[i];
+        const rawQty = new Decimal(item.quantity ?? 0);
+        const rawRate = new Decimal(item.rate ?? item.unit_price ?? 0);
+        const rawGst = new Decimal(item.gst_rate !== undefined ? item.gst_rate : 18);
+        if (!rawQty.isFinite() || rawQty.lte(0)) {
+          throw new Error(`Invalid quantity for item "${item.item_name || i + 1}": must be greater than zero.`);
+        }
+        if (!rawRate.isFinite() || rawRate.lt(0)) {
+          throw new Error(`Invalid rate for item "${item.item_name || i + 1}": cannot be negative.`);
+        }
+        if (!rawGst.isFinite() || rawGst.lt(0) || rawGst.gt(100)) {
+          throw new Error(`Invalid GST rate for item "${item.item_name || i + 1}": must be between 0% and 100%.`);
+        }
+
+        const lineCalc = calculateLineItem({
+          quantity: rawQty.toString(),
+          rate: rawRate.toString(),
+          discountPercentage: item.discount_percentage,
+          discountAmount: item.discount_amount,
+          gstRate: rawGst.toString(),
+          isTaxInclusive: Boolean(item.is_tax_inclusive),
+          isInterState,
+        });
+
+        const itemId = item.item_id || item.product_id || undefined;
+        let itemName = item.item_name || item.name || item.description || 'Line Item';
+        let hsnCode = item.hsn_or_sac || item.hsn || '';
+        let itemType = item.item_type || 'PRODUCT';
+        let itemUnit = item.unit || 'NOS';
+
+        if (itemId) {
+          const prod = await trx('products').where({ id: itemId, company_id: companyId }).first();
+          if (prod) {
+            itemName = item.item_name || item.name || prod.name || itemName;
+            hsnCode = hsnCode || prod.hsn_or_sac || '';
+            itemType = prod.item_type || itemType;
+            if (!item.unit && prod.unit) {
+              itemUnit = prod.unit;
+            }
+          }
+        }
+
+        calculatedItems.push({
+          id: item.id || uuidv4(),
+          invoice_id: invoiceId,
+          item_id: itemId,
+          item_type: itemType,
+          item_name: itemName,
+          description: item.description || undefined,
+          hsn_or_sac: hsnCode,
+          quantity: lineCalc.quantity,
+          unit: itemUnit,
+          rate: lineCalc.rate,
+          discount_percentage: item.discount_percentage ? new Decimal(item.discount_percentage).toFixed(2) : '0.00',
+          discount_amount: lineCalc.discountAmount,
+          is_tax_inclusive: Boolean(item.is_tax_inclusive),
+          taxable_value: lineCalc.taxableValue,
+          gst_rate: lineCalc.gstRate,
+          cgst_rate: lineCalc.cgstRate,
+          cgst_amount: lineCalc.cgstAmount,
+          sgst_rate: lineCalc.sgstRate,
+          sgst_amount: lineCalc.sgstAmount,
+          igst_rate: lineCalc.igstRate,
+          igst_amount: lineCalc.igstAmount,
+          total_tax: lineCalc.totalTax,
+          line_total: lineCalc.lineTotal,
+          sort_order: i,
+        });
+      }
+
+      // 4. Calculate Document Totals
+      const docTotals = calculateDocumentTotals({
+        items: calculatedItems as any,
+        overallDiscountPercentage: input.overallDiscountPercentage,
+        overallDiscountAmount: input.overallDiscountAmount,
+        additionalCharges: input.additional_charges,
+        customRoundOff: input.round_off !== undefined ? input.round_off : existing.round_off,
+      });
+
+      const amountInWords = convertAmountToWords(docTotals.grandTotal);
+
+      // 5. Customer info
+      let customerId = input.customer_id !== undefined ? input.customer_id : existing.customer_id;
+      let customerName = input.customer_name || existing.customer_name;
+      let customerGstin = input.customer_gstin !== undefined ? input.customer_gstin : existing.customer_gstin;
+      let customerPan = input.customer_pan !== undefined ? input.customer_pan : existing.customer_pan;
+      let billingAddress = input.billing_address !== undefined ? input.billing_address : existing.billing_address;
+      let shippingAddress = input.shipping_address !== undefined ? input.shipping_address : existing.shipping_address;
+      let posState = input.place_of_supply_state || existing.place_of_supply_state;
+      let posCodeToUse = input.place_of_supply_code || existing.place_of_supply_code;
+
+      if (customerId) {
+        const custRec = await trx('customers').where({ id: customerId, company_id: companyId }).first();
+        if (custRec) {
+          customerName = input.customer_name || custRec.name;
+          customerGstin = input.customer_gstin !== undefined ? input.customer_gstin : custRec.gstin;
+          customerPan = input.customer_pan !== undefined ? input.customer_pan : custRec.pan;
+          billingAddress = input.billing_address !== undefined ? input.billing_address : (custRec.billing_address || custRec.address || '');
+          shippingAddress = input.shipping_address !== undefined ? input.shipping_address : (custRec.shipping_address || billingAddress || '');
+          posState = input.place_of_supply_state || custRec.state;
+          if (!input.place_of_supply_code && custRec.state_code) {
+            posCodeToUse = custRec.state_code;
+          }
+        }
+      }
+
+      // 6. Recalculate Balance
+      const paidDec = new Decimal(existing.paid_amount || 0);
+      const newGrandTotalDec = new Decimal(docTotals.grandTotal);
+      const newBalanceDec = Decimal.max(0, newGrandTotalDec.sub(paidDec));
+
+      // 7. Update Invoice Record
+      const updateData: any = {
+        customer_id: customerId,
+        customer_name: customerName,
+        customer_gstin: customerGstin || null,
+        customer_pan: customerPan || null,
+        billing_address: billingAddress || '',
+        shipping_address: shippingAddress || billingAddress || '',
+        place_of_supply_state: posState || 'Madhya Pradesh',
+        place_of_supply_code: posCodeToUse,
+        is_inter_state: isInterState,
+        invoice_date: input.invoice_date || existing.invoice_date,
+        due_date: input.due_date || input.invoice_date || existing.due_date,
+        purchase_order_number: input.purchase_order_number || input.po_number || existing.purchase_order_number,
+        purchase_order_date: input.purchase_order_date || input.po_date || existing.purchase_order_date,
+        po_date: input.po_date || input.purchase_order_date || existing.po_date,
+        delivery_challan_number: input.delivery_challan_number || input.dc_number || existing.delivery_challan_number,
+        delivery_challan_date: input.delivery_challan_date || input.dc_date || existing.delivery_challan_date,
+        dc_number: input.dc_number || input.delivery_challan_number || existing.dc_number,
+        dc_date: input.dc_date || input.delivery_challan_date || existing.dc_date,
+        agent_name: input.agent_name !== undefined ? input.agent_name : existing.agent_name,
+        letterhead_template_id: input.letterhead_template_id !== undefined ? input.letterhead_template_id : existing.letterhead_template_id,
+        subtotal: docTotals.subtotal,
+        total_taxable_value: docTotals.totalTaxableValue,
+        total_cgst: docTotals.totalCgst,
+        total_sgst: docTotals.totalSgst,
+        total_igst: docTotals.totalIgst,
+        total_tax: docTotals.totalTax,
+        round_off: docTotals.roundOff,
+        grand_total: docTotals.grandTotal,
+        balance_amount: newBalanceDec.toFixed(2),
+        amount_in_words: amountInWords,
+        notes: input.notes !== undefined ? input.notes : existing.notes,
+        terms_conditions: input.terms_conditions || input.terms_and_conditions || existing.terms_conditions,
+        top_margin_mm: input.top_margin_mm !== undefined ? Number(input.top_margin_mm) : existing.top_margin_mm,
+        bottom_margin_mm: input.bottom_margin_mm !== undefined ? Number(input.bottom_margin_mm) : existing.bottom_margin_mm,
+        created_by_device_name: input.created_by_device_name || existing.created_by_device_name,
+        updated_at: now,
+      };
+
+      await trx('invoices').where({ id: invoiceId }).update(updateData);
+
+      // 8. Replace invoice items
+      await trx('invoice_items').where({ invoice_id: invoiceId }).del();
+      for (const item of calculatedItems) {
+        await trx('invoice_items').insert(item);
+      }
+
+      // 9. Re-apply customer balance and stock movements if finalized
+      if (wasFinalized) {
+        if (customerId) {
+          const targetCust = await trx('customers').where({ id: customerId, company_id: companyId }).first();
+          if (targetCust) {
+            const currentBal = new Decimal(targetCust.current_balance || 0);
+            const nextBal =
+              existing.document_type === 'CREDIT_NOTE' ? currentBal.sub(newGrandTotalDec) : currentBal.add(newGrandTotalDec);
+            await trx('customers').where({ id: customerId, company_id: companyId }).update({
+              current_balance: nextBal.toFixed(2),
+              updated_at: now,
+            });
+          }
+        }
+
+        const stockMovementTypes: DocumentType[] = [
+          'TAX_INVOICE',
+          'STANDARD_INVOICE',
+          'COMMERCIAL_INVOICE',
+          'EXPORT_INVOICE',
+          'DELIVERY_CHALLAN',
+        ];
+
+        if (stockMovementTypes.includes(existing.document_type)) {
+          const trackedProductItems = calculatedItems.filter((item) => item.item_type === 'PRODUCT' && item.item_id);
+          if (trackedProductItems.length > 0) {
+            let warehouse =
+              (await trx('warehouses').where({ company_id: companyId, branch_id: existing.branch_id, is_active: true }).first()) ||
+              (await trx('warehouses').where({ company_id: companyId, is_default: true, is_active: true }).first()) ||
+              (await trx('warehouses').where({ company_id: companyId, is_active: true }).first());
+
+            if (!warehouse) {
+              const fallbackWhId = uuidv4();
+              await trx('warehouses').insert({
+                id: fallbackWhId,
+                company_id: companyId,
+                branch_id: existing.branch_id,
+                name: 'Main Warehouse',
+                code: 'MW01',
+                address: '',
+                is_default: true,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+              });
+              warehouse = await trx('warehouses').where({ id: fallbackWhId }).first();
+            }
+
+            const warehouseId = warehouse.id;
+            const compSettings = await trx('company_settings').where({ company_id: companyId }).first();
+            const allowNegativeStock = Boolean(compSettings?.allow_negative_stock);
+
+            for (const item of trackedProductItems) {
+              const qtyOut = new Decimal(item.quantity);
+              const prod = await trx('products').where({ id: item.item_id, company_id: companyId }).first();
+              if (prod) {
+                const currentProdStock = new Decimal(prod.current_stock || 0);
+                const newProdStock = currentProdStock.sub(qtyOut);
+                if (!allowNegativeStock && newProdStock.lt(0)) {
+                  throw new Error(
+                    `Insufficient stock for "${prod.name}" (available: ${currentProdStock.toFixed(2)}, requested: ${qtyOut.toFixed(2)}). Enable "Allow Negative Stock" in Settings to override.`
+                  );
+                }
+                await trx('products').where({ id: item.item_id, company_id: companyId }).update({
+                  current_stock: newProdStock.toFixed(2),
+                  updated_at: now,
+                });
+              }
+
+              await trx('inventory_transactions').insert({
+                id: uuidv4(),
+                company_id: companyId,
+                branch_id: existing.branch_id,
+                warehouse_id: warehouseId,
+                product_id: item.item_id,
+                movement_type: 'SALES_DISPATCH',
+                quantity: qtyOut.negated().toFixed(2),
+                unit_cost: item.rate,
+                total_cost: qtyOut.mul(new Decimal(item.rate)).toFixed(2),
+                reference_document_type: existing.document_type,
+                reference_document_id: invoiceId,
+                reference_document_number: existing.invoice_number,
+                notes: `Sales dispatch updated for invoice ${existing.invoice_number}`,
+                transaction_date: input.invoice_date || existing.invoice_date,
+                created_at: now,
+              });
+
+              const existingBal = await trx('stock_balances')
+                .where({ company_id: companyId, warehouse_id: warehouseId, product_id: item.item_id })
+                .first();
+              if (existingBal) {
+                const newWhQty = new Decimal(existingBal.quantity_on_hand || 0).sub(qtyOut);
+                const avgCost = new Decimal(existingBal.average_unit_cost || item.rate || 0);
+                await trx('stock_balances').where({ id: existingBal.id }).update({
+                  quantity_on_hand: newWhQty.toFixed(2),
+                  total_stock_value: newWhQty.mul(avgCost).toFixed(2),
+                  last_updated_at: now,
+                });
+              } else {
+                await trx('stock_balances').insert({
+                  id: uuidv4(),
+                  company_id: companyId,
+                  branch_id: existing.branch_id,
+                  warehouse_id: warehouseId,
+                  product_id: item.item_id,
+                  quantity_on_hand: qtyOut.negated().toFixed(2),
+                  average_unit_cost: item.rate,
+                  total_stock_value: qtyOut.negated().mul(new Decimal(item.rate)).toFixed(2),
+                  last_updated_at: now,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      await trx('audit_logs').insert({
+        id: uuidv4(),
+        company_id: companyId,
+        entity_type: 'INVOICE',
+        entity_id: invoiceId,
+        action: 'UPDATE',
+        details: `Updated invoice ${existing.invoice_number}. Grand total: ₹ ${docTotals.grandTotal}`,
+        timestamp: now,
+      });
+
+      return (await this.getInvoiceById(companyId, invoiceId, trx))!;
+    });
+  }
+
+  /**
    * Internal transactional finalization helper (reused to prevent nested SQLite transactions)
    */
   private async finalizeInvoiceInTrx(trx: Knex.Transaction, companyId: string, invoiceId: string): Promise<Invoice> {

@@ -18,6 +18,7 @@ import { BackupRestoreService } from './services/backupRestoreService';
 import { PdfEngine } from './services/pdfEngine';
 import { NumberingService } from './services/numberingService';
 import { applySoftwareIconToDesktop } from './services/softwareIconService';
+import { broadcastDataChange } from './events';
 import {
   WorkstationService,
   MENU_CATALOG,
@@ -37,6 +38,8 @@ import {
 } from './services/pathSecurity';
 
 import { DiagnosticsService } from './services/diagnosticsService';
+import { ActivityService } from './services/activityService';
+import { DocumentArchiveService } from './services/documentArchiveService';
 import { getActiveDbConfig, switchDatabase, getDefaultDataDir, getDefaultSqlitePath } from './database/connection';
 import { assertDiskSpace } from './services/diskSpaceGuard';
 import { runMigrations } from './database/migrations';
@@ -57,6 +60,14 @@ export function createApiRouter(db: Knex): Router {
   const backupRestoreService = new BackupRestoreService(db);
   const workstationService = new WorkstationService(db);
   const diagnosticsService = new DiagnosticsService(db);
+  const activityService = new ActivityService(db);
+  const documentArchiveService = new DocumentArchiveService(
+    db,
+    companyService,
+    invoiceService,
+    quotationService,
+    letterheadService
+  );
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 25 * 1024 * 1024 },
@@ -141,6 +152,20 @@ export function createApiRouter(db: Knex): Router {
       if (ws?.is_admin) return true;
     }
     res.status(403).json({ error: 'Admin access required. Enter MD / Admin PIN to view workstations.' });
+    return false;
+  };
+
+  const isHostOrAdmin = async (req: Request): Promise<boolean> => {
+    if (isLoopbackRequest(req)) return true;
+    const suppliedPin = String(req.headers['x-eim-admin-pin'] || req.body?.admin_pin || '').trim();
+    if (suppliedPin && (await workstationService.checkAdminPin(suppliedPin))) {
+      return true;
+    }
+    const meta = getRequestDeviceMeta(req);
+    if (meta.deviceId) {
+      const ws = await workstationService.getWorkstationPermission(meta.deviceId);
+      if (ws?.is_admin) return true;
+    }
     return false;
   };
 
@@ -639,6 +664,63 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
+  // ===================== DESKTOP & WORKSTATION LAN CONFIG =====================
+  router.get('/system/lan-config', async (_req: Request, res: Response) => {
+    try {
+      const dataDir = getDefaultDataDir();
+      const lanFile = path.join(dataDir, 'lan-config.json');
+      if (fs.existsSync(lanFile)) {
+        const raw = fs.readFileSync(lanFile, 'utf8');
+        return res.json({ config: JSON.parse(raw) });
+      }
+      res.json({
+        config: {
+          role: 'STANDALONE',
+          hostIp: '',
+          port: 4200,
+          deviceId: 'local-pc',
+          deviceName: 'Local Workstation',
+          staffName: '',
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/system/lan-config', adminRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const dataDir = getDefaultDataDir();
+      const lanFile = path.join(dataDir, 'lan-config.json');
+      let current: any = {};
+      if (fs.existsSync(lanFile)) {
+        try {
+          current = JSON.parse(fs.readFileSync(lanFile, 'utf8'));
+        } catch {
+          current = {};
+        }
+      }
+      const updated = {
+        ...current,
+        role: req.body?.role || current.role || 'STANDALONE',
+        hostIp: req.body?.hostIp !== undefined ? String(req.body.hostIp).trim() : current.hostIp || '',
+        port: Number(req.body?.port) || current.port || 4200,
+        staffName: req.body?.staffName !== undefined ? String(req.body.staffName).trim() : current.staffName || '',
+        deviceName: req.body?.deviceName !== undefined ? String(req.body.deviceName).trim() : current.deviceName || '',
+        deviceId: req.body?.deviceId || current.deviceId || `ws-${Date.now()}`,
+        minimizeToTray: req.body?.minimizeToTray !== undefined ? Boolean(req.body.minimizeToTray) : current.minimizeToTray ?? true,
+        autoStartOnBoot: req.body?.autoStartOnBoot !== undefined ? Boolean(req.body.autoStartOnBoot) : current.autoStartOnBoot ?? false,
+      };
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(lanFile, JSON.stringify(updated, null, 2), 'utf8');
+      res.json({ success: true, config: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ===================== DATABASE MODE & FIRST-RUN LAN SETUP =====================
   router.get('/database/mode', async (_req: Request, res: Response) => {
     try {
@@ -949,6 +1031,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const customer = await masterDataService.createCustomer(companyId, req.body);
+      broadcastDataChange('customers', 'create', customer);
       res.status(201).json(customer);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -959,6 +1042,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, customerId } = getParams(req);
       const customer = await masterDataService.updateCustomer(companyId, customerId, req.body);
+      broadcastDataChange('customers', 'update', customer);
       res.json(customer);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -969,6 +1053,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, customerId } = getParams(req);
       await masterDataService.archiveCustomer(companyId, customerId);
+      broadcastDataChange('customers', 'delete', { id: customerId });
       res.json({ success: true });
     } catch (err: any) {
       sendInternalError(res, err);
@@ -991,6 +1076,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const supplier = await masterDataService.createSupplier(companyId, req.body);
+      broadcastDataChange('suppliers', 'create', supplier);
       res.status(201).json(supplier);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1001,6 +1087,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, supplierId } = getParams(req);
       const supplier = await masterDataService.updateSupplier(companyId, supplierId, req.body);
+      broadcastDataChange('suppliers', 'update', supplier);
       res.json(supplier);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1011,6 +1098,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, supplierId } = getParams(req);
       await masterDataService.archiveSupplier(companyId, supplierId);
+      broadcastDataChange('suppliers', 'delete', { id: supplierId });
       res.json({ success: true });
     } catch (err: any) {
       sendInternalError(res, err);
@@ -1036,6 +1124,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const product = await masterDataService.createProduct(companyId, req.body);
+      broadcastDataChange('products', 'create', product);
       res.status(201).json(product);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1046,6 +1135,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, productId } = getParams(req);
       const product = await masterDataService.updateProduct(companyId, productId, req.body);
+      broadcastDataChange('products', 'update', product);
       res.json(product);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1056,6 +1146,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, productId } = getParams(req);
       await masterDataService.archiveProduct(companyId, productId);
+      broadcastDataChange('products', 'delete', { id: productId });
       res.json({ success: true });
     } catch (err: any) {
       sendInternalError(res, err);
@@ -1077,6 +1168,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const cat = await masterDataService.createCategory(companyId, req.body.name, req.body.description);
+      broadcastDataChange('products', 'category', cat);
       res.status(201).json(cat);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1087,6 +1179,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, categoryId } = getParams(req);
       await masterDataService.deleteCategory(companyId, categoryId);
+      broadcastDataChange('products', 'category', { id: categoryId });
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1339,17 +1432,37 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const meta = getRequestDeviceMeta(req);
-      const creatorName =
-        String(req.body?.created_by_device_name || req.body?.created_by_staff_name || '').trim() ||
-        meta.staffName ||
-        meta.deviceName ||
-        undefined;
+      const isHost = await isHostOrAdmin(req);
+      // Only host/owner can set an arbitrary creator; staff are automatically stamped with their profile name
+      const creatorName = isHost
+        ? String(req.body?.created_by_device_name || req.body?.created_by_staff_name || '').trim() ||
+          meta.staffName ||
+          meta.deviceName ||
+          undefined
+        : meta.staffName || meta.deviceName || 'Staff Workstation';
       const invoice = await invoiceService.createInvoice(companyId, {
         ...req.body,
         created_by_device_id: req.body?.created_by_device_id || meta.deviceId || undefined,
         created_by_device_name: creatorName,
       });
-      res.status(201).json(invoice);
+      const archiveRes = await documentArchiveService.archiveInvoice(companyId, invoice.id);
+      const savedHostPath = archiveRes.savedPath;
+      broadcastDataChange('invoices', 'create', invoice);
+      activityService.recordActivity({
+        companyId,
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        action: 'CREATE',
+        details: `Created invoice ${invoice.invoice_number} for customer "${invoice.customer_name}" (Total: ₹ ${Number(invoice.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })})` + (savedHostPath ? ` • Archived on Host: ${savedHostPath}` : ''),
+        staffName: creatorName || meta.staffName || meta.deviceName,
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'INVOICE',
+        documentNumber: invoice.invoice_number,
+        partyName: invoice.customer_name,
+        amount: invoice.grand_total,
+      }).catch(() => {});
+      res.status(201).json({ ...invoice, saved_on_host_path: savedHostPath });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1357,6 +1470,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.patch('/companies/:companyId/invoices/:invoiceId/creator', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can change who created this invoice.' });
+      }
       const { companyId, invoiceId } = getParams(req);
       const creatorName = String(req.body?.creator_name || req.body?.created_by_device_name || '').trim();
       if (!creatorName) {
@@ -1366,9 +1482,52 @@ export function createApiRouter(db: Knex): Router {
         .where({ company_id: companyId, id: invoiceId })
         .update({ created_by_device_name: creatorName, updated_at: new Date().toISOString() });
       const updated = await invoiceService.getInvoiceById(companyId, invoiceId);
+      broadcastDataChange('invoices', 'update', updated);
+      activityService.recordActivity({
+        companyId,
+        entityType: 'INVOICE',
+        entityId: invoiceId,
+        action: 'UPDATE_CREATOR',
+        details: `Reassigned invoice ${updated?.invoice_number || ''} creator to "${creatorName}"`,
+        staffName: meta.staffName || meta.deviceName || 'Admin / Owner',
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'INVOICE',
+        documentNumber: updated?.invoice_number,
+        partyName: updated?.customer_name,
+      }).catch(() => {});
       res.json(updated);
     } catch (err: any) {
       sendInternalError(res, err, 'Failed to update invoice creator.');
+    }
+  });
+
+  router.put('/companies/:companyId/invoices/:invoiceId', async (req: Request, res: Response) => {
+    try {
+      const { companyId, invoiceId } = getParams(req);
+      const meta = extractWorkstationMeta(req);
+      const invoice = await invoiceService.updateInvoice(companyId, invoiceId, req.body);
+      const archiveResult = await documentArchiveService.archiveInvoice(companyId, invoice.id).catch(() => null);
+      broadcastDataChange('invoices', 'update', invoice);
+
+      activityService.recordActivity({
+        companyId,
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        action: 'UPDATE',
+        details: `Updated invoice ${invoice.invoice_number} (${invoice.customer_name}) - Grand Total: ₹ ${invoice.grand_total}`,
+        staffName: meta.staffName || meta.deviceName || invoice.created_by_device_name || 'Admin / Owner',
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'INVOICE',
+        amount: invoice.grand_total,
+        documentNumber: invoice.invoice_number,
+        partyName: invoice.customer_name,
+      }).catch(() => {});
+
+      res.json({ ...invoice, saved_on_host_path: archiveResult?.pdfPath || null });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
   });
 
@@ -1376,6 +1535,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, invoiceId } = getParams(req);
       const invoice = await invoiceService.finalizeInvoice(companyId, invoiceId);
+      documentArchiveService.archiveInvoice(companyId, invoice.id).catch(() => {});
+      broadcastDataChange('invoices', 'finalize', invoice);
       res.json(invoice);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1393,6 +1554,7 @@ export function createApiRouter(db: Knex): Router {
         notes: req.body?.notes,
         closeRemainingBalance: req.body?.close_remaining_balance,
       });
+      broadcastDataChange('invoices', 'payment', invoice);
       res.json(invoice);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1406,6 +1568,7 @@ export function createApiRouter(db: Knex): Router {
         reason: req.body?.reason,
         notes: req.body?.notes,
       });
+      broadcastDataChange('invoices', 'update', invoice);
       res.json(invoice);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1416,6 +1579,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, invoiceId } = getParams(req);
       const invoice = await invoiceService.cancelInvoice(companyId, invoiceId, req.body.reason);
+      broadcastDataChange('invoices', 'cancel', invoice);
       res.json(invoice);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1426,6 +1590,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, invoiceId } = getParams(req);
       await invoiceService.deleteInvoice(companyId, invoiceId);
+      broadcastDataChange('invoices', 'delete', { id: invoiceId });
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1545,17 +1710,37 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const meta = getRequestDeviceMeta(req);
-      const creatorName =
-        String(req.body?.created_by_device_name || req.body?.created_by_staff_name || '').trim() ||
-        meta.staffName ||
-        meta.deviceName ||
-        undefined;
+      const isHost = await isHostOrAdmin(req);
+      // Only host/owner can set an arbitrary creator; staff are automatically stamped with their profile name
+      const creatorName = isHost
+        ? String(req.body?.created_by_device_name || req.body?.created_by_staff_name || '').trim() ||
+          meta.staffName ||
+          meta.deviceName ||
+          undefined
+        : meta.staffName || meta.deviceName || 'Staff Workstation';
       const q = await quotationService.createQuotation(companyId, {
         ...req.body,
         created_by_device_id: req.body?.created_by_device_id || meta.deviceId || undefined,
         created_by_device_name: creatorName,
       });
-      res.status(201).json(q);
+      const archiveRes = await documentArchiveService.archiveQuotation(companyId, q.id);
+      const savedHostPath = archiveRes.savedPath;
+      broadcastDataChange('quotations', 'create', q);
+      activityService.recordActivity({
+        companyId,
+        entityType: 'QUOTATION',
+        entityId: q.id,
+        action: 'CREATE',
+        details: `Created quotation ${q.quotation_number} for customer "${q.customer_name}" (Total: ₹ ${Number(q.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })})` + (savedHostPath ? ` • Archived on Host: ${savedHostPath}` : ''),
+        staffName: creatorName || meta.staffName || meta.deviceName,
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'QUOTATION',
+        documentNumber: q.quotation_number,
+        partyName: q.customer_name,
+        amount: q.grand_total,
+      }).catch(() => {});
+      res.status(201).json({ ...q, saved_on_host_path: savedHostPath });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1563,6 +1748,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.patch('/companies/:companyId/quotations/:quotationId/creator', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can change who created this quotation.' });
+      }
       const { companyId, quotationId } = getParams(req);
       const creatorName = String(req.body?.creator_name || req.body?.created_by_device_name || '').trim();
       if (!creatorName) {
@@ -1572,6 +1760,20 @@ export function createApiRouter(db: Knex): Router {
         .where({ company_id: companyId, id: quotationId })
         .update({ created_by_device_name: creatorName, updated_at: new Date().toISOString() });
       const updated = await quotationService.getQuotationById(companyId, quotationId);
+      broadcastDataChange('quotations', 'update', updated);
+      activityService.recordActivity({
+        companyId,
+        entityType: 'QUOTATION',
+        entityId: quotationId,
+        action: 'UPDATE_CREATOR',
+        details: `Reassigned quotation ${updated?.quotation_number || ''} creator to "${creatorName}"`,
+        staffName: meta.staffName || meta.deviceName || 'Admin / Owner',
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'QUOTATION',
+        documentNumber: updated?.quotation_number,
+        partyName: updated?.customer_name,
+      }).catch(() => {});
       res.json(updated);
     } catch (err: any) {
       sendInternalError(res, err, 'Failed to update quotation creator.');
@@ -1581,8 +1783,27 @@ export function createApiRouter(db: Knex): Router {
   router.put('/companies/:companyId/quotations/:quotationId', async (req: Request, res: Response) => {
     try {
       const { companyId, quotationId } = getParams(req);
+      const meta = extractWorkstationMeta(req);
       const q = await quotationService.updateQuotation(companyId, quotationId, req.body);
-      res.json(q);
+      const archiveResult = await documentArchiveService.archiveQuotation(companyId, q.id).catch(() => null);
+      broadcastDataChange('quotations', 'update', q);
+
+      activityService.recordActivity({
+        companyId,
+        entityType: 'QUOTATION',
+        entityId: q.id,
+        action: 'UPDATE',
+        details: `Updated quotation ${q.quotation_number} (${q.customer_name}) - Grand Total: ₹ ${q.grand_total}`,
+        staffName: meta.staffName || meta.deviceName || q.created_by_device_name || 'Admin / Owner',
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'QUOTATION',
+        amount: q.grand_total,
+        documentNumber: q.quotation_number,
+        partyName: q.customer_name,
+      }).catch(() => {});
+
+      res.json({ ...q, saved_on_host_path: archiveResult?.pdfPath || null });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1592,6 +1813,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, quotationId } = getParams(req);
       const q = await quotationService.updateQuotationStatus(companyId, quotationId, req.body.status);
+      broadcastDataChange('quotations', 'status', q);
       res.json(q);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1602,6 +1824,24 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, quotationId } = getParams(req);
       const invoice = await quotationService.convertToInvoice(companyId, quotationId);
+      documentArchiveService.archiveInvoice(companyId, invoice.id).catch(() => {});
+      documentArchiveService.archiveQuotation(companyId, quotationId).catch(() => {});
+      broadcastDataChange('invoices', 'convert', invoice);
+      broadcastDataChange('quotations', 'convert', { id: quotationId });
+      activityService.recordActivity({
+        companyId,
+        entityType: 'QUOTATION',
+        entityId: quotationId,
+        action: 'CONVERT',
+        details: `Converted quotation to Sales Invoice ${invoice.invoice_number} for customer "${invoice.customer_name}" (Total: ₹ ${Number(invoice.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })})`,
+        staffName: meta.staffName || meta.deviceName || 'Admin / Owner',
+        deviceName: meta.deviceName,
+        deviceId: meta.deviceId,
+        module: 'QUOTATION',
+        documentNumber: invoice.invoice_number,
+        partyName: invoice.customer_name,
+        amount: invoice.grand_total,
+      }).catch(() => {});
       res.json(invoice);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1612,6 +1852,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, quotationId } = getParams(req);
       await quotationService.deleteQuotation(companyId, quotationId);
+      broadcastDataChange('quotations', 'delete', { id: quotationId });
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1693,6 +1934,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const po = await purchaseService.createPurchaseOrder(companyId, req.body);
+      broadcastDataChange('purchases', 'create_order', po);
       res.status(201).json(po);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1703,6 +1945,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, orderId } = getParams(req);
       await purchaseService.deletePurchaseOrder(companyId, orderId);
+      broadcastDataChange('purchases', 'delete_order', { id: orderId });
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1728,6 +1971,9 @@ export function createApiRouter(db: Knex): Router {
         created_by_device_id: meta.deviceId || undefined,
         created_by_device_name: meta.deviceName || undefined,
       });
+      documentArchiveService.archivePurchaseBill(companyId, bill).catch(() => {});
+      broadcastDataChange('purchases', 'create_bill', bill);
+      broadcastDataChange('inventory', 'purchase', bill);
       res.status(201).json(bill);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1738,6 +1984,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, billId } = getParams(req);
       await purchaseService.deletePurchaseInvoice(companyId, billId);
+      broadcastDataChange('purchases', 'delete_bill', { id: billId });
+      broadcastDataChange('inventory', 'purchase', { id: billId });
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1748,6 +1996,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, billId } = getParams(req);
       const bill = await purchaseService.finalizePurchaseInvoice(companyId, billId);
+      broadcastDataChange('purchases', 'finalize_bill', bill);
+      broadcastDataChange('inventory', 'purchase', bill);
       res.json(bill);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1769,6 +2019,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       const wh = await inventoryService.createWarehouse(companyId, req.body);
+      broadcastDataChange('inventory', 'warehouse', wh);
       res.status(201).json(wh);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1779,6 +2030,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, warehouseId } = getParams(req);
       const wh = await inventoryService.updateWarehouse(companyId, warehouseId, req.body);
+      broadcastDataChange('inventory', 'warehouse', wh);
       res.json(wh);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1789,6 +2041,7 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, warehouseId } = getParams(req);
       await inventoryService.deleteWarehouse(companyId, warehouseId);
+      broadcastDataChange('inventory', 'warehouse', { id: warehouseId });
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1824,6 +2077,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       await inventoryService.recordStockAdjustment(companyId, req.body);
+      broadcastDataChange('inventory', 'adjust', req.body);
+      broadcastDataChange('products', 'stock');
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1834,6 +2089,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId } = getParams(req);
       await inventoryService.transferStock(companyId, req.body);
+      broadcastDataChange('inventory', 'transfer', req.body);
+      broadcastDataChange('products', 'stock');
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1860,6 +2117,8 @@ export function createApiRouter(db: Knex): Router {
         created_by_device_id: meta.deviceId || undefined,
         created_by_device_name: meta.deviceName || undefined,
       });
+      broadcastDataChange('payments', 'create', payment);
+      broadcastDataChange('invoices', 'payment');
       res.status(201).json(payment);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1870,6 +2129,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, paymentId } = getParams(req);
       const updated = await paymentService.updateCustomerPayment(companyId, paymentId, req.body);
+      broadcastDataChange('payments', 'update', updated);
+      broadcastDataChange('invoices', 'payment');
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1880,6 +2141,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, paymentId } = getParams(req);
       await paymentService.deleteCustomerPayment(companyId, paymentId);
+      broadcastDataChange('payments', 'delete', { id: paymentId });
+      broadcastDataChange('invoices', 'payment');
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1905,6 +2168,8 @@ export function createApiRouter(db: Knex): Router {
         created_by_device_id: meta.deviceId || undefined,
         created_by_device_name: meta.deviceName || undefined,
       });
+      broadcastDataChange('payments', 'supplier', payment);
+      broadcastDataChange('purchases', 'payment');
       res.status(201).json(payment);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1915,6 +2180,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, paymentId } = getParams(req);
       const updated = await paymentService.updateSupplierPayment(companyId, paymentId, req.body);
+      broadcastDataChange('payments', 'supplier', updated);
+      broadcastDataChange('purchases', 'payment');
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1925,6 +2192,8 @@ export function createApiRouter(db: Knex): Router {
     try {
       const { companyId, paymentId } = getParams(req);
       await paymentService.deleteSupplierPayment(companyId, paymentId);
+      broadcastDataChange('payments', 'supplier', { id: paymentId });
+      broadcastDataChange('purchases', 'payment');
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1959,6 +2228,81 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
+  router.get('/companies/:companyId/reports/tally-gstr1', requireMenuAccess('reports'), async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getParams(req);
+      const report = await reportService.getTallyGstr1Report(
+        companyId,
+        req.query.start_date as string,
+        req.query.end_date as string
+      );
+      res.json(report);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to generate Tally GSTR-1 report.');
+    }
+  });
+
+  router.get('/companies/:companyId/reports/tally-gstr3b', requireMenuAccess('reports'), async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getParams(req);
+      const report = await reportService.getTallyGstr3BReport(
+        companyId,
+        req.query.start_date as string,
+        req.query.end_date as string
+      );
+      res.json(report);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to generate Tally GSTR-3B report.');
+    }
+  });
+
+  router.get('/companies/:companyId/reports/tally-gstr2', requireMenuAccess('reports'), async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getParams(req);
+      const report = await reportService.getTallyGstr2Report(
+        companyId,
+        req.query.start_date as string,
+        req.query.end_date as string
+      );
+      res.json(report);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to generate Tally GSTR-2 report.');
+    }
+  });
+
+  router.get('/companies/:companyId/reports/gstr1-excel', requireMenuAccess('reports'), async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getParams(req);
+      const workbook = await reportService.exportGstr1ToExcel(
+        companyId,
+        req.query.start_date as string,
+        req.query.end_date as string
+      );
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="GSTR1_${companyId}_${Date.now()}.xlsx"`);
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to export GSTR-1 Excel.');
+    }
+  });
+
+  router.get('/companies/:companyId/reports/gstr1-json', requireMenuAccess('reports'), async (req: Request, res: Response) => {
+    try {
+      const { companyId } = getParams(req);
+      const json = await reportService.exportGstr1ToJson(
+        companyId,
+        req.query.start_date as string,
+        req.query.end_date as string
+      );
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="GSTR1_${companyId}_${Date.now()}.json"`);
+      res.json(json);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to export GSTR-1 JSON.');
+    }
+  });
+
   router.get('/companies/:companyId/reports/staff-activity', requireMenuAccess(['work_summary', 'reports']), async (req: Request, res: Response) => {
     try {
       const { companyId } = getParams(req);
@@ -1970,6 +2314,40 @@ export function createApiRouter(db: Knex): Router {
       res.json(activity);
     } catch (err: any) {
       sendInternalError(res, err, 'Failed to load staff activity report.');
+    }
+  });
+
+  // ===================== SOFTWARE ACTIVITY & AUDIT TRAIL (EXCLUSIVE TO OWNER / HOST) =====================
+  router.get('/companies/:companyId/activity', async (req: Request, res: Response) => {
+    try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. The Activity Log is restricted to the Host computer and Owner Admin.' });
+      }
+      const { companyId } = getParams(req);
+      const feed = await activityService.getActivityFeed(companyId, {
+        staffName: req.query.staff as string,
+        module: req.query.module as string,
+        startDate: req.query.start_date as string,
+        endDate: req.query.end_date as string,
+        search: req.query.search as string,
+        limit: req.query.limit ? Number(req.query.limit) : 500,
+      });
+      res.json(feed);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to load software activity feed.');
+    }
+  });
+
+  router.get('/companies/:companyId/activity/summary', async (req: Request, res: Response) => {
+    try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. The Activity Log is restricted to the Host computer and Owner Admin.' });
+      }
+      const { companyId } = getParams(req);
+      const summary = await activityService.getActivitySummary(companyId);
+      res.json(summary);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to load activity summary.');
     }
   });
 

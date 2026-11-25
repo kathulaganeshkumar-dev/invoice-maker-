@@ -128,40 +128,47 @@ if (!gotSingleLock) {
     let connectToRemoteHost = false;
     if (activeLanConfig.role === 'LAN_CLIENT' && activeLanConfig.hostIp) {
       let resolvedRemote = false;
+      let initialAttempts = 0;
       while (!resolvedRemote) {
-        const probe = await testLanHostConnection(activeLanConfig.hostIp, activeLanConfig.port, 3500);
+        initialAttempts++;
+        console.log(`[Electron] Auto-connecting to Main Office Server at ${activeLanConfig.hostIp}:${activeLanConfig.port} (Attempt ${initialAttempts})...`);
+        const probe = await testLanHostConnection(activeLanConfig.hostIp, activeLanConfig.port, 4000);
         if (probe.success) {
           connectToRemoteHost = true;
           activeAppOrigin = `http://${activeLanConfig.hostIp}:${activeLanConfig.port}`;
-          console.log(`[Electron] Connected to Main Office PC at ${activeAppOrigin}`);
+          console.log(`[Electron] Successfully connected to Main Office Server at ${activeAppOrigin}`);
           resolvedRemote = true;
+          break;
+        }
+
+        // Automatically retry 3 times without disturbing the user (allows Tailscale or WiFi to settle on boot)
+        if (initialAttempts < 3) {
+          console.log('[Electron] Server not reachable yet, waiting 1500ms before next automatic retry...');
+          await new Promise((res) => setTimeout(res, 1500));
+          continue;
+        }
+
+        const choice = await dialog.showMessageBox({
+          type: 'warning',
+          title: 'Main Office Server Unreachable',
+          message: `Could not connect to Main Office Server at ${activeLanConfig.hostIp}:${activeLanConfig.port}.`,
+          detail:
+            `Server IP "${activeLanConfig.hostIp}" is permanently saved.\n\nMake sure the Main Office PC is powered on and connected to Tailscale or office LAN.\n\nClick "Retry Connection" to try again, or "Open Offline (Local PC)" to continue for this session without changing your saved server IP.`,
+          buttons: ['Retry Connection', 'Open Offline (Keeps Saved Server IP)', 'Exit'],
+          defaultId: 0,
+          cancelId: 2,
+        });
+        if (choice.response === 0) {
+          continue;
+        } else if (choice.response === 1) {
+          resolvedRemote = true;
+          connectToRemoteHost = false;
+          // CRITICAL: NEVER erase activeLanConfig.role or hostIp in lan-config.json!
+          // We run locally for this session only, while keeping the saved server IP intact for next launch.
+          console.log('[Electron] Running in temporary offline mode for this session only; keeping saved server IP intact.');
         } else {
-          const choice = await dialog.showMessageBox({
-            type: 'warning',
-            title: 'Main Office PC Unreachable',
-            message: `Could not connect to Main Office PC at ${activeLanConfig.hostIp}:${activeLanConfig.port}.`,
-            detail:
-              'Make sure the Main Office PC is powered on, Enterprise Management is open in "Main Office PC (Host)" mode, and both computers are on the same office network.',
-            buttons: ['Retry Connection', 'Open Standalone Mode (Local PC)', 'Exit'],
-            defaultId: 0,
-            cancelId: 2,
-          });
-          if (choice.response === 0) {
-            continue;
-          } else if (choice.response === 1) {
-            resolvedRemote = true;
-            connectToRemoteHost = false;
-            activeLanConfig.role = 'STANDALONE';
-            try {
-              saveLanConfig(resolvedDataDir, activeLanConfig);
-              console.log('[Electron] Switched to STANDALONE mode and updated lan-config.json');
-            } catch (saveErr) {
-              console.warn('[Electron] Failed to update lan config to STANDALONE:', saveErr);
-            }
-          } else {
-            app.quit();
-            return;
-          }
+          app.quit();
+          return;
         }
       }
     }
@@ -809,6 +816,39 @@ ipcMain.handle('app:relaunch', async () => {
   app.relaunch();
   app.exit(0);
   return true;
+});
+
+ipcMain.handle('app:select-folder', async (_event, defaultPath?: string) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Folder for Saving Documents',
+    defaultPath: defaultPath || undefined,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (res.canceled || !res.filePaths || res.filePaths.length === 0) {
+    return null;
+  }
+  return res.filePaths[0];
+});
+
+ipcMain.handle('app:save-file-locally', async (_event, params: { folderPath: string; filename: string; fileBase64: string }) => {
+  try {
+    const { folderPath, filename, fileBase64 } = params;
+    if (!folderPath || !filename || !fileBase64) {
+      return { success: false, error: 'Missing required parameters (folderPath, filename, fileBase64)' };
+    }
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+    }
+    const cleanName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+    const fullPath = path.join(folderPath, cleanName);
+    const buffer = Buffer.from(fileBase64, 'base64');
+    fs.writeFileSync(fullPath, buffer);
+    return { success: true, savedPath: fullPath };
+  } catch (err: any) {
+    console.error('[Electron] Error saving file locally:', err);
+    return { success: false, error: err.message };
+  }
 });
 
 app.on('before-quit', async (event) => {

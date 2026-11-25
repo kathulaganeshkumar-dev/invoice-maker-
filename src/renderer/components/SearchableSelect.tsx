@@ -209,11 +209,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         setHasTyped(false);
       }
     } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setIsOpen(false);
-      setHasTyped(false);
-      if (!onFreeTextChange) {
-        setSearchQuery(selectedOption ? selectedOption.label : '');
+      if (isOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsOpen(false);
+        setHasTyped(false);
+        if (!onFreeTextChange) {
+          setSearchQuery(selectedOption ? selectedOption.label : '');
+        }
       }
     } else if (e.key === 'Tab') {
       if (!onFreeTextChange && isOpen && highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {

@@ -21,6 +21,7 @@ import { WorkSummaryView } from './views/WorkSummaryView';
 import { ImportExportView } from './views/ImportExportView';
 import { BackupRestoreView } from './views/BackupRestoreView';
 import { QuickAddCustomerModal } from './components/QuickAddCustomerModal';
+import { ActivityView } from './views/ActivityView';
 import { RefreshCw, Building2, PlusCircle } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -45,6 +46,14 @@ export const App: React.FC = () => {
       return null;
     }
   });
+  const [savedServerIp, setSavedServerIp] = useState<string>(() => {
+    try {
+      return localStorage.getItem('eim_lan_host_ip') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [isOwnerOrHost, setIsOwnerOrHost] = useState<boolean>(true);
 
   const applyBrowserFavicon = (iconDataUrl: string | null) => {
     let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
@@ -78,12 +87,20 @@ export const App: React.FC = () => {
       const res = await api.getMyWorkstationPermission();
       const ws = res?.workstation;
       if (ws) {
-        const menus = ws.is_admin ? null : ws.allowed_menus;
+        const isOwner = Boolean(
+          ws.is_admin ||
+          ws.device_id === 'HOST_LOCAL' ||
+          ws.device_name === 'Host Server (Primary PC)'
+        );
+        setIsOwnerOrHost(isOwner);
+        const menus = isOwner ? null : ws.allowed_menus;
         setAllowedMenus(menus);
         // Staff always allowed to open Settings to disconnect or switch to Standalone mode
         setCanOpenSettings(true);
         if (menus && menus.length > 0) {
-          setActiveTab((prev) => (menus.includes(prev) ? prev : menus[0]));
+          setActiveTab((prev) => (menus.includes(prev) ? prev : (prev === 'activity' ? 'invoices' : menus[0])));
+        } else if (!isOwner && activeTab === 'activity') {
+          setActiveTab('invoices');
         }
       }
     } catch {
@@ -198,12 +215,32 @@ export const App: React.FC = () => {
       }
     };
 
-    // Auto-sync timer every 3.5 seconds
+    // Auto-sync timer every 2.5 seconds as network fallback
     const syncTimer = setInterval(() => {
       syncLiveLanData();
       loadMyPermissions();
       checkSystemStatus();
-    }, 3500);
+    }, 2500);
+
+    // Live Server-Sent Events (SSE) listener for instantaneous multi-PC synchronization
+    let sseSource: EventSource | null = null;
+    try {
+      const sseUrl = `${getBaseUrl()}/realtime-sync`;
+      sseSource = new EventSource(sseUrl);
+      sseSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === 'data-changed') {
+            window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: payload }));
+            window.dispatchEvent(new CustomEvent('eim-data-sync', { detail: payload }));
+          }
+        } catch {
+          // ignore parsing error
+        }
+      };
+    } catch {
+      // EventSource not supported or blocked
+    }
 
     window.addEventListener('eim-software-icon-changed', onIconChanged);
     window.addEventListener('eim-permissions-changed', onPermissionsChanged);
@@ -215,6 +252,13 @@ export const App: React.FC = () => {
 
     return () => {
       clearInterval(syncTimer);
+      if (sseSource) {
+        try {
+          sseSource.close();
+        } catch {
+          // ignore
+        }
+      }
       window.removeEventListener('eim-software-icon-changed', onIconChanged);
       window.removeEventListener('eim-permissions-changed', onPermissionsChanged);
       window.removeEventListener('eim-data-sync', onPermissionsChanged);
@@ -227,6 +271,26 @@ export const App: React.FC = () => {
   const bootstrap = async () => {
     try {
       await initDeviceIdentity();
+      const isStaffMode =
+        localStorage.getItem('eim_lan_role') === 'LAN_CLIENT' ||
+        Boolean(localStorage.getItem('eim_lan_host_ip'));
+      const hostIp = localStorage.getItem('eim_lan_host_ip') || '';
+      const hostPort = localStorage.getItem('eim_lan_host_port') || '4200';
+      if (hostIp) setSavedServerIp(hostIp);
+
+      // In browser mode: if accessed via localhost on a staff PC, automatically forward directly to Host Server
+      if (
+        isStaffMode &&
+        hostIp &&
+        (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') &&
+        !(window as any)?.electronAPI?.setLanConfig
+      ) {
+        if (hostIp !== '127.0.0.1' && hostIp !== 'localhost') {
+          window.location.replace(`http://${hostIp}:${hostPort}${window.location.pathname}`);
+          return;
+        }
+      }
+
       const [companies, appSettings] = await Promise.all([
         api.getCompanies(),
         api.getAppSettings().catch(() => null),
@@ -244,28 +308,32 @@ export const App: React.FC = () => {
       }
 
       if (companies.length > 0) {
+        // Automatically enter active/default company so all connected machines (Host, Staff, Remote Tailscale)
+        // immediately see identical data, invoices, and full layout without blank screens.
         const restoredCompId = sessionStorage.getItem('eim_restore_active_company_id');
         if (restoredCompId) {
           sessionStorage.removeItem('eim_restore_active_company_id');
-          const defaultComp =
-            companies.find((c) => c.id === restoredCompId) ||
-            companies.find((c) => c.is_default) ||
-            companies[0];
-          setActiveCompany(defaultComp);
-
-          const branches = await api.getBranches(defaultComp.id);
-          const defaultBranch = branches.find((b) => b.is_default) || branches[0];
-          setActiveBranch(defaultBranch || null);
-          setHasEnteredCompany(true);
-        } else {
-          // On program startup: do not enter any company yet. Open company selection window.
-          setActiveCompany(null);
-          setActiveBranch(null);
-          setHasEnteredCompany(false);
-          setIsCompanyModalOpen(true);
         }
+        const defaultComp =
+          (restoredCompId ? companies.find((c) => c.id === restoredCompId) : null) ||
+          companies.find((c) => c.is_default) ||
+          companies[0];
+        setActiveCompany(defaultComp);
+
+        const branches = await api.getBranches(defaultComp.id).catch(() => []);
+        const defaultBranch = branches.find((b) => b.is_default) || branches[0];
+        setActiveBranch(defaultBranch || null);
+        setHasEnteredCompany(true);
+        setIsCompanyModalOpen(false);
+      } else if (isStaffMode) {
+        // Staff PC with saved server IP: NEVER pop up "Create Company" modal.
+        // Instead, keep waiting and auto-connecting to host server
+        setActiveCompany(null);
+        setActiveBranch(null);
+        setHasEnteredCompany(false);
+        setIsCompanyModalOpen(false);
       } else {
-        // First run - force open company creation modal
+        // First run on Host / Standalone PC - force open company creation modal
         setActiveCompany(null);
         setActiveBranch(null);
         setHasEnteredCompany(false);
@@ -273,10 +341,13 @@ export const App: React.FC = () => {
       }
     } catch (err) {
       console.error('Bootstrap error:', err);
+      const isStaffMode =
+        localStorage.getItem('eim_lan_role') === 'LAN_CLIENT' ||
+        Boolean(localStorage.getItem('eim_lan_host_ip'));
       setActiveCompany(null);
       setActiveBranch(null);
       setHasEnteredCompany(false);
-      setIsCompanyModalOpen(true);
+      setIsCompanyModalOpen(!isStaffMode);
     } finally {
       setInitializing(false);
     }
@@ -352,6 +423,7 @@ export const App: React.FC = () => {
         allowedMenus={allowedMenus}
         canOpenSettings={canOpenSettings}
         hasEnteredCompany={hasEnteredCompany && !isCompanyModalOpen}
+        savedServerIp={savedServerIp}
       />
 
       {/* Top Critical Status Banners */}
@@ -374,17 +446,48 @@ export const App: React.FC = () => {
         <Sidebar
           activeTab={activeTab}
           onSelectTab={(tab) => {
-            if (!allowedMenus || allowedMenus.includes(tab)) setActiveTab(tab);
+            if (!allowedMenus || allowedMenus.includes(tab) || (tab === 'activity' && isOwnerOrHost)) {
+              setActiveTab(tab);
+            }
           }}
           onOpenSettings={() => setIsConfigModalOpen(true)}
           allowedMenus={allowedMenus}
           canOpenSettings={canOpenSettings}
+          isOwnerOrHost={isOwnerOrHost}
         />
 
         <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
           {!activeCompany ? (
             activeTab === 'backup_restore' ? (
               <BackupRestoreView />
+            ) : savedServerIp ? (
+              <div className="h-full w-full flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center mb-4 shadow-sm animate-pulse">
+                  <Building2 className="w-8 h-8 text-emerald-600" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                  Connecting to Server at {savedServerIp}...
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mt-2">
+                  Staff Mode is active. Your computer is automatically connecting to the Main Office Server. Invoices and business data will open as soon as the connection is ready.
+                </p>
+                <div className="mt-5 flex items-center space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => syncLiveLanData()}
+                    className="inline-flex items-center space-x-2 px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                  >
+                    <span>Retry Connection</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfigModalOpen(true)}
+                    className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline cursor-pointer"
+                  >
+                    Change Server IP
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="h-full w-full flex flex-col items-center justify-center p-8 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800 flex items-center justify-center mb-4 shadow-sm">
@@ -406,52 +509,57 @@ export const App: React.FC = () => {
           ) : (
             <>
               {activeTab === 'dashboard' && (
-                <DashboardView companyId={activeCompany.id} onNavigate={(tab) => setActiveTab(tab)} />
+                <DashboardView key={`dashboard-${activeCompany.id}`} companyId={activeCompany.id} onNavigate={(tab) => setActiveTab(tab)} />
+              )}
+              {activeTab === 'activity' && isOwnerOrHost && (
+                <ActivityView key={`activity-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'invoices' && (
-                <InvoicesView key="invoices-sales" companyId={activeCompany.id} mode="sales" />
+                <InvoicesView key={`invoices-sales-${activeCompany.id}`} companyId={activeCompany.id} mode="sales" isOwnerOrHost={isOwnerOrHost} />
               )}
               {activeTab === 'invoices_other' && (
-                <InvoicesView key="invoices-other" companyId={activeCompany.id} mode="other" />
+                <InvoicesView key={`invoices-other-${activeCompany.id}`} companyId={activeCompany.id} mode="other" isOwnerOrHost={isOwnerOrHost} />
               )}
               {activeTab === 'quotations' && (
                 <QuotationsView
+                  key={`quotations-${activeCompany.id}`}
                   companyId={activeCompany.id}
                   onNavigateToInvoice={() => setActiveTab('invoices')}
+                  isOwnerOrHost={isOwnerOrHost}
                 />
               )}
               {activeTab === 'customers' && (
-                <CustomersView companyId={activeCompany.id} />
+                <CustomersView key={`customers-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'suppliers' && (
-                <SuppliersView companyId={activeCompany.id} />
+                <SuppliersView key={`suppliers-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'products' && (
-                <ProductsView companyId={activeCompany.id} />
+                <ProductsView key={`products-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'purchases' && (
-                <PurchasesView companyId={activeCompany.id} />
+                <PurchasesView key={`purchases-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'inventory' && (
-                <InventoryView companyId={activeCompany.id} />
+                <InventoryView key={`inventory-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'payments' && (
-                <PaymentsView companyId={activeCompany.id} />
+                <PaymentsView key={`payments-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'letterheads' && (
-                <LetterheadsView companyId={activeCompany.id} />
+                <LetterheadsView key={`letterheads-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'reports' && (
-                <ReportsView companyId={activeCompany.id} />
+                <ReportsView key={`reports-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'work_summary' && (
-                <WorkSummaryView companyId={activeCompany.id} />
+                <WorkSummaryView key={`work_summary-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'import_export' && (
-                <ImportExportView companyId={activeCompany.id} />
+                <ImportExportView key={`import_export-${activeCompany.id}`} companyId={activeCompany.id} />
               )}
               {activeTab === 'backup_restore' && (
-                <BackupRestoreView companyId={activeCompany.id} companyName={activeCompany.name} />
+                <BackupRestoreView key={`backup_restore-${activeCompany.id}`} companyId={activeCompany.id} companyName={activeCompany.name} />
               )}
             </>
           )}
@@ -459,12 +567,14 @@ export const App: React.FC = () => {
       </div>
 
       {/* Company Selection / Creation Modal */}
-      <CompanyBranchModal
-        isOpen={isCompanyModalOpen}
-        onClose={() => setIsCompanyModalOpen(false)}
-        onSelect={handleSelectCompanyBranch}
-        currentCompanyId={activeCompany?.id}
-      />
+      {isCompanyModalOpen && (
+        <CompanyBranchModal
+          isOpen={isCompanyModalOpen}
+          onClose={() => setIsCompanyModalOpen(false)}
+          onSelect={handleSelectCompanyBranch}
+          currentCompanyId={activeCompany?.id}
+        />
+      )}
 
       {/* System & Company Configuration Modal */}
       <ConfigurationModal

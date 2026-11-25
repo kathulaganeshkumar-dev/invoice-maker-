@@ -7,6 +7,7 @@ interface Props {
   onOpenSettings?: () => void;
   allowedMenus?: string[] | null;
   canOpenSettings?: boolean;
+  isOwnerOrHost?: boolean;
 }
 
 export const Sidebar: React.FC<Props> = ({
@@ -15,9 +16,11 @@ export const Sidebar: React.FC<Props> = ({
   onOpenSettings,
   allowedMenus,
   canOpenSettings = true,
+  isOwnerOrHost = true,
 }) => {
   const allMenuItems = [
     { id: 'dashboard', label: 'Dashboard' },
+    ...(isOwnerOrHost ? [{ id: 'activity', label: 'Activity' }] : []),
     { id: 'invoices', label: 'Invoices (Sales)' },
     { id: 'invoices_other', label: 'Invoices (Other)' },
     { id: 'quotations', label: 'Quotations' },
@@ -49,13 +52,18 @@ export const Sidebar: React.FC<Props> = ({
               key={item.id}
               type="button"
               onClick={() => onSelectTab(item.id)}
-              className={`w-full text-left px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              className={`w-full text-left px-3.5 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-between ${
                 isActive
                   ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold border border-slate-300 dark:border-slate-700 shadow-xs'
                   : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               <span className="truncate block">{item.label}</span>
+              {item.id === 'activity' && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ml-1">
+                  Owner
+                </span>
+              )}
             </button>
           );
         })}

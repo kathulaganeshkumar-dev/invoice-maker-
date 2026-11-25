@@ -36,6 +36,9 @@ import {
   User,
   Edit2,
   Check,
+  Eye,
+  Download,
+  Pencil,
 } from 'lucide-react';
 
 const SALES_DOC_TYPES: { value: DocumentType; label: string }[] = [
@@ -117,6 +120,7 @@ interface Props {
   modalOnly?: boolean;
   onCloseModal?: () => void;
   onInvoiceCreated?: (invoice: Invoice) => void;
+  isOwnerOrHost?: boolean;
 }
 
 export const InvoicesView: React.FC<Props> = ({
@@ -125,6 +129,7 @@ export const InvoicesView: React.FC<Props> = ({
   modalOnly = false,
   onCloseModal,
   onInvoiceCreated,
+  isOwnerOrHost: propIsOwnerOrHost = true,
 }) => {
   const isOtherMode = mode === 'other';
   const allowedDocTypes = isOtherMode ? OTHER_DOC_TYPES : SALES_DOC_TYPES;
@@ -139,9 +144,35 @@ export const InvoicesView: React.FC<Props> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(!modalOnly);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(Boolean(modalOnly));
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+
+  const [internalIsOwner, setInternalIsOwner] = useState<boolean>(() => {
+    try {
+      const lanRole = localStorage.getItem('eim_lan_role');
+      return lanRole !== 'LAN_CLIENT';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    api.getWorkstationPermissions().then((res) => {
+      const ws = res?.workstation;
+      if (ws) {
+        setInternalIsOwner(Boolean(ws.is_admin || ws.device_name === 'Host Server (Primary PC)'));
+      }
+    }).catch(() => {
+      const isLocal = typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
+      const isStaff = typeof window !== 'undefined' && localStorage.getItem('eim_lan_role') === 'LAN_CLIENT';
+      setInternalIsOwner(isLocal && !isStaff);
+    });
+  }, []);
+
+  const isOwnerOrHost = propIsOwnerOrHost && internalIsOwner;
 
   const closeCreateModal = () => {
     setIsCreateModalOpen(false);
+    setEditingInvoice(null);
     if (modalOnly && onCloseModal) {
       onCloseModal();
     }
@@ -276,6 +307,9 @@ export const InvoicesView: React.FC<Props> = ({
   }, [defaultDocType]);
 
   useEffect(() => {
+    setInvoices([]);
+    setCustomers([]);
+    setProducts([]);
     if (companyId) {
       if (!modalOnly) {
         loadInvoices();
@@ -549,6 +583,85 @@ export const InvoicesView: React.FC<Props> = ({
     }
 
     try {
+      if (editingInvoice) {
+        const updated = await api.updateInvoice(companyId, editingInvoice.id, {
+          document_type: docType,
+          customer_id: cust.id,
+          customer_name: cust.name,
+          customer_gstin: cust.gstin,
+          customer_pan: cust.pan,
+          billing_address: cust.billing_address,
+          place_of_supply_state: cust.state,
+          place_of_supply_code: cust.state_code,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          purchase_order_number: poNumber.trim() || undefined,
+          purchase_order_date: poDate || undefined,
+          po_number: poNumber.trim() || undefined,
+          po_date: poDate || undefined,
+          reference_number: referenceNumber.trim() || dcNumber.trim() || undefined,
+          delivery_challan_number: dcNumber.trim() || referenceNumber.trim() || undefined,
+          delivery_challan_date: dcDate || undefined,
+          dc_number: dcNumber.trim() || referenceNumber.trim() || undefined,
+          dc_date: dcDate || undefined,
+          agent_name: agentName.trim() || undefined,
+          letterhead_template_id: selectedTemplateId || undefined,
+          created_by_device_name: creatorName.trim() || undefined,
+          items: validItems.map((it) => ({
+            item_id: it.item_id || undefined,
+            item_type: it.item_type || 'PRODUCT',
+            item_name: it.item_name.trim(),
+            description: it.description || '',
+            hsn_or_sac: it.hsn_or_sac || '',
+            unit: it.unit || 'NOS',
+            quantity: it.quantity || '1',
+            rate: it.rate || '0.00',
+            gst_rate: it.gst_rate || '18.00',
+            is_tax_inclusive: Boolean(it.is_tax_inclusive),
+          })),
+          terms_conditions: termsAndConditions,
+          terms_and_conditions: termsAndConditions,
+          top_margin_mm: topMarginMm,
+          bottom_margin_mm: bottomMarginMm,
+          notes: notes.trim() || undefined,
+        });
+
+        // If staff / operator configured a local workstation save folder, automatically mirror a copy locally
+        try {
+          const localPath = localStorage.getItem('eim_local_invoice_save_path');
+          if (localPath && localPath.trim() && (window as any)?.electronAPI?.saveFileLocally) {
+            const pdfUrl = api.getInvoicePdfUrl(companyId, updated.id);
+            fetch(pdfUrl)
+              .then((r) => r.blob())
+              .then((blob) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const base64data = (reader.result as string).split(',')[1];
+                  (window as any).electronAPI.saveFileLocally({
+                    folderPath: localPath.trim(),
+                    filename: updated.invoice_number,
+                    fileBase64: base64data,
+                  });
+                };
+                reader.readAsDataURL(blob);
+              })
+              .catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Could not auto-save workstation local copy:', e);
+        }
+
+        resetForm();
+        setEditingInvoice(null);
+        window.dispatchEvent(new CustomEvent('eim-data-changed', { detail: { type: 'invoice' } }));
+        closeCreateModal();
+        if (!modalOnly) {
+          await loadInvoices();
+        }
+        alert(`Invoice ${updated.invoice_number} updated successfully in database!`);
+        return;
+      }
+
       const created = await api.createInvoice(companyId, {
         document_type: docType,
         customer_id: cust.id,
@@ -630,6 +743,69 @@ export const InvoicesView: React.FC<Props> = ({
       } else {
         alert(msg);
       }
+    }
+  };
+
+  const handleEditInvoice = async (inv: Invoice) => {
+    try {
+      const full = await api.getInvoice(companyId, inv.id);
+      const target = full || inv;
+      setEditingInvoice(target);
+      setDocType(target.document_type || defaultDocType);
+      setSelectedCustomerId(target.customer_id || '');
+      setPoNumber(target.purchase_order_number || '');
+      setPoDate(target.purchase_order_date || target.po_date || '');
+      setReferenceNumber(target.reference_number || '');
+      setDcNumber(target.delivery_challan_number || target.dc_number || '');
+      setDcDate(target.delivery_challan_date || target.dc_date || '');
+      setAgentName(target.agent_name || '');
+      setInvoiceDate(target.invoice_date || new Date().toISOString().split('T')[0]);
+      setDueDate(target.due_date || target.invoice_date || new Date().toISOString().split('T')[0]);
+      setInvoicePaymentStatus(target.status === 'DRAFT' ? 'DRAFT' : 'UNPAID');
+      setSelectedTemplateId(target.letterhead_template_id || '');
+      setCreatorName(target.created_by_device_name || '');
+      setTopMarginMm(target.top_margin_mm !== undefined && target.top_margin_mm !== null ? Number(target.top_margin_mm) : 55);
+      setBottomMarginMm(target.bottom_margin_mm !== undefined && target.bottom_margin_mm !== null ? Number(target.bottom_margin_mm) : 32);
+      setTermsAndConditions(target.terms_conditions || companyDefaultTerms || DEFAULT_VARUN_INVOICE_TERMS);
+      setNotes(target.notes || '');
+
+      if (target.items && target.items.length > 0) {
+        setItems(
+          target.items.map((it: any) => ({
+            item_id: it.item_id || undefined,
+            item_type: it.item_type || 'PRODUCT',
+            item_name: it.item_name || '',
+            description: it.description || '',
+            hsn_or_sac: it.hsn_or_sac || '',
+            unit: it.unit || 'NOS',
+            quantity: String(it.quantity || ''),
+            rate: String(it.rate || ''),
+            gst_rate: String(it.gst_rate !== undefined ? it.gst_rate : '18.00'),
+            is_tax_inclusive: Boolean(it.is_tax_inclusive),
+            is_custom: !it.item_id,
+          }))
+        );
+      } else {
+        setItems([
+          {
+            item_id: undefined,
+            item_type: 'PRODUCT',
+            item_name: '',
+            description: '',
+            hsn_or_sac: '',
+            unit: 'NOS',
+            quantity: '',
+            rate: '',
+            gst_rate: '18.00',
+            is_tax_inclusive: false,
+            is_custom: false,
+          },
+        ]);
+      }
+
+      setIsCreateModalOpen(true);
+    } catch (err: any) {
+      alert(`Could not load invoice details for editing: ${err.message}`);
     }
   };
 
@@ -1346,6 +1522,21 @@ export const InvoicesView: React.FC<Props> = ({
                           </button>
                         )}
 
+                        {inv.status !== 'CANCELLED' && isOwnerOrHost && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditInvoice(inv);
+                            }}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 border border-brand-300 dark:border-brand-700 bg-brand-50/70 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/60 text-brand-700 dark:text-brand-300 rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+                            title="Edit this invoice (Updates database & archives)"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                            <span>Edit</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1605,6 +1796,22 @@ export const InvoicesView: React.FC<Props> = ({
                     <FileText className="w-3.5 h-3.5 text-amber-600" />
                     <span>Preprinted Letterhead</span>
                   </button>
+
+                  {viewingInvoice.status !== 'CANCELLED' && isOwnerOrHost && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const toEdit = viewingInvoice;
+                        setViewingInvoice(null);
+                        handleEditInvoice(toEdit);
+                      }}
+                      className="inline-flex items-center space-x-1 px-3 py-1.5 border border-brand-300 dark:border-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/60 dark:hover:bg-brand-900 text-brand-900 dark:text-brand-200 rounded text-xs font-semibold shadow-xs cursor-pointer"
+                      title="Edit this invoice (Updates database & archives)"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-brand-600" />
+                      <span>Edit Invoice</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1690,7 +1897,7 @@ export const InvoicesView: React.FC<Props> = ({
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-[96vw] max-w-[90rem] max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
               <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                <span>{isOtherMode ? 'Create Other Invoice / Document' : 'Create Sales Document'}</span>
+                <span>{editingInvoice ? `Edit Sales Document: ${editingInvoice.invoice_number}` : (isOtherMode ? 'Create Other Invoice / Document' : 'Create Sales Document')}</span>
               </h2>
               <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -1899,21 +2106,34 @@ export const InvoicesView: React.FC<Props> = ({
                     <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
                       <User className="w-3.5 h-3.5 text-sky-600" />
                       <span>Created By (Staff / Owner)</span>
+                      {!isOwnerOrHost && (
+                        <span className="text-[10px] text-slate-400 font-normal ml-1">
+                          (Locked to your profile)
+                        </span>
+                      )}
                     </label>
                   </div>
                   <input
                     type="text"
-                    list="staff-creators-list"
+                    list={isOwnerOrHost ? 'staff-creators-list' : undefined}
                     value={creatorName}
-                    onChange={(e) => setCreatorName(e.target.value)}
+                    readOnly={!isOwnerOrHost}
+                    disabled={!isOwnerOrHost}
+                    onChange={(e) => isOwnerOrHost && setCreatorName(e.target.value)}
                     placeholder="e.g. Veer, Sandhya, Admin / Owner"
-                    className="w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs bg-white dark:bg-slate-700 font-semibold outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white"
+                    className={`w-full h-9 border border-slate-300 dark:border-slate-600 rounded-lg px-3 text-xs outline-none ${
+                      isOwnerOrHost
+                        ? 'bg-white dark:bg-slate-700 font-semibold focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-900 dark:text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                    }`}
                   />
-                  <datalist id="staff-creators-list">
-                    {availableStaffNames.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
+                  {isOwnerOrHost && (
+                    <datalist id="staff-creators-list">
+                      {availableStaffNames.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
+                  )}
                 </div>
               </div>
 
@@ -2353,7 +2573,9 @@ export const InvoicesView: React.FC<Props> = ({
                 onClick={handleCreateInvoice}
                 className="px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
               >
-                {invoicePaymentStatus === 'PAID'
+                {editingInvoice
+                  ? 'Update Invoice & Save Changes'
+                  : invoicePaymentStatus === 'PAID'
                   ? 'Finalize & Mark as Paid'
                   : invoicePaymentStatus === 'PARTIAL'
                   ? 'Finalize & Record Partial Pay'

@@ -54,34 +54,47 @@ export const CompanyBranchModal: React.FC<Props> = ({
     return list.reverse();
   }, []);
 
+  // Whenever the modal opens, always reset to the Business Selection Tab
   useEffect(() => {
     if (isOpen) {
+      setIsEditing(false);
+      setEditingCompany({});
+      setIsBranchFormOpen(false);
+      setEditingBranchId(null);
+      setBranchFormData({});
+      setShowBranchesList(false);
+      setError('');
       loadData();
-      const interval = setInterval(async () => {
-        // Silently poll for newly created companies on Host PC
-        if (!isEditing && !isBranchFormOpen) {
-          try {
-            const comps = await api.getCompanies();
-            setCompanies(comps);
-            if (!selectedCompanyId && comps.length > 0) {
-              const active = comps.find((c) => c.is_default) || comps[0];
-              setSelectedCompanyId(active.id);
-              api
-                .getBranches(active.id)
-                .then((brs) => {
-                  setBranches(brs);
-                  const defBranch = brs.find((b) => b.is_default) || brs[0];
-                  if (defBranch) setSelectedBranchId(defBranch.id);
-                })
-                .catch(() => {});
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }, 3000);
-      return () => clearInterval(interval);
     }
+  }, [isOpen]);
+
+  // Background polling for newly created companies on Host PC
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(async () => {
+      // Silently poll for newly created companies on Host PC
+      if (!isEditing && !isBranchFormOpen) {
+        try {
+          const comps = await api.getCompanies();
+          setCompanies(comps);
+          if (!selectedCompanyId && comps.length > 0) {
+            const active = comps.find((c) => c.is_default) || comps[0];
+            setSelectedCompanyId(active.id);
+            api
+              .getBranches(active.id)
+              .then((brs) => {
+                setBranches(brs);
+                const defBranch = brs.find((b) => b.is_default) || brs[0];
+                if (defBranch) setSelectedBranchId(defBranch.id);
+              })
+              .catch(() => {});
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, 3000);
+    return () => clearInterval(interval);
   }, [isOpen, isEditing, isBranchFormOpen, selectedCompanyId]);
 
   const handleGstinChange = (val: string) => {
@@ -380,8 +393,40 @@ export const CompanyBranchModal: React.FC<Props> = ({
 
     setSelectedCompanyId(comp.id);
     onSelect(comp, targetBranch);
+    handleModalClose();
+  };
+
+  const handleModalClose = () => {
+    setIsEditing(false);
+    setEditingCompany({});
+    setIsBranchFormOpen(false);
+    setEditingBranchId(null);
+    setBranchFormData({});
+    setShowBranchesList(false);
+    setError('');
     onClose();
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isEditing) {
+          setIsEditing(false);
+          setEditingCompany({});
+        } else if (showBranchesList || isBranchFormOpen) {
+          setShowBranchesList(false);
+          setIsBranchFormOpen(false);
+        } else {
+          handleModalClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, isEditing, showBranchesList, isBranchFormOpen]);
 
   const handleSetDefault = async (compId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -406,8 +451,9 @@ export const CompanyBranchModal: React.FC<Props> = ({
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Select Business & Branch</h2>
           </div>
           <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
+            onClick={handleModalClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+            title="Close window (Esc)"
           >
             <X className="w-5 h-5" />
           </button>

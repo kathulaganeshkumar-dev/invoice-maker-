@@ -132,6 +132,51 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
   const [permSavingId, setPermSavingId] = useState<string | null>(null);
   const [sessionAdminPin, setSessionAdminPin] = useState<string>('');
 
+  // Workstation Personal / Local Save Paths (Independent per Computer)
+  const [staffLocalInvoicePath, setStaffLocalInvoicePath] = useState<string>(() => {
+    try {
+      return localStorage.getItem('eim_local_invoice_save_path') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [staffLocalQuotationPath, setStaffLocalQuotationPath] = useState<string>(() => {
+    try {
+      return localStorage.getItem('eim_local_quotation_save_path') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const saveStaffLocalInvoicePath = (val: string) => {
+    setStaffLocalInvoicePath(val);
+    try {
+      localStorage.setItem('eim_local_invoice_save_path', val.trim());
+    } catch {}
+  };
+
+  const saveStaffLocalQuotationPath = (val: string) => {
+    setStaffLocalQuotationPath(val);
+    try {
+      localStorage.setItem('eim_local_quotation_save_path', val.trim());
+    } catch {}
+  };
+
+  const handlePickFolder = async (setter: (val: string) => void, currentVal?: string) => {
+    const electronAPI = (window as any)?.electronAPI;
+    if (electronAPI?.selectFolder) {
+      try {
+        const folder = await electronAPI.selectFolder(currentVal);
+        if (folder) setter(folder);
+      } catch (err) {
+        console.warn('Folder selection error:', err);
+      }
+    } else {
+      const manual = window.prompt('Enter folder path for saving:', currentVal || '');
+      if (manual !== null) setter(manual.trim());
+    }
+  };
+
   // Simultaneous Multi-Role Batch Creator state
   const [staffCreationMode, setStaffCreationMode] = useState<'quick' | 'multi_role'>('quick');
   const [batchStaffRows, setBatchStaffRows] = useState<
@@ -365,6 +410,19 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handleSave = async () => {
     setLoading(true);
@@ -692,9 +750,19 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
           localStorage.setItem('eim_lan_role', 'LAN_CLIENT');
           localStorage.setItem('eim_lan_host_ip', lanHostIp.trim());
           localStorage.setItem('eim_lan_host_port', String(Number(lanPort) || 4200));
+          localStorage.setItem('eim_staff_name', lanStaffName.trim());
+          localStorage.setItem('eim_workstation_name', lanStaffName.trim());
+          api.saveLanConfig({
+            role: 'LAN_CLIENT',
+            hostIp: lanHostIp.trim(),
+            port: Number(lanPort) || 4200,
+            staffName: lanStaffName.trim(),
+            deviceName: lanStaffName.trim(),
+          }).catch(() => {});
         } else {
           localStorage.setItem('eim_lan_role', 'STANDALONE');
           localStorage.removeItem('eim_lan_host_ip');
+          api.saveLanConfig({ role: 'STANDALONE', hostIp: '', port: 4200 }).catch(() => {});
         }
         setLocalDeviceIdentity(
           lanDeviceId || 'web-pc',
@@ -710,7 +778,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
               ? 'Standalone Mode is active! You can continue using the software.'
               : roleToSave === 'LAN_HOST'
               ? 'Host Mode active! Office database is ready for staff connections.'
-              : `Connected as Staff: "${lanStaffName.trim()}"! Permissions recognized.`,
+              : `Server IP permanently saved for Staff "${lanStaffName.trim()}"! The software will automatically open in our server every day.`,
         });
         if (roleToSave === 'LAN_CLIENT' && !window.location.origin.includes(lanHostIp.trim())) {
           setTimeout(() => {
@@ -738,9 +806,19 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
         localStorage.setItem('eim_lan_role', 'LAN_CLIENT');
         localStorage.setItem('eim_lan_host_ip', lanHostIp.trim());
         localStorage.setItem('eim_lan_host_port', String(Number(lanPort) || 4200));
+        localStorage.setItem('eim_staff_name', lanStaffName.trim());
+        localStorage.setItem('eim_workstation_name', lanStaffName.trim());
+        api.saveLanConfig({
+          role: 'LAN_CLIENT',
+          hostIp: lanHostIp.trim(),
+          port: Number(lanPort) || 4200,
+          staffName: lanStaffName.trim(),
+          deviceName: lanStaffName.trim(),
+        }).catch(() => {});
       } else {
         localStorage.setItem('eim_lan_role', 'STANDALONE');
         localStorage.removeItem('eim_lan_host_ip');
+        api.saveLanConfig({ role: 'STANDALONE', hostIp: '', port: 4200 }).catch(() => {});
       }
 
       const effectiveDeviceName = roleToSave === 'LAN_CLIENT' ? lanStaffName.trim() : lanDeviceName.trim();
@@ -780,7 +858,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
             ? 'Standalone Mode saved! Ready to continue.'
             : roleToSave === 'LAN_HOST'
             ? 'Host Mode configured! Staff PCs can now connect to this PC.'
-            : `Connected to Host as Staff: "${lanStaffName.trim()}"! Permissions recognized.`,
+            : `Server IP and Staff Mode permanently saved for "${lanStaffName.trim()}"! This computer will automatically open in our server every day.`,
       });
     } catch (err: any) {
       setLanStatus({ success: false, message: err?.message || 'Could not save LAN configuration.' });
@@ -2280,61 +2358,186 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
               </div>
             )}
 
-            {/* 7. Saving Paths by Category */}
+            {/* 7. Saving Paths by Category - Local Drive File Saving & Archiving Configuration */}
             {activeCategory === 'Category_Save_Paths' && companySettings && (
-              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4 bg-white dark:bg-slate-800/60 shadow-sm">
-                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center space-x-2">
-                  <FolderOpen className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                  <span>Local Drive Saving Paths by Document Category</span>
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Set designated folders on your local computer or network drive for automatic archiving. Every generated invoice, quotation, purchase bill, report, backup, or Excel/CSV export can be automatically mirrored to its respective directory.
-                </p>
+              <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-5 bg-white dark:bg-slate-800/60 shadow-sm">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center space-x-2">
+                    <FolderOpen className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                    <span>Host Server &amp; Workstation Document Save Paths</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    All invoices and quotations created from anywhere (Host, Staff PCs, or Remote Workers) are permanently archived on the Host PC. Staff computers can also configure an additional local save folder below to keep personal copies on their own machine.
+                  </p>
+                </div>
 
-                <div className="space-y-4 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Invoices Save Folder Path:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. C:\BusinessDocs\Invoices"
-                      value={companySettings.invoice_save_path || ''}
-                      onChange={(e) => updateCompanySetting('invoice_save_path', e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
-                    />
+                {/* Section A: Host Server Central Archive Folders */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Server className="w-4 h-4 text-brand-600" />
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                      Host PC Central Archive Folders (Primary Server Storage)
+                    </span>
                   </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Documents generated by any workstation are automatically saved into these folders on the Host computer.
+                  </p>
 
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Quotations Save Folder Path:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. C:\BusinessDocs\Quotations"
-                      value={companySettings.quotation_save_path || ''}
-                      onChange={(e) => updateCompanySetting('quotation_save_path', e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
-                    />
-                  </div>
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        Invoices Save Folder Path (Host PC):
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. C:\BusinessDocs\Invoices"
+                          value={companySettings.invoice_save_path || ''}
+                          onChange={(e) => updateCompanySetting('invoice_save_path', e.target.value)}
+                          className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePickFolder((v) => updateCompanySetting('invoice_save_path', v), companySettings.invoice_save_path)}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
+                    </div>
 
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Orders & Bills Save Folder Path:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. C:\BusinessDocs\Purchases"
-                      value={companySettings.purchase_save_path || ''}
-                      onChange={(e) => updateCompanySetting('purchase_save_path', e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
-                    />
-                  </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        Quotations Save Folder Path (Host PC):
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. C:\BusinessDocs\Quotations"
+                          value={companySettings.quotation_save_path || ''}
+                          onChange={(e) => updateCompanySetting('quotation_save_path', e.target.value)}
+                          className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePickFolder((v) => updateCompanySetting('quotation_save_path', v), companySettings.quotation_save_path)}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
+                    </div>
 
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Reports & Financial Statements Save Folder Path:</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. C:\BusinessDocs\Reports"
-                      value={companySettings.report_save_path || ''}
-                      onChange={(e) => updateCompanySetting('report_save_path', e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
-                    />
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        Purchase Orders &amp; Bills Save Folder Path (Host PC):
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. C:\BusinessDocs\Purchases"
+                          value={companySettings.purchase_save_path || ''}
+                          onChange={(e) => updateCompanySetting('purchase_save_path', e.target.value)}
+                          className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePickFolder((v) => updateCompanySetting('purchase_save_path', v), companySettings.purchase_save_path)}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        Reports &amp; Financial Statements Save Folder Path (Host PC):
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. C:\BusinessDocs\Reports"
+                          value={companySettings.report_save_path || ''}
+                          onChange={(e) => updateCompanySetting('report_save_path', e.target.value)}
+                          className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePickFolder((v) => updateCompanySetting('report_save_path', v), companySettings.report_save_path)}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                {/* Section B: This Computer / Workstation Local Save Folders (Staff Personal Copy) */}
+                <div className="p-4 bg-sky-50/60 dark:bg-sky-950/30 rounded-xl border border-sky-200 dark:border-sky-800 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Monitor className="w-4 h-4 text-sky-600" />
+                    <span className="font-bold text-xs text-sky-900 dark:text-sky-200 uppercase tracking-wider">
+                      This Computer Local Save Folders (Staff / Workstation Personal Copy)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    If staff members or operators on THIS computer want an additional local PDF copy saved to their own machine whenever creating an invoice or quotation, set personal folders below:
+                  </p>
+
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        My Local Invoices Folder (This PC Only):
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. D:\StaffInvoices or C:\Users\Username\Documents\MyInvoices"
+                          value={staffLocalInvoicePath}
+                          onChange={(e) => saveStaffLocalInvoicePath(e.target.value)}
+                          className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePickFolder(saveStaffLocalInvoicePath, staffLocalInvoicePath)}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-sky-300 dark:border-sky-700 rounded bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-950 text-sky-900 dark:text-sky-200 text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">
+                        My Local Quotations Folder (This PC Only):
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. D:\StaffQuotations or C:\Users\Username\Documents\MyQuotations"
+                          value={staffLocalQuotationPath}
+                          onChange={(e) => saveStaffLocalQuotationPath(e.target.value)}
+                          className="flex-1 border border-slate-300 dark:border-slate-600 rounded px-3 py-1.5 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handlePickFolder(saveStaffLocalQuotationPath, staffLocalQuotationPath)}
+                          className="inline-flex items-center space-x-1 px-3 py-1.5 border border-sky-300 dark:border-sky-700 rounded bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-950 text-sky-900 dark:text-sky-200 text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                   <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-3">
                     <div className="flex items-center justify-between">
@@ -2470,8 +2673,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                     />
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {/* 8. Inventory Rules */}
             {activeCategory === 'Inventory_Rules' && companySettings && (
@@ -2751,33 +2953,27 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             {/* Detected IP Addresses */}
                             <div>
                               <span className="font-semibold text-emerald-900 dark:text-emerald-200 block mb-1.5">
-                                Host IP Address (detected on office network):
+                                Tailscale Host IP Address (Unified IP for Office &amp; Remote Workers):
                               </span>
                               {lanLocalIps.length > 0 ? (
                                 <div className="space-y-2">
                                   <div className="flex flex-wrap gap-2">
                                     {lanLocalIps.map((ip) => {
-                                      const isVpn = ip.startsWith('100.');
-                                      const isLocalLan = ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.');
+                                      const isTailscale = ip.startsWith('100.');
                                       return (
                                         <div
                                           key={ip}
                                           className={`inline-flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-slate-800 border rounded-lg font-mono font-bold shadow-sm ${
-                                            isLocalLan
-                                              ? 'border-emerald-400 dark:border-emerald-600 text-emerald-900 dark:text-emerald-200'
+                                            isTailscale
+                                              ? 'border-brand-500 dark:border-brand-500 text-brand-900 dark:text-brand-200 ring-2 ring-brand-500/20'
                                               : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'
                                           }`}
                                         >
                                           <span>{ip}</span>
                                           <span className="text-slate-400 text-[11px] font-sans font-normal">Port {lanPort}</span>
-                                          {isLocalLan && (
-                                            <span className="px-1.5 py-0.5 text-[10px] font-sans font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 rounded">
-                                              Office Wi-Fi / LAN (Use This)
-                                            </span>
-                                          )}
-                                          {isVpn && (
-                                            <span className="px-1.5 py-0.5 text-[10px] font-sans font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 rounded">
-                                              Tailscale / VPN
+                                          {isTailscale && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-sans font-semibold bg-brand-100 text-brand-800 dark:bg-brand-950/70 dark:text-brand-300 rounded">
+                                              Tailscale Unified IP (Use for All PCs)
                                             </span>
                                           )}
                                           <button
@@ -2792,12 +2988,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                     })}
                                   </div>
                                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                                    💡 <strong>Which IP to use:</strong> Enter the <strong>Office Wi-Fi / LAN</strong> IP (<code className="text-emerald-700 dark:text-emerald-300 font-bold">192.168.x.x</code>) on Staff PCs connected to the same Wi-Fi router. The <code className="text-amber-700 dark:text-amber-300 font-bold">100.x.x.x</code> IP is your virtual Tailscale VPN adapter.
+                                    <strong>Connection Guide:</strong> Both office staff and remote workers connect using this exact Tailscale IP (<code className="text-brand-700 dark:text-brand-300 font-bold">100.x.x.x</code>). Enter this IP and Port {lanPort} on worker PCs or open <code className="text-brand-700 dark:text-brand-300 font-bold">http://[Tailscale-IP]:{lanPort}</code> in any browser.
                                   </p>
                                 </div>
                               ) : (
                                 <div className="text-slate-600 dark:text-slate-400">
-                                  Run <code className="px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded border dark:border-slate-700">ipconfig</code> in Windows Command Prompt to view your office Wi-Fi/Ethernet IPv4 address.
+                                  Please ensure Tailscale is running on this computer to obtain your 100.x.x.x IP address.
                                 </div>
                               )}
                             </div>
@@ -2860,7 +3056,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                                     }`}
                                   >
-                                    ⚡ Quick Simultaneous Creator
+                                    Quick Simultaneous Creator
                                   </button>
                                   <button
                                     type="button"
@@ -2871,7 +3067,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                                     }`}
                                   >
-                                    📋 Multi-Role Batch Creator
+                                    Multi-Role Batch Creator
                                   </button>
                                 </div>
                               </div>
@@ -2913,7 +3109,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                       return (
                                         <div className="mt-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs flex flex-wrap items-center gap-2">
                                           <span className="font-bold flex items-center space-x-1 text-amber-700 dark:text-amber-400">
-                                            <span>⚡ Simultaneous Creation:</span>
+                                            <span>Simultaneous Creation:</span>
                                           </span>
                                           <span>
                                             {detected.length} {hostNewStaffIsAdmin ? 'Owner profiles' : 'Staff profiles'} will be created at once:
@@ -2955,7 +3151,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                             : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100'
                                         }`}
                                       >
-                                        👑 Owner / Full Admin (All 15 Access)
+                                        Owner / Full Admin (All 15 Access)
                                       </button>
                                       <button
                                         type="button"
@@ -2982,7 +3178,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                             : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
                                         }`}
                                       >
-                                        👔 Manager / Partner
+                                        Manager / Partner
                                       </button>
                                       <button
                                         type="button"
@@ -3002,7 +3198,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                             : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
                                         }`}
                                       >
-                                        🧾 Billing Staff
+                                        Billing Staff
                                       </button>
                                       <button
                                         type="button"
@@ -3026,7 +3222,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                             : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
                                         }`}
                                       >
-                                        📊 Accounts &amp; Inventory
+                                        Accounts &amp; Inventory
                                       </button>
                                       <button
                                         type="button"
@@ -3040,7 +3236,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                             : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
                                         }`}
                                       >
-                                        📦 Warehouse &amp; Stock
+                                        Warehouse &amp; Stock
                                       </button>
                                       <button
                                         type="button"
@@ -3058,7 +3254,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                             : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300'
                                         }`}
                                       >
-                                        👁️ Audit Only
+                                        Audit Only
                                       </button>
                                       <button
                                         type="button"
@@ -3174,12 +3370,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                                         }}
                                         className="border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold focus:outline-none"
                                       >
-                                        <option value="OWNER">👑 Owner / Full Admin (All 15 Access)</option>
-                                        <option value="MANAGER">👔 Manager / Partner (Operations + Reports)</option>
-                                        <option value="BILLING">🧾 Billing Staff (Sales &amp; Quotes)</option>
-                                        <option value="ACCOUNTS">📊 Accounts &amp; Inventory Staff</option>
-                                        <option value="INVENTORY">📦 Warehouse &amp; Stock</option>
-                                        <option value="AUDIT">👁️ Audit / View Only</option>
+                                        <option value="OWNER">Owner / Full Admin (All 15 Access)</option>
+                                        <option value="MANAGER">Manager / Partner (Operations + Reports)</option>
+                                        <option value="BILLING">Billing Staff (Sales &amp; Quotes)</option>
+                                        <option value="ACCOUNTS">Accounts &amp; Inventory Staff</option>
+                                        <option value="INVENTORY">Warehouse &amp; Stock</option>
+                                        <option value="AUDIT">Audit / View Only</option>
                                       </select>
                                       <button
                                         type="button"
@@ -3483,18 +3679,18 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               <span>Connect to Main Office PC</span>
                             </h4>
                             <p className="text-slate-500 dark:text-slate-400 mt-0.5">
-                              Enter the Main PC&apos;s IP address and the Staff Name given to you by the Host/MD. The software will connect and recognize your assigned menu permissions.
+                              Enter the Main PC&apos;s Tailscale IP address (100.x.x.x) and your Staff Name. Both office and remote workers connect using this single IP to access the exact same data and unified layout.
                             </p>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="sm:col-span-2">
                               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                Main Office PC IP Address *
+                                Main PC Tailscale IP Address *
                               </label>
                               <input
                                 type="text"
-                                placeholder="e.g. 192.168.1.100"
+                                placeholder="e.g. 100.x.x.x (Tailscale IP)"
                                 value={lanHostIp}
                                 onChange={(e) => setLanHostIp(e.target.value)}
                                 className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 font-mono text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -3519,13 +3715,13 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                             </label>
                             <input
                               type="text"
-                              placeholder="e.g. Ramesh, Priya, Billing Desk 1"
+                              placeholder="e.g. Ramesh, Priya, Billing Desk 1, Remote Worker 1"
                               value={lanStaffName}
                               onChange={(e) => setLanStaffName(e.target.value)}
                               className="w-full sm:w-80 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-xs bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                             />
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              Must match the name created by the Host. Your allowed menus (e.g. Invoices, Quotations) will automatically apply, and restricted menus (Dashboard, Reports) will remain hidden.
+                              Enter your name. When connected, all invoices, quotations, customers, and reports will sync live with the Host PC in real-time.
                             </p>
                           </div>
 

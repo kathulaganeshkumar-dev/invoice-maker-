@@ -26,4 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportUpdatePackage: () => ipcRenderer.invoke('app:export-update-package'),
   updateFromLan: () => ipcRenderer.invoke('app:update-from-lan'),
   factoryReset: () => ipcRenderer.invoke('app:factory-reset'),
+  selectFolder: (defaultPath?: string) => ipcRenderer.invoke('app:select-folder', defaultPath),
+  saveFileLocally: (params: { folderPath: string; filename: string; fileBase64: string }) =>
+    ipcRenderer.invoke('app:save-file-locally', params),
 });

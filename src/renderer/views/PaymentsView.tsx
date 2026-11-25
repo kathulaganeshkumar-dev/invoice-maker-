@@ -254,11 +254,77 @@ export const PaymentsView: React.FC<Props> = ({ companyId }) => {
     }
   }, [activeTab, customers, suppliers]);
 
+  const loadPaymentsSilently = async () => {
+    try {
+      if (activeTab === 'customer') {
+        const cp = await api.getCustomerPayments(companyId);
+        setCustomerPayments(cp);
+      } else {
+        const sp = await api.getSupplierPayments(companyId);
+        setSupplierPayments(sp);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadMasterSilently = async () => {
+    try {
+      const [cList, sList, comp, brList, invList, billList] = await Promise.all([
+        api.getCustomers(companyId),
+        api.getSuppliers(companyId),
+        api.getCompany(companyId).catch(() => null),
+        api.getBranches(companyId).catch(() => []),
+        api.getInvoices(companyId).catch(() => []),
+        api.getPurchaseInvoices(companyId).catch(() => []),
+      ]);
+      const nonCancelledInvs = invList.filter((i) => i.status !== 'CANCELLED');
+      const unpInvs = nonCancelledInvs.filter((i) => Number(i.balance_amount || 0) > 0);
+      const unpBills = billList.filter((b) => Number(b.balance_amount || 0) > 0);
+
+      setCustomers(cList);
+      setSuppliers(sList);
+      setCompanyInfo(comp);
+      setBranches(brList);
+      setAllCompanyInvoices(nonCancelledInvs);
+      setAllUnpaidInvoices(unpInvs);
+      setAllCompanyBills(billList);
+      setAllUnpaidBills(unpBills);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (companyId) {
       loadPayments();
       loadMaster();
     }
+  }, [companyId, activeTab]);
+
+  useEffect(() => {
+    if (!companyId) return;
+
+    const handleSync = () => {
+      loadPaymentsSilently();
+      loadMasterSilently();
+    };
+
+    const syncTimer = setInterval(() => {
+      loadPaymentsSilently();
+      loadMasterSilently();
+    }, 3000);
+
+    window.addEventListener('eim-data-changed', handleSync);
+    window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', handleSync);
+      window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
   }, [companyId, activeTab]);
 
   const loadPayments = async () => {

@@ -62,6 +62,25 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
     }));
   }, [units]);
 
+  const loadProductsSilently = async () => {
+    try {
+      const params: any = {};
+      if (itemTypeFilter !== 'ALL') params.item_type = itemTypeFilter;
+      if (categoryFilter) params.category_id = categoryFilter;
+
+      const [data, cList, uList] = await Promise.all([
+        api.getProducts(companyId, params),
+        api.getCategories(companyId).catch(() => []),
+        api.getUnits(companyId).catch(() => []),
+      ]);
+      setProducts(data);
+      if (cList.length > 0) setCategories(cList);
+      if (uList.length > 0) setUnits(uList);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (companyId) {
       loadProducts();
@@ -70,16 +89,27 @@ export const ProductsView: React.FC<Props> = ({ companyId }) => {
   }, [companyId, itemTypeFilter, categoryFilter]);
 
   useEffect(() => {
+    if (!companyId) return;
+
     const handleSync = () => {
-      if (companyId) loadProducts();
+      loadProductsSilently();
     };
+
+    const syncTimer = setInterval(() => {
+      loadProductsSilently();
+    }, 3000);
+
     window.addEventListener('eim-data-changed', handleSync);
     window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
     return () => {
+      clearInterval(syncTimer);
       window.removeEventListener('eim-data-changed', handleSync);
       window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
-  }, [companyId]);
+  }, [companyId, itemTypeFilter, categoryFilter]);
 
   const loadProducts = async () => {
     setLoading(true);

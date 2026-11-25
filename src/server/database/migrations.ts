@@ -1026,6 +1026,18 @@ export async function runMigrations(db: Knex): Promise<void> {
     }
   }
 
+  // Ensure audit_logs table has staff, device, and metadata columns for the Activity Log
+  if (await db.schema.hasTable('audit_logs')) {
+    for (const col of ['staff_name', 'device_name', 'device_id', 'module', 'document_number', 'party_name', 'amount']) {
+      const exists = await db.schema.hasColumn('audit_logs', col);
+      if (!exists) {
+        await db.schema.alterTable('audit_logs', (table) => {
+          table.string(col).nullable();
+        });
+      }
+    }
+  }
+
   // Ensure legacy temporary host PC entries are cleaned up
   if (await db.schema.hasTable('workstation_permissions')) {
     await db('workstation_permissions').where({ device_id: 'local-host-pc' }).del().catch(() => {});

@@ -37,6 +37,7 @@ interface Props {
   allowedMenus?: string[] | null;
   canOpenSettings?: boolean;
   hasEnteredCompany?: boolean;
+  savedServerIp?: string;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -54,6 +55,7 @@ export const Navbar: React.FC<Props> = ({
   allowedMenus,
   canOpenSettings = true,
   hasEnteredCompany = false,
+  savedServerIp,
 }) => {
   const [liveFy, setLiveFy] = useState<string>(() => getIndianFinancialYear());
   const [isFyModalOpen, setIsFyModalOpen] = useState<boolean>(false);
@@ -122,6 +124,17 @@ export const Navbar: React.FC<Props> = ({
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>FY {liveFy}</span>
         </button>
+
+        {/* Saved Server IP Badge in Staff Mode */}
+        {savedServerIp && (
+          <div
+            className="hidden md:inline-flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-lg text-[11px] font-mono font-semibold shadow-2xs"
+            title={`Connected to Main Office Server: ${savedServerIp} (Auto-connected)`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>Server: {savedServerIp}</span>
+          </div>
+        )}
       </div>
 
       {/* Right: Quick Actions, Theme, Status */}

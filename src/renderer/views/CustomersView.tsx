@@ -165,10 +165,47 @@ export const CustomersView: React.FC<Props> = ({ companyId }) => {
     }));
   }, []);
 
-  useEffect(() => {
-    if (companyId) {
-      loadCustomers();
+  const loadCustomersSilently = async () => {
+    try {
+      const [data, invList, qList] = await Promise.all([
+        api.getCustomers(companyId),
+        api.getInvoices(companyId).catch(() => []),
+        api.getQuotations(companyId).catch(() => []),
+      ]);
+      setCustomers(data);
+      setInvoices(invList);
+      setQuotations(qList);
+      setViewingCustomer((prev) => {
+        if (!prev) return null;
+        return data.find((c) => c.id === prev.id) || prev;
+      });
+    } catch {
+      // silent polling error ignored
     }
+  };
+
+  useEffect(() => {
+    if (!companyId) return;
+    loadCustomers();
+
+    const onDataChanged = () => {
+      loadCustomersSilently();
+    };
+
+    const syncTimer = setInterval(() => {
+      loadCustomersSilently();
+    }, 3000);
+
+    window.addEventListener('eim-data-changed', onDataChanged);
+    window.addEventListener('eim-data-sync', onDataChanged);
+    window.addEventListener('focus', onDataChanged);
+
+    return () => {
+      clearInterval(syncTimer);
+      window.removeEventListener('eim-data-changed', onDataChanged);
+      window.removeEventListener('eim-data-sync', onDataChanged);
+      window.removeEventListener('focus', onDataChanged);
+    };
   }, [companyId]);
 
   const loadCustomers = async () => {
