@@ -59,11 +59,6 @@ export const Sidebar: React.FC<Props> = ({
               }`}
             >
               <span className="truncate block">{item.label}</span>
-              {item.id === 'activity' && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ml-1">
-                  Owner
-                </span>
-              )}
             </button>
           );
         })}

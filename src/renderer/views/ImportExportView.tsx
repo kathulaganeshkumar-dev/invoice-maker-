@@ -273,6 +273,19 @@ export const ImportExportView: React.FC<Props> = ({ companyId }) => {
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 shrink-0">Download .xlsx</span>
               </a>
             ))}
+            <a
+              key="export-activity-csv"
+              href={api.getActivityCsvExportUrl(companyId)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+            >
+              <div className="min-w-0">
+                <div className="font-bold text-xs text-slate-800 dark:text-slate-100">Software Activity &amp; Audit Trail</div>
+                <div className="text-[11px] text-slate-400 truncate">Real-time staff operations, document creations &amp; transaction audit log</div>
+              </div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 shrink-0">Download .csv</span>
+            </a>
           </div>
         </div>
 

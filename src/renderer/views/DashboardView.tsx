@@ -271,11 +271,11 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
             </h2>
             <div className="flex items-center space-x-3 text-xs">
               <span className="flex items-center space-x-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-700 dark:bg-slate-300 inline-block" />
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
                 <span className="text-slate-600 dark:text-slate-400 font-medium">Sales</span>
               </span>
               <span className="flex items-center space-x-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500 inline-block" />
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
                 <span className="text-slate-600 dark:text-slate-400 font-medium">Purchases</span>
               </span>
             </div>
@@ -307,12 +307,12 @@ export const DashboardView: React.FC<Props> = ({ companyId, onNavigate }) => {
                   <div className="flex items-end space-x-0.5 w-full justify-center h-full">
                     <div
                       style={{ height: `${salesHeight}%` }}
-                      className={`w-2 sm:w-3 rounded-t transition-all ${salesVal > 0 ? 'bg-slate-700 dark:bg-slate-300 hover:bg-slate-900' : 'bg-slate-200 dark:bg-slate-700'}`}
+                      className={`w-2 sm:w-3 rounded-t transition-all ${salesVal > 0 ? 'bg-emerald-500 dark:bg-emerald-400 hover:bg-emerald-600' : 'bg-slate-200 dark:bg-slate-700'}`}
                       title={`${m.month} Sales: ${formatIndianCurrency(salesVal)}`}
                     />
                     <div
                       style={{ height: `${purchasesHeight}%` }}
-                      className={`w-2 sm:w-3 rounded-t transition-all ${purchasesVal > 0 ? 'bg-slate-400 dark:bg-slate-500 hover:bg-slate-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                      className={`w-2 sm:w-3 rounded-t transition-all ${purchasesVal > 0 ? 'bg-rose-500 dark:bg-rose-400 hover:bg-rose-600' : 'bg-slate-200 dark:bg-slate-700'}`}
                       title={`${m.month} Purchases: ${formatIndianCurrency(purchasesVal)}`}
                     />
                   </div>

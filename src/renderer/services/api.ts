@@ -633,6 +633,7 @@ export const api = {
   getInventoryExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/inventory`,
   getPaymentsReceivableExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/payments-receivable`,
   getPaymentsToSuppliersExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/export/payments-suppliers`,
+  getActivityCsvExportUrl: (companyId: string) => `${getBaseUrl()}/companies/${companyId}/activity/export-csv`,
   getCustomerImportTemplateUrl: () => `${getBaseUrl()}/export/template/customers`,
   getImportTemplateUrl: (category: string) => `${getBaseUrl()}/export/template/${category}`,
   importExcelData: (companyId: string, category: string, formData: FormData) =>

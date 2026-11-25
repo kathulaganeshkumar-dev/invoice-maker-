@@ -2351,6 +2351,38 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
+  router.get('/companies/:companyId/activity/export-csv', async (req: Request, res: Response) => {
+    try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Activity CSV export is restricted to the Host computer and Owner Admin.' });
+      }
+      const { companyId } = getParams(req);
+      const feed = await activityService.getActivityFeed(companyId, { limit: 5000 });
+      const headers = ['Timestamp', 'Date', 'Time', 'Staff Member', 'Module', 'Action', 'Document Number', 'Party Name', 'Amount (INR)', 'Details'];
+      const escapeCsv = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+      const rows = (Array.isArray(feed) ? feed : []).map((i: any) =>
+        [
+          escapeCsv(i.timestamp),
+          escapeCsv(i.date),
+          escapeCsv(i.time),
+          escapeCsv(i.staff_name),
+          escapeCsv(i.module),
+          escapeCsv(i.action),
+          escapeCsv(i.document_number),
+          escapeCsv(i.party_name),
+          escapeCsv(i.amount !== undefined && i.amount !== null ? i.amount : ''),
+          escapeCsv(i.details),
+        ].join(',')
+      );
+      const csv = [headers.join(','), ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="Software_Activity_Log_${new Date().toISOString().slice(0, 10)}.csv"`);
+      res.send(csv);
+    } catch (err: any) {
+      sendInternalError(res, err, 'Failed to export activity CSV.');
+    }
+  });
+
   // ===================== LETTERHEADS =====================
   router.get('/companies/:companyId/letterheads', async (req: Request, res: Response) => {
     try {
