@@ -80,6 +80,11 @@ export function createApiRouter(db: Knex): Router {
     max: 1000,
     message: 'Too many administrative requests. Please wait a moment and try again.',
   });
+  const pinRateLimiter = createSimpleRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: 'Too many PIN verification attempts. Please wait 15 minutes and try again.',
+  });
   const dbTestRateLimiter = createSimpleRateLimiter({
     windowMs: 60 * 1000,
     max: 10,
@@ -173,22 +178,40 @@ export function createApiRouter(db: Knex): Router {
     const ids = Array.isArray(menuId) ? menuId : [menuId];
     return async (req: Request, res: Response, next: any) => {
       try {
-        const meta = getRequestDeviceMeta(req);
-        if (!meta.deviceId) return next();
-        const ws = await workstationService.getWorkstationPermission(meta.deviceId);
-        if (!ws || ws.is_admin || ids.some((id) => ws.allowed_menus.includes(id))) {
-          return next();
-        }
+        if (isLoopbackRequest(req)) return next();
+
         // Allow MD override if valid Admin PIN header is provided
         const suppliedPin = String(req.headers['x-eim-admin-pin'] || '').trim();
         if (suppliedPin && (await workstationService.hasAdminPin()) && (await workstationService.checkAdminPin(suppliedPin))) {
           return next();
         }
+
+        const meta = getRequestDeviceMeta(req);
+        if (!meta.deviceId) {
+          return res.status(403).json({
+            error: 'Workstation Device ID is required for LAN access.',
+          });
+        }
+
+        const ws = await workstationService.getWorkstationPermission(meta.deviceId);
+        if (ws) {
+          if (ws.is_admin || ids.some((id) => ws.allowed_menus.includes(id))) {
+            return next();
+          }
+        } else {
+          const defaultMenus = await workstationService.getDefaultStaffMenus();
+          if (ids.some((id) => defaultMenus.includes(id))) {
+            return next();
+          }
+        }
+
         return res.status(403).json({
           error: `Access to "${ids.join(' / ')}" is restricted on this PC by your MD / Administrator.`,
         });
       } catch {
-        return next();
+        return res.status(403).json({
+          error: 'Access denied due to authorization verification failure.',
+        });
       }
     };
   };
@@ -199,7 +222,7 @@ export function createApiRouter(db: Knex): Router {
   };
 
   // ===================== RESET ALL APPLICATION DATA (FACTORY RESET) =====================
-  router.post('/reset-all-data', adminRateLimiter, async (req: Request, res: Response) => {
+  router.post('/reset-all-data', pinRateLimiter, async (req: Request, res: Response) => {
     try {
       const confirmHeader = String(req.headers['x-eim-confirm-reset'] || req.body?.confirm || '').trim().toUpperCase();
       if (confirmHeader !== 'CONFIRM_RESET_ALL_DATA' && confirmHeader !== 'RESET_ALL_DATA' && confirmHeader !== 'RESET') {
@@ -526,8 +549,11 @@ export function createApiRouter(db: Knex): Router {
   });
 
   // ===================== SYSTEM DIAGNOSTICS & TELEMETRY =====================
-  router.get('/system/diagnostics', async (_req: Request, res: Response) => {
+  router.get('/system/diagnostics', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. System diagnostics are restricted to the Host computer and Owner Admin.' });
+      }
       const zipBuffer = await diagnosticsService.createDiagnosticsZipBuffer();
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="diagnostics_${Date.now()}.zip"`);
@@ -597,8 +623,16 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/system/install-offline-update', updateUpload.single('updateFile'), async (req: Request, res: Response) => {
+  router.post('/system/install-offline-update', pinRateLimiter, updateUpload.single('updateFile'), async (req: Request, res: Response) => {
     try {
+      if (!isLoopbackRequest(req)) {
+        if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch {} }
+        return res.status(403).json({ error: 'Offline software updates can only be installed directly from the host machine.' });
+      }
+      if (!(await requireAdminAuthorization(req, res))) {
+        if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch {} }
+        return;
+      }
       if (!req.file) {
         return res.status(400).json({ error: 'Please select an update file (.asar).' });
       }
@@ -690,6 +724,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.post('/system/lan-config', adminRateLimiter, async (req: Request, res: Response) => {
     try {
+      if (!isLoopbackRequest(req)) {
+        return res.status(403).json({ error: 'Host LAN configuration can only be modified directly from the host computer.' });
+      }
       const dataDir = getDefaultDataDir();
       const lanFile = path.join(dataDir, 'lan-config.json');
       let current: any = {};
@@ -1370,7 +1407,7 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/workstations/admin-pin', adminRateLimiter, async (req: Request, res: Response) => {
+  router.post('/workstations/admin-pin', pinRateLimiter, async (req: Request, res: Response) => {
     try {
       const newPin = String(req.body?.new_pin || '').trim();
       if (!/^\d{4}$/.test(newPin)) {
@@ -1383,7 +1420,7 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/workstations/verify-pin', adminRateLimiter, async (req: Request, res: Response) => {
+  router.post('/workstations/verify-pin', pinRateLimiter, async (req: Request, res: Response) => {
     try {
       const pin = String(req.body?.pin || '').trim();
       if (!/^\d{4}$/.test(pin)) {
@@ -1504,6 +1541,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.put('/companies/:companyId/invoices/:invoiceId', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can edit invoices.' });
+      }
       const { companyId, invoiceId } = getParams(req);
       const meta = extractWorkstationMeta(req);
       const invoice = await invoiceService.updateInvoice(companyId, invoiceId, req.body);
@@ -1577,6 +1617,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.post('/companies/:companyId/invoices/:invoiceId/cancel', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can cancel invoices.' });
+      }
       const { companyId, invoiceId } = getParams(req);
       const invoice = await invoiceService.cancelInvoice(companyId, invoiceId, req.body.reason);
       broadcastDataChange('invoices', 'cancel', invoice);
@@ -1588,6 +1631,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.delete('/companies/:companyId/invoices/:invoiceId', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can delete invoices.' });
+      }
       const { companyId, invoiceId } = getParams(req);
       await invoiceService.deleteInvoice(companyId, invoiceId);
       broadcastDataChange('invoices', 'delete', { id: invoiceId });
@@ -1782,6 +1828,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.put('/companies/:companyId/quotations/:quotationId', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can edit quotations.' });
+      }
       const { companyId, quotationId } = getParams(req);
       const meta = extractWorkstationMeta(req);
       const q = await quotationService.updateQuotation(companyId, quotationId, req.body);
@@ -1850,6 +1899,9 @@ export function createApiRouter(db: Knex): Router {
 
   router.delete('/companies/:companyId/quotations/:quotationId', async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Permission denied. Only the Host computer or Admin Owner can delete quotations.' });
+      }
       const { companyId, quotationId } = getParams(req);
       await quotationService.deleteQuotation(companyId, quotationId);
       broadcastDataChange('quotations', 'delete', { id: quotationId });
@@ -2706,8 +2758,11 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.get('/backups/:filename/inspect', async (req: Request, res: Response) => {
+  router.get('/backups/:filename/inspect', requireMenuAccess('backup_restore'), async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Backup inspection is restricted to the Host computer and Owner Admin.' });
+      }
       const { filename } = getParams(req);
       const companyId = req.query.companyId ? String(req.query.companyId).trim() : '';
       const info = await backupRestoreService.inspectSavedBackup(filename, companyId || undefined);
@@ -2717,8 +2772,11 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/backups/inspect-upload', upload.single('file'), async (req: Request, res: Response) => {
+  router.post('/backups/inspect-upload', requireMenuAccess('backup_restore'), upload.single('file'), async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Backup inspection is restricted to the Host computer and Owner Admin.' });
+      }
       const uploaded = req.file;
       if (!uploaded) {
         return res.status(400).json({ error: 'Please select a .sqlite3 backup file.' });
@@ -2730,8 +2788,11 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.get('/backups/:filename/download', async (req: Request, res: Response) => {
+  router.get('/backups/:filename/download', requireMenuAccess('backup_restore'), async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Backup download is restricted to the Host computer and Owner Admin.' });
+      }
       const { filename } = getParams(req);
       const companyId = req.query.companyId ? String(req.query.companyId).trim() : '';
       const { filename: cleanName, filePath } = backupRestoreService.getDownloadableBackup(
@@ -2746,8 +2807,11 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/backups/upload-restore', adminRateLimiter, upload.single('file'), async (req: Request, res: Response) => {
+  router.post('/backups/upload-restore', pinRateLimiter, upload.single('file'), async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Database restore is restricted to the Host computer and Owner Admin.' });
+      }
       const uploaded = req.file;
       if (!uploaded) {
         return res.status(400).json({ error: 'Please select a .sqlite3 backup file to restore.' });
@@ -2769,8 +2833,11 @@ export function createApiRouter(db: Knex): Router {
     }
   });
 
-  router.post('/backups/restore', adminRateLimiter, async (req: Request, res: Response) => {
+  router.post('/backups/restore', pinRateLimiter, async (req: Request, res: Response) => {
     try {
+      if (!(await isHostOrAdmin(req))) {
+        return res.status(403).json({ error: 'Database restore is restricted to the Host computer and Owner Admin.' });
+      }
       const mode = req.body?.mode === 'INTO_COMPANY' ? 'INTO_COMPANY' : 'FULL_REPLACE';
       if (mode === 'FULL_REPLACE' && !isLoopbackRequest(req)) {
         return res.status(403).json({ error: 'Full database replacement is only permitted from the host machine.' });

@@ -281,19 +281,20 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate, hasE
       const deletedSet = new Set(currentDeletedToday);
       const activeItems = items.filter((it) => !deletedSet.has(it.id));
 
-      // Daily Automatic Reminder Check:
-      // Surfaces every calendar day (and whenever a new pending alert enters the 7-day/overdue window)
-      // until every payment/alert is cleared manually.
+      // Open the reminders modal once when opening the company (if there are active reminders
+      // and the user hasn't closed it in this session). Once closed, never re-open automatically.
       if (activeItems.length > 0) {
         const todayKey = getTodayKey();
         const ack = readDailyAck(companyId);
-        const ackedToday = ack?.date === todayKey;
-        const seenSet = new Set(ackedToday ? ack.seenIds || [] : []);
-        const hasNewUnseen = activeItems.some((it) => !seenSet.has(it.id));
-        const popupCycleKey = `${companyId}:${todayKey}:${activeItems.map((it) => it.id).join(',')}`;
+        let closedInSession = false;
+        try {
+          closedInSession = sessionStorage.getItem(`eim_notif_closed_${companyId}`) === '1';
+        } catch {
+          // ignore
+        }
 
-        if ((!ackedToday || hasNewUnseen) && lastAutoPopupKeyRef.current !== popupCycleKey) {
-          lastAutoPopupKeyRef.current = popupCycleKey;
+        if (!closedInSession && lastAutoPopupKeyRef.current !== companyId) {
+          lastAutoPopupKeyRef.current = companyId;
           setShowDailyPopup(true);
         }
 
@@ -345,16 +346,19 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate, hasE
     }
   }, [companyId, hasEnteredCompany, loadNotifications]);
 
-  // Close popover on outside click or Escape key
+  // Close popover or daily popup on Escape key
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen && !showDailyPopup) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (isOpen && containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
+      if (e.key === 'Escape') {
+        if (isOpen) setIsOpen(false);
+        if (showDailyPopup) handleDismissForToday();
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
@@ -362,7 +366,7 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate, hasE
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, showDailyPopup]);
 
   const visibleNotifications = useMemo(() => {
     if (deletedTodayIds.length === 0) return notifications;
@@ -450,6 +454,12 @@ export const NotificationsBell: React.FC<Props> = ({ companyId, onNavigate, hasE
 
   const handleDismissForToday = () => {
     if (companyId) {
+      lastAutoPopupKeyRef.current = companyId;
+      try {
+        sessionStorage.setItem(`eim_notif_closed_${companyId}`, '1');
+      } catch {
+        // ignore
+      }
       const prev = readDailyAck(companyId);
       writeDailyAck(companyId, {
         date: getTodayKey(),

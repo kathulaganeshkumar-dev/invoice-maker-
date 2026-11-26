@@ -2714,8 +2714,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                 <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-white dark:bg-slate-800/60 shadow-sm space-y-4">
                   <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                        <Server className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                      <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">
                         <span>Software Operating Mode</span>
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -2742,10 +2741,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                   {/* Dedicated Quick Disconnect / Standalone Switch for Staff PC */}
                   {lanRole === 'LAN_CLIENT' && (
                     <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                      <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-brand-600 text-white rounded-lg shrink-0 mt-0.5">
-                          <Monitor className="w-5 h-5" />
-                        </div>
+                      <div>
                         <div>
                           <div className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                             <span>Connected to Office Host: {lanHostIp || 'Office LAN'}</span>
@@ -2777,19 +2773,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         setLanRole('STANDALONE');
                         setLanStatus(null);
                       }}
-                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start space-x-3.5 ${
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                         lanRole === 'STANDALONE'
                           ? 'border-brand-600 bg-brand-50/60 dark:bg-brand-950/40 shadow-sm'
                           : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/60'
                       }`}
                     >
-                      <div
-                        className={`p-2.5 rounded-lg shrink-0 ${
-                          lanRole === 'STANDALONE' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        <Monitor className="w-5 h-5" />
-                      </div>
                       <div>
                         <div className="font-bold text-sm text-slate-800 dark:text-slate-100">1. Standalone Mode</div>
                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -2803,21 +2792,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                         if (lanRole === 'STANDALONE') setLanRole('LAN_HOST');
                         setLanStatus(null);
                       }}
-                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start space-x-3.5 ${
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                         lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT'
                           ? 'border-brand-600 bg-brand-50/60 dark:bg-brand-950/40 shadow-sm'
                           : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/60'
                       }`}
                     >
-                      <div
-                        className={`p-2.5 rounded-lg shrink-0 ${
-                          lanRole === 'LAN_HOST' || lanRole === 'LAN_CLIENT'
-                            ? 'bg-brand-600 text-white'
-                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        <Users className="w-5 h-5" />
-                      </div>
                       <div>
                         <div className="font-bold text-sm text-slate-800 dark:text-slate-100">2. LAN Multi-User Mode</div>
                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -2897,13 +2877,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               setLanRole('LAN_HOST');
                               setLanStatus(null);
                             }}
-                            className={`px-4 py-1.5 rounded-md transition-all flex items-center space-x-1.5 ${
+                            className={`px-4 py-1.5 rounded-md transition-all ${
                               lanRole === 'LAN_HOST'
                                 ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-300 shadow-sm font-bold'
                                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                             }`}
                           >
-                            <Server className="w-3.5 h-3.5" />
                             <span>Central Server (Office Host)</span>
                           </button>
                           <button
@@ -2912,13 +2891,12 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               setLanRole('LAN_CLIENT');
                               setLanStatus(null);
                             }}
-                            className={`px-4 py-1.5 rounded-md transition-all flex items-center space-x-1.5 ${
+                            className={`px-4 py-1.5 rounded-md transition-all ${
                               lanRole === 'LAN_CLIENT'
                                 ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-300 shadow-sm font-bold'
                                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                             }`}
                           >
-                            <Users className="w-3.5 h-3.5" />
                             <span>Worker PC (Owner / Staff)</span>
                           </button>
                         </div>
@@ -2958,7 +2936,10 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                               {lanLocalIps.length > 0 ? (
                                 <div className="space-y-2">
                                   <div className="flex flex-wrap gap-2">
-                                    {lanLocalIps.map((ip) => {
+                                    {(lanLocalIps.some((ip) => ip.startsWith('100.'))
+                                      ? lanLocalIps.filter((ip) => ip.startsWith('100.'))
+                                      : lanLocalIps
+                                    ).map((ip) => {
                                       const isTailscale = ip.startsWith('100.');
                                       return (
                                         <div
@@ -3042,8 +3023,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
                             <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                                  <Users className="w-4 h-4 text-brand-600" />
+                                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">
                                   <span>Create Staff &amp; Owner Profiles (Simultaneous / Unrestricted)</span>
                                 </h4>
                                 <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-900 text-xs font-semibold">
@@ -3438,8 +3418,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                           <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
                             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
                               <div>
-                                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                                  <Users className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">
                                   <span>Configured Office Staff Members ({permWorkstations.length})</span>
                                 </h4>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -3674,8 +3653,7 @@ export const ConfigurationModal: React.FC<Props> = ({ isOpen, onClose, companyId
                       {lanRole === 'LAN_CLIENT' && (
                         <div className="p-5 bg-white dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm text-xs">
                           <div className="border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
-                              <Users className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">
                               <span>Connect to Main Office PC</span>
                             </h4>
                             <p className="text-slate-500 dark:text-slate-400 mt-0.5">

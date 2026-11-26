@@ -236,7 +236,7 @@ export async function startServer(port = 4200): Promise<express.Express> {
     const primaryTailscaleIp = uniqueTailscale.find((ip) => ip.startsWith('100.')) || uniqueTailscale[0] || null;
 
     res.json({
-      localIps: primaryTailscaleIp ? [primaryTailscaleIp, ...uniqueLan] : uniqueLan,
+      localIps: primaryTailscaleIp ? [primaryTailscaleIp] : uniqueLan,
       tailscaleIp: primaryTailscaleIp,
       tailscaleIps: uniqueTailscale,
       lanIps: uniqueLan,

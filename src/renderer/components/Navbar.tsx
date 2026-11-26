@@ -121,7 +121,6 @@ export const Navbar: React.FC<Props> = ({
           className="group inline-flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200/90 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer shadow-2xs hover:shadow-xs"
           title="Indian Financial Year (Auto-advances every 01 April). Click to view details and test auto-rollover."
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>FY {liveFy}</span>
         </button>
 

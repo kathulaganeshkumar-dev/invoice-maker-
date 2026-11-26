@@ -837,11 +837,48 @@ ipcMain.handle('app:save-file-locally', async (_event, params: { folderPath: str
     if (!folderPath || !filename || !fileBase64) {
       return { success: false, error: 'Missing required parameters (folderPath, filename, fileBase64)' };
     }
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
+    const trimmedFolder = String(folderPath).trim();
+    if (
+      /[\x00-\x1f]/.test(trimmedFolder) ||
+      trimmedFolder.startsWith('\\\\') ||
+      trimmedFolder.startsWith('//') ||
+      trimmedFolder.split(/[\\/]+/).some((seg) => seg === '..') ||
+      !path.isAbsolute(trimmedFolder)
+    ) {
+      return { success: false, error: 'Invalid or unsafe folder path.' };
     }
-    const cleanName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-    const fullPath = path.join(folderPath, cleanName);
+    const resolvedFolder = path.resolve(trimmedFolder);
+    const parsedRoot = path.parse(resolvedFolder).root;
+    if (resolvedFolder === parsedRoot) {
+      return { success: false, error: 'Cannot save directly to a bare drive root.' };
+    }
+    const lowerPath = resolvedFolder.replace(/\//g, '\\').toLowerCase().replace(/^[a-z]:/, '');
+    const forbiddenSubpaths = [
+      '\\windows',
+      '\\program files',
+      '\\program files (x86)',
+      '\\programdata',
+      '\\system32',
+      '\\syswow64',
+      '\\start menu\\programs\\startup',
+      '\\appdata\\roaming\\microsoft\\windows',
+      '\\$recycle.bin',
+    ];
+    if (forbiddenSubpaths.some((bad) => lowerPath === bad || lowerPath.startsWith(bad + '\\') || lowerPath.includes(bad + '\\'))) {
+      return { success: false, error: 'Target folder points to a protected system directory and is not permitted.' };
+    }
+
+    if (!fs.existsSync(resolvedFolder)) {
+      fs.mkdirSync(resolvedFolder, { recursive: true });
+    }
+    const realFolder = fs.realpathSync(resolvedFolder);
+    const baseName = path.basename(String(filename)).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/\.{2,}/g, '_').replace(/^[._-]+|[._-]+$/g, '');
+    const safeBase = baseName || 'document';
+    const cleanName = safeBase.endsWith('.pdf') ? safeBase : `${safeBase}.pdf`;
+    const fullPath = path.resolve(realFolder, cleanName);
+    if (!fullPath.startsWith(realFolder + path.sep)) {
+      return { success: false, error: 'Resolved file path escaped target directory.' };
+    }
     const buffer = Buffer.from(fileBase64, 'base64');
     fs.writeFileSync(fullPath, buffer);
     return { success: true, savedPath: fullPath };

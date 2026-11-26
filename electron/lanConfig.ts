@@ -193,7 +193,7 @@ export function getLocalLanIps(): string[] {
   }
   const tailscaleIps = Array.from(new Set(vpnIps));
   const regularLanIps = Array.from(new Set(lanIps));
-  return tailscaleIps.length > 0 ? [...tailscaleIps, ...regularLanIps] : regularLanIps;
+  return tailscaleIps.length > 0 ? tailscaleIps : regularLanIps;
 }
 
 export function testLanHostConnection(

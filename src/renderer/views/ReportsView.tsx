@@ -139,19 +139,26 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
     loadReports(true);
   }, [companyId, returnType, startDate, endDate]);
 
-  // Reactivity & live sync
+  // Reactivity & live auto-recalculation
   useEffect(() => {
     if (!companyId) return;
     const handleSync = () => {
       loadReports(false);
     };
 
+    const syncInterval = setInterval(() => {
+      loadReports(false);
+    }, 3000);
+
     window.addEventListener('eim-data-changed', handleSync);
     window.addEventListener('eim-data-sync', handleSync);
+    window.addEventListener('focus', handleSync);
 
     return () => {
+      clearInterval(syncInterval);
       window.removeEventListener('eim-data-changed', handleSync);
       window.removeEventListener('eim-data-sync', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
   }, [companyId, returnType, startDate, endDate]);
 
@@ -185,8 +192,7 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
             GST Returns &amp; Tax Intelligence
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-3">
-            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
               {companyInfo?.name || 'Selected Company'}
             </span>
             <span>•</span>
@@ -197,44 +203,31 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
         </div>
 
         {/* Global Export & Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => loadReports(false)}
-            disabled={refreshing}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5 transition-colors shadow-sm"
-            title="Recalculate report from live database"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-brand-600' : 'text-slate-500'}`} />
-            <span>{refreshing ? 'Refreshing...' : 'Recalculate'}</span>
-          </button>
-
+        <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
           <a
             href={excelExportUrl}
             download
-            className="px-3 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm text-slate-700 dark:text-slate-300"
             title="Export official multi-sheet Excel file (b2b, b2cl, b2cs, hsn, docs)"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Export to Excel</span>
+            Export to Excel
           </a>
 
           <a
             href={jsonExportUrl}
             download
-            className="px-3 py-2 text-xs font-bold rounded-lg bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center gap-1.5 transition-colors shadow-sm border border-slate-700"
+            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm text-slate-700 dark:text-slate-300"
             title="Download JSON schema ready for upload on GST Portal (gst.gov.in)"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Portal JSON</span>
+            Portal JSON
           </a>
 
           <button
             onClick={handlePrint}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5 transition-colors shadow-sm text-slate-700 dark:text-slate-300"
+            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm text-slate-700 dark:text-slate-300"
             title="Print Summary Return"
           >
-            <Printer className="w-3.5 h-3.5 text-slate-500" />
-            <span>Print</span>
+            Print
           </button>
         </div>
       </div>
@@ -243,8 +236,8 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
         {/* Preset Chips */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1 mr-1">
-            <Calendar className="w-3.5 h-3.5" /> Period:
+          <span className="text-slate-500 dark:text-slate-400 font-semibold mr-1">
+            Period:
           </span>
           {[
             { id: 'this_month', label: 'This Month' },
@@ -301,38 +294,35 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-1 sm:gap-2">
         <button
           onClick={() => setReturnType('gstr1')}
-          className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-2 transition-all ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all ${
             returnType === 'gstr1'
               ? 'border-brand-600 text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 rounded-t-lg'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
           }`}
         >
-          <FileText className="w-4 h-4" />
-          <span>GSTR-1 (Outward Supplies)</span>
+          GSTR-1 (Outward Supplies)
         </button>
 
         <button
           onClick={() => setReturnType('gstr3b')}
-          className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-2 transition-all ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all ${
             returnType === 'gstr3b'
               ? 'border-brand-600 text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 rounded-t-lg'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
           }`}
         >
-          <Layers className="w-4 h-4" />
-          <span>GSTR-3B (Summary Return &amp; ITC)</span>
+          GSTR-3B (Summary Return &amp; ITC)
         </button>
 
         <button
           onClick={() => setReturnType('gstr2')}
-          className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-2 transition-all ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all ${
             returnType === 'gstr2'
               ? 'border-brand-600 text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 rounded-t-lg'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
           }`}
         >
-          <ShieldCheck className="w-4 h-4" />
-          <span>GSTR-2 (Inward Purchase ITC)</span>
+          GSTR-2 (Inward Purchase ITC)
         </button>
       </div>
 
@@ -348,33 +338,33 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
       {!loading && returnType === 'gstr1' && gstr1Report && (
         <div className="space-y-4">
           {/* Tally Return Statistics Banner */}
-          <div className="bg-slate-900 text-white rounded-xl p-4 shadow-md grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="border-r border-slate-800 pr-3">
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Vouchers</div>
-              <div className="text-2xl font-black text-white mt-0.5">{gstr1Report.statistics?.totalVouchers || 0}</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Recorded in the period</div>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="border-r border-slate-200 dark:border-slate-800 pr-3">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Vouchers</div>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{gstr1Report.statistics?.totalVouchers || 0}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Recorded in the period</div>
             </div>
 
-            <div className="border-r border-slate-800 pr-3">
-              <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Included in Return
+            <div className="border-r border-slate-200 dark:border-slate-800 pr-3">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Included in Return
               </div>
-              <div className="text-2xl font-black text-emerald-300 mt-0.5">{gstr1Report.statistics?.includedInReturn || 0}</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Finalized tax invoices</div>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{gstr1Report.statistics?.includedInReturn || 0}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Finalized tax invoices</div>
             </div>
 
-            <div className="border-r border-slate-800 pr-3">
-              <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Not Relevant for Return</div>
-              <div className="text-2xl font-black text-amber-300 mt-0.5">{gstr1Report.statistics?.notRelevantForReturn || 0}</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Cancelled / non-return vouchers</div>
+            <div className="border-r border-slate-200 dark:border-slate-800 pr-3">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Not Relevant for Return</div>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{gstr1Report.statistics?.notRelevantForReturn || 0}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Cancelled / non-return vouchers</div>
             </div>
 
             <div>
-              <div className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-rose-400" /> Incomplete / Mismatch
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Incomplete / Mismatch
               </div>
-              <div className="text-2xl font-black text-rose-400 mt-0.5">{gstr1Report.statistics?.mismatchCount || 0}</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">To be resolved / warnings</div>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{gstr1Report.statistics?.mismatchCount || 0}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">To be resolved / warnings</div>
             </div>
           </div>
 
@@ -832,23 +822,23 @@ export const ReportsView: React.FC<Props> = ({ companyId }) => {
       {!loading && returnType === 'gstr3b' && gstr3bReport && (
         <div className="space-y-4">
           {/* Net Cash Tax Payable Hero Banner */}
-          <div className="bg-gradient-to-r from-slate-900 to-brand-950 text-white rounded-xl p-5 shadow-lg border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-brand-300 bg-brand-900/50 px-2 py-0.5 rounded border border-brand-700/50">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                 Payment of Tax / Net Cash Liability
               </span>
-              <h2 className="text-xl sm:text-2xl font-black mt-1">
+              <h2 className="text-xl sm:text-2xl font-black mt-1 text-slate-900 dark:text-white">
                 Net Tax Payable in Cash (After ITC Offset)
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Output Tax on Sales minus Eligible Input Tax Credit (ITC) from Purchases
               </p>
             </div>
 
-            <div className="flex items-center gap-4 bg-white/10 p-3 rounded-xl border border-white/10 backdrop-blur-sm">
+            <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="text-right">
-                <div className="text-[11px] text-slate-300 font-medium">Total Net Cash Payable</div>
-                <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-300">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Total Net Cash Payable</div>
+                <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
                   {formatIndianCurrency(gstr3bReport.taxPayableVsItc?.netTaxPayableInCash?.total || '0.00')}
                 </div>
               </div>
